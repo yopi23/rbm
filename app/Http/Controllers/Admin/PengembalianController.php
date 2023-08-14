@@ -1,0 +1,67 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Pengambilan;
+use Illuminate\Http\Request;
+use App\Models\Sevices as modelServices;
+class PengembalianController extends Controller
+{
+    //
+    public function index(){
+        $page = "Pengembalian";
+        $data = Pengambilan::where([['user_input','=',auth()->user()->id],['kode_owner','=',$this->getThisUser()->id_upline],['status_pengambilan','=','0']])->get()->first();
+        $count = Pengambilan::where([['kode_owner','=',$this->getThisUser()->id_upline]])->get()->count();
+        
+        if(!$data){
+            $kode_pengambilan = 'PNG'.date('Ymd').auth()->user()->id.$count;
+            $create = Pengambilan::create([
+                'kode_pengambilan'=> $kode_pengambilan,
+                'tgl_pengambilan'=> date('Y-m-d'),
+                'nama_pengambilan'=> '',
+                'total_bayar'=> '0',
+                'user_input'=> auth()->user()->id,
+                'status_pengambilan'=> '0',
+                'kode_owner'=> $this->getThisUser()->id_upline,
+            ]);
+            if($create){
+                $data = Pengambilan::where([['user_input','=',auth()->user()->id],['kode_owner','=',$this->getThisUser()->id_upline],['status_pengambilan','=','0']])->get()->first();
+            }
+        }
+        $service = modelServices::where([['kode_pengambilan','=',$data->id],['status_services','=','Selesai'],['kode_owner','=',$this->getThisUser()->id_upline]])->get();
+        $done_service = modelServices::where([['status_services','=','Selesai'],['kode_owner','=',$this->getThisUser()->id_upline]])->get();
+        $content = view('admin.page.pengembalian',compact(['data','service','done_service']));
+        return view('admin.layout.blank_page',compact(['page','content']));
+    }
+    public function update(Request $request,$id){
+        $update = Pengambilan::findOrFail($id);
+        $update->update([
+            'nama_pengambilan' => $request->nama_pengambilan,
+            'tgl_pengambilan' => $request->tgl_pengambilan,
+            'total_bayar' => $request->total_bayar,
+            'status_pengambilan' => '1',
+        ]);
+        if($update){
+            modelServices::where([['kode_pengambilan','=',$id]])->update([
+                'status_services' => 'Diambil'
+            ]);
+            return redirect()->back()->with(['success'=>'Pengambilan Berhasil']);
+        }
+        return redirect()->back()->with(['success'=>'Opss,Something Went Wrong']);
+    }
+    public function store_detail(Request $request,$id){
+        $update = modelServices::findOrFail($request->id_service);
+        $update->update([
+            'kode_pengambilan' => $id
+        ]);
+        return redirect()->back();
+    }
+    public function destroy_detail(Request $request,$id){
+        $update = modelServices::findOrFail($request->id_service);
+        $update->update([
+            'kode_pengambilan' => ''
+        ]);
+        return redirect()->back();
+    }
+}

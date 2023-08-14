@@ -1,0 +1,6 @@
+@section('page',$page)
+@include('admin.component.header')
+@include('admin.component.navbar')
+@include('admin.component.sidebar')
+@yield('content-app')
+@include('admin.component.footer')
