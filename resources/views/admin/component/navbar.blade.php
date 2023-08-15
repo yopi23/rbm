@@ -29,11 +29,11 @@
           <span class="dropdown-header"><div class="text-center">
             @if (isset($this_user) && $this_user->foto_user != '-')
             <img class="profile-user-img img-fluid img-circle"
-                 src="{{asset('public/')}}/uploads/{{$this_user->foto_user}}"
+                 src="{{asset('/uploads/{{$this_user->foto_user}}')}}"
                  alt="User profile picture">
             @else
             <img class="profile-user-img img-fluid img-circle"
-                 src="{{asset('public/')}}/img/user-default.png"
+                 src="{{asset('/img/user-default.png')}}"
                  alt="User profile picture">
             @endif
           </div>
