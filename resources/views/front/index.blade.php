@@ -187,10 +187,10 @@
                 <div class="member" data-aos="zoom-in" data-aos-delay="100">
                   <div class="pic">
                     @if ($item->foto_user != '-')
-                    {{-- <img src="{{asset('public/')}}/uploads/{{$item->foto_user}}" class="img-fluid" alt=""> --}}
-                    <div style="background-image:url('{{asset('public/')}}/uploads/{{$item->foto_user}}'); height:150px; background-size: cover; background-position: center;"  alt="" ></div>
+                    {{-- <img src="{{asset('public/')}}uploads/{{$item->foto_user}}" class="img-fluid" alt=""> --}}
+                    <div style="background-image:url('{{asset('public')}}/uploads/{{$item->foto_user}}'); height:150px; background-size: cover; background-position: center;"  alt="" ></div>
                     @else
-                        <img src="{{asset('public/')}}/img/user-default.png" class="img-fluid" alt="">
+                        <img src="{{asset('public/')}}img/user-default.png" class="img-fluid" alt="">
                     @endif
                   </div>
                   <div class="member-info">
