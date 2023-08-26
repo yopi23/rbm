@@ -13,7 +13,7 @@
         <div class="image">
           @if (isset($this_user) && $this_user->foto_user != '-')
           {{-- <img src="{{asset('')}}/uploads/{{$this_user->foto_user}}" class="img-circle" alt="User Image"> --}}
-          <div style="background-image:url('{{asset('uploads/{{$this_user->foto_user}}')}}'); height:35px; width:35px; background-size: cover; background-position: center;"  alt="" ></div>
+          <div style="background-image:url('{{asset('uploads')}}/{{$this_user->foto_user}}'); height:35px; width:35px; background-size: cover; background-position: center;"  alt="" ></div>
           @else
           <img src="{{asset('/img/user-default.png')}}" class="img-circle" alt="User Image" style="w">
           @endif
