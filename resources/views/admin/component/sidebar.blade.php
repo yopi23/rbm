@@ -2,7 +2,7 @@
  <aside class="main-sidebar sidebar-dark-success elevation-4">
     <!-- Brand Logo -->
     <a href="{{route('dashboard')}}" class="brand-link">
-      <img src="{{asset('public/')}}/img/yoygreen.png" alt="AdminLTE Logo" class="brand-image img-circle" style="opacity: 1">
+      <img src="{{asset('/img/yoygreen.png')}}" alt="AdminLTE Logo" class="brand-image img-circle" style="opacity: 1">
       <span class="brand-text font-weight-bolder">YOYOYCELL</span>
     </a>
 
@@ -12,10 +12,10 @@
       <div class="user-panel mt-3 pb-3 mb-3 d-flex">
         <div class="image">
           @if (isset($this_user) && $this_user->foto_user != '-')
-          {{-- <img src="{{asset('public/')}}/uploads/{{$this_user->foto_user}}" class="img-circle" alt="User Image"> --}}
-          <div style="background-image:url('{{asset('public/')}}/uploads/{{$this_user->foto_user}}'); height:35px; width:35px; background-size: cover; background-position: center;"  alt="" ></div>
+          {{-- <img src="{{asset('')}}/uploads/{{$this_user->foto_user}}" class="img-circle" alt="User Image"> --}}
+          <div style="background-image:url('{{asset('uploads')}}/{{$this_user->foto_user}}'); height:35px; width:35px; background-size: cover; background-position: center;"  alt="" ></div>
           @else
-          <img src="{{asset('public/')}}/img/user-default.png" class="img-circle" alt="User Image" style="w">
+          <img src="{{asset('/img/user-default.png')}}" class="img-circle" alt="User Image" style="w">
           @endif
           
         </div>
