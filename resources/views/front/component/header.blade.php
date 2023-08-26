@@ -30,8 +30,4 @@
     <!-- Template Main CSS File -->
     <link href="{{ asset('front/assets/css/style.css') }}" rel="stylesheet">
 </head>
-<<<<<<< HEAD
-=======
-
->>>>>>> 65acf0ed853e9629ed9fd433b407e3bd0f4c10f6
 <body>
