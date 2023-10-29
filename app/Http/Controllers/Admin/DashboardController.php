@@ -157,6 +157,12 @@ class DashboardController extends Controller
             'tgl_service' => ['required'],
         ]);
         if ($validate) {
+            // Cek apakah kode service sudah ada dalam database
+            $existingService = modelServices::where('kode_service', $request->kode_service)->first();
+
+            if ($existingService) {
+                return redirect()->back()->with('error', 'Kode Service sudah ada, pilih kode yang berbeda.');
+            }
             $create = modelServices::create([
                 'kode_service' => $request->kode_service,
                 'tgl_service' => $request->tgl_service,

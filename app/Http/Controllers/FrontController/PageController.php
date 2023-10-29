@@ -12,22 +12,26 @@ use Illuminate\Http\Request;
 class PageController extends Controller
 {
     //
-    public function index(Request $request){
-        $datateam = User::join('user_details','user_details.kode_user','=','users.id')->where([
-            ['user_details.status_user','=','1'],['user_details.jabatan','!=','0']
-            ])->get(['users.*','user_details.*','users.id as id_user']);
+    public function index(Request $request)
+    {
+        $datateam = User::join('user_details', 'user_details.kode_user', '=', 'users.id')->where([
+            ['user_details.status_user', '=', '1'], ['user_details.jabatan', '!=', '0']
+        ])->get(['users.*', 'user_details.*', 'users.id as id_user']);
         $produk = Handphone::latest()->get()->count();
         $sparepart = Sparepart::latest()->get()->count();
         $service = Sevices::latest()->get()->count();
-        return view('front.index',compact(['datateam','service','sparepart','produk']));
+        return view('front.index', compact(['datateam', 'service', 'sparepart', 'produk']));
     }
-    public function view_service(Request $request){
+    public function view_service(Request $request)
+    {
         return view('front.service');
     }
-    public function view_sparepart(Request $request){
+    public function view_sparepart(Request $request)
+    {
         return view('front.sparepart');
     }
-    public function view_produk(Request $request){
+    public function view_produk(Request $request)
+    {
         return view('front.produk');
     }
 }
