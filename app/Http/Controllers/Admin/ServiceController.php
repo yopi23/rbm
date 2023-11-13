@@ -53,7 +53,7 @@ class ServiceController extends Controller
                     ';
         $tbody = '';
         $no = 1;
-              $year = date('Y'); // Mendapatkan tahun saat ini
+        $year = date('Y'); // Mendapatkan tahun saat ini
         $data_service = modelServices::leftjoin('detail_part_services', 'sevices.id', '=', 'kode_services')
             ->leftjoin('detail_part_luar_services', 'sevices.id', '=', 'detail_part_luar_services.kode_services')
             ->leftjoin('users', 'sevices.id_teknisi', '=', 'users.id')
@@ -90,7 +90,8 @@ class ServiceController extends Controller
                         </td>
                          <td>
                          <a href="' . route('nota_tempel_selesai', $item->id_service) . '" target="_blank" class="btn btn-sm btn-primary mt-2"><i class="fas fa-print"></i></a>
-                        </td>
+                        <button class="btn btn-secondary btn-sm my-2" data-toggle="modal" data-target="#editteknisi">Edit</button>
+                         </td>
                         </tr>';
         }
         $data = $this->getTable($thead, $tbody);

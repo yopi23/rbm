@@ -101,7 +101,13 @@ class UserController extends Controller
         if ($create) {
             $data = Penarikan::where([['kode_penarikan', '=', $kode]])->get()->first();
             $pegawais = UserDetail::where([['kode_user', '=', $data->kode_user]])->get()->first();
-            $new_saldo = $pegawais->saldo - $request->jumlah_penarikan;
+            $jumlahPenarikan = $request->jumlah_penarikan;
+            if ($jumlahPenarikan <= 0 || $pegawais->saldo < $request->jumlah_penarikan) {
+                return redirect()->back()->with([
+                    'error' => 'Oops, saldo anda tidak cukup'
+                ]);
+            }
+            $new_saldo = $pegawais->saldo - $jumlahPenarikan;
             $pegawais->update([
                 'saldo' => $new_saldo
             ]);

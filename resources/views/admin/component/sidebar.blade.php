@@ -17,24 +17,24 @@
           @else
           <img src="{{asset('/img/user-default.png')}}" class="img-circle" alt="User Image" style="w">
           @endif
-          
+
         </div>
         <div class="info">
           <a href="{{route('profile')}}" class="d-block">{{auth()->user()->name}}</a>
           @switch($this_user->jabatan)
               @case(0)
-                 <span class="badge badge-success">Administrator</span> 
+                 <span class="badge badge-success">Administrator</span>
                   @break
               @case(1)
-              <span class="badge badge-success"> Owner</span> 
+              <span class="badge badge-success"> Owner</span>
                   @break
               @case(2)
-              <span class="badge badge-success"> Kasir</span>               
+              <span class="badge badge-success"> Kasir</span>
                   @break
               @case(3)
-              <span class="badge badge-success"> Teknisi</span> 
+              <span class="badge badge-success"> Teknisi</span>
                   @break
-                  
+
           @endswitch
         </div>
       </div>
@@ -70,7 +70,7 @@
             <a href="{{route('owner.index')}}" class="nav-link">
               <i class="nav-icon fas fa-users"></i>
               <p>
-                Owner 
+                Owner
               </p>
             </a>
           </li>
@@ -78,7 +78,7 @@
             <a href="{{route('laporan_owner')}}" class="nav-link">
               <i class="nav-icon fas fa-copy"></i>
               <p>
-                Laporan Owner 
+                Laporan Owner
               </p>
             </a>
           </li>
@@ -89,7 +89,7 @@
             <a href="#" class="nav-link ">
               <i class="nav-icon fas fa-box"></i>
               <p>
-                Barang 
+                Barang
                 <i class="fas fa-angle-left right"></i>
               </p>
             </a>
@@ -108,7 +108,7 @@
                   </a>
                 </li>
               @endif
-              
+
               <li class="nav-item">
                 <a href="{{route('stok_produk')}}" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
@@ -138,9 +138,9 @@
                     <i class="far fa-circle nav-icon"></i>
                     <p>Kategori</p>
                   </a>
-                </li> 
+                </li>
               @endif
-              
+
               <li class="nav-item">
                 <a href="{{route('stok_sparepart')}}" class="nav-link">
                   <i class="far fa-circle nav-icon"></i>
@@ -278,7 +278,7 @@
             </li>
             @endif
           @endif
-          
+
         </ul>
       </nav>
       <!-- /.sidebar-menu -->
