@@ -78,7 +78,7 @@ class ServiceController extends Controller
                         <td>' . $no++ . '</td>
                         <td>' . $item->tgl_service . '<br>' . $item->kode_service . '</td>
                         <td>' . $item->nama_pelanggan . '</td>
-                        <td><a href="https://wa.me/62' . $item->no_telp . '?text=Assalamualaikum, pemberitahuan bahwa unit ' . $item->type_unit . ' sudah selesai diperbaiki. Teknisi: ' . $teknisi . ' (Terimakasih)" target="_blank"</a>' . $item->no_telp . '</td>
+                        <td><a href="https://wa.me/62' . $item->no_telp . '?text=Assalamualaikum, pemberitahuan bahwa unit ' . $item->type_unit . ' sudah selesai diperbaiki. Teknisi: ' . $teknisi . ' (Terimakasih)" target="_blank">' . $item->no_telp . '</a></td>
                         <td>' . $item->type_unit . '</td>
                         <td>' . $item->keterangan . '</td>
                         <td>Rp.' . number_format($item->total_biaya) . ',-</td>
@@ -114,6 +114,7 @@ class ServiceController extends Controller
         $update->update([
             'tgl_service' => $request->tgl_service,
             'nama_pelanggan' => $request->nama_pelanggan,
+            'dp' => $request->dp,
             'no_telp' => $request->no_telp,
             'type_unit' => $request->type_unit,
             'keterangan' => $request->keterangan,
@@ -334,14 +335,12 @@ class ServiceController extends Controller
                 'users.*',
                 'detail_part_services.*',
                 'detail_part_services.qty_part as qty_part_toko',
+                'detail_part_services.detail_harga_part_service as hpart_toko',
                 'detail_part_luar_services.qty_part as qty_part_luar',
                 'detail_part_luar_services.*'
             ]);
 
-        // $proses = modelServices::join('users', 'sevices.id_teknisi', '=', 'users.id')
-        //     ->where([['id_teknisi', '=', auth()->user()->id], ['status_services', '=', 'Diproses']])
-        //     ->orderByDesc('id_service')
-        //     ->get(['sevices.id as id_service', 'sevices.*', 'users.*']);
+
         $selesai = modelServices::join('users', 'sevices.id_teknisi', '=', 'users.id')->where([['id_teknisi', '=', auth()->user()->id], ['status_services', '=', 'Selesai']])->get(['sevices.id as id_service', 'sevices.*', 'users.*']);
         $batal = modelServices::join('users', 'sevices.id_teknisi', '=', 'users.id')->where([['id_teknisi', '=', auth()->user()->id], ['status_services', '=', 'Cancel']])->get(['sevices.id as id_service', 'sevices.*', 'users.*']);
         $content = view('admin.page.todolist', compact(['antrian', 'proses', 'selesai', 'batal']));
@@ -411,12 +410,4 @@ class ServiceController extends Controller
             return redirect()->back();
         }
     }
-
-    // public function edit_service(Request $request,$id){
-    //     $page = "Edit Services";
-    //     $data = modelServices::findOrFail($id);
-    //     $detail = DetailPartServices::join('spareparts','detail_part_services.kode_sparepart','=','spareparts.id')->where([['detail_part_services.kode_services','=',$id]])->get(['detail_part_services.id as id_detail_part','detail_part_services.*','spareparts.*']);
-    //     $detail_luar = DetailPartLuarService::where([['kode_services','=',$id]])->get();
-    //     return view('admin.forms.services',compact(['page','data','detail','detail_luar']));
-    // }
 }
