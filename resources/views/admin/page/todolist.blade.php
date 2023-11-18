@@ -83,23 +83,6 @@
                                 <th>Aksi</th>
                             </thead>
                             <tbody>
-                                @php
-                                    $totalSparepartPerService = [];
-                                @endphp
-
-                                @foreach ($proses as $item)
-                                    @php
-                                        // Hitung total harga part service dan part luar per service
-                                        $totalHarga = $item->hpart_toko * $item->qty_part_toko + $item->harga_part * $item->qty_part_luar;
-
-                                        // Simpan total sparepart per service dalam array
-                                        if (!isset($totalSparepartPerService[$item->id_service])) {
-                                            $totalSparepartPerService[$item->id_service] = 0;
-                                        }
-                                        $totalSparepartPerService[$item->id_service] += $totalHarga;
-                                    @endphp
-                                @endforeach
-
                                 @forelse ($proses as $item)
                                     <tr>
                                         <td>{{ $loop->index + 1 }}</td>
@@ -107,7 +90,8 @@
                                         <td>{{ $item->type_unit }}</td>
                                         <td>{{ $item->keterangan }}</td>
                                         <td>Rp.{{ number_format($item->total_biaya) }}</td>
-                                        <td>Rp.{{ number_format($totalSparepartPerService[$item->id_service]) }}</td>
+                                        <td>Rp.{{ number_format($item->total_harga_part) }}
+                                        </td>
                                         <td>{{ $item->name }}</td>
                                         <td>
                                             <form action="{{ route('proses_service', $item->id_service) }}"

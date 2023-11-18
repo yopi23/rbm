@@ -15,6 +15,7 @@ use App\Models\Sparepart;
 use App\Models\User;
 use App\Models\UserDetail;
 use Milon\Barcode\Facades\DNS1DFacade;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use PDO;
 
@@ -324,21 +325,40 @@ class ServiceController extends Controller
 
         $antrian = modelServices::where([['status_services', '=', 'Antri'], ['kode_owner', '=', $this->getThisUser()->id_upline]])->get();
 
-        $proses = modelServices::leftjoin('detail_part_services', 'sevices.id', '=', 'kode_services')
-            ->leftjoin('detail_part_luar_services', 'sevices.id', '=', 'detail_part_luar_services.kode_services')
-            ->leftjoin('users', 'sevices.id_teknisi', '=', 'users.id')
-            ->where([['id_teknisi', '=', auth()->user()->id], ['status_services', '=', 'Diproses']])
-            ->orderByDesc('id_service')
-            ->get([
-                'sevices.id as id_service',
-                'sevices.*',
-                'users.*',
-                'detail_part_services.*',
-                'detail_part_services.qty_part as qty_part_toko',
-                'detail_part_services.detail_harga_part_service as hpart_toko',
-                'detail_part_luar_services.qty_part as qty_part_luar',
-                'detail_part_luar_services.*'
-            ]);
+
+
+
+        $proses = modelServices::select('s.*', DB::raw('COUNT(DISTINCT s.id) as id_service'))
+            ->selectRaw(
+                'SUM((COALESCE(pls.harga_part, 0) * COALESCE(pls.qty_part, 0))
+                    +
+                    (COALESCE(ps.detail_harga_part_service, 0) * COALESCE(ps.qty_part, 0))) as total_harga_part'
+            )
+            ->from('sevices as s')
+            ->leftJoin('detail_part_luar_services as pls', 's.id', '=', 'pls.kode_services')
+            ->leftJoin('detail_part_services as ps', 's.id', '=', 'ps.kode_services')
+            ->where('s.id_teknisi', '=', auth()->user()->id)
+            ->where('s.status_services', 'Diproses')
+            ->groupBy(
+                's.id',
+                's.kode_service',
+                's.tgl_service',
+                's.nama_pelanggan',
+                's.no_telp',
+                's.type_unit',
+                's.keterangan',
+                's.total_biaya',
+                's.dp',
+                's.id_teknisi',
+                's.kode_pengambilan',
+                's.status_services',
+                's.kode_owner',
+                's.created_at',
+                's.updated_at'
+            )
+            ->get();
+
+
 
 
         $selesai = modelServices::join('users', 'sevices.id_teknisi', '=', 'users.id')->where([['id_teknisi', '=', auth()->user()->id], ['status_services', '=', 'Selesai']])->get(['sevices.id as id_service', 'sevices.*', 'users.*']);
