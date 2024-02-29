@@ -325,62 +325,22 @@ class ServiceController extends Controller
 
         $antrian = modelServices::where([['status_services', '=', 'Antri'], ['kode_owner', '=', $this->getThisUser()->id_upline]])->get();
 
-        $proses = modelServices::leftJoin(DB::raw('(SELECT kode_services, SUM(qty_part * harga_part) AS part_luar FROM detail_part_luar_services GROUP BY kode_services) AS part_luar_services'), 'sevices.id', '=', 'part_luar_services.kode_services')
-            ->leftJoin(DB::raw('(SELECT kode_services, SUM(qty_part * detail_harga_part_service) AS part_toko FROM detail_part_services GROUP BY kode_services) AS part_toko'), 'sevices.id', '=', 'part_toko.kode_services')
-            ->leftjoin('users', 'sevices.id_teknisi', '=', 'users.id')
-            ->select([
-                'sevices.id as id_service',
-                'sevices.kode_service',
-                'sevices.tgl_service',
-                'sevices.nama_pelanggan',
-                'sevices.no_telp',
-                'sevices.type_unit',
-                'sevices.keterangan',
-                'sevices.total_biaya',
-                'sevices.dp',
-                'sevices.id_teknisi',
-                'sevices.kode_pengambilan',
-                'sevices.status_services',
-                'sevices.kode_owner',
-                DB::raw('COALESCE(SUM(part_luar_services.part_luar), 0) + COALESCE(SUM(part_toko.part_toko), 0) AS total_harga_part'),
-                'users.id as user_id', // Adjust this line according to your needs
-                'users.name'
-            ])
-            ->where([['id_teknisi', '=', auth()->user()->id], ['status_services', '=', 'Diproses']])
-            ->groupBy(
-                'sevices.id',
-                'sevices.kode_service',
-                'sevices.tgl_service',
-                'sevices.nama_pelanggan',
-                'sevices.no_telp',
-                'sevices.type_unit',
-                'sevices.keterangan',
-                'sevices.total_biaya',
-                'sevices.dp',
-                'sevices.id_teknisi',
-                'sevices.kode_pengambilan',
-                'sevices.status_services',
-                'sevices.kode_owner',
-                'users.id',
-                'users.name',
-            )
-            ->get();
 
-        // $proses = modelServices::leftjoin('detail_part_services', 'sevices.id', '=', 'kode_services')
-        //     ->leftjoin('detail_part_luar_services', 'sevices.id', '=', 'detail_part_luar_services.kode_services')
-        //     ->leftjoin('users', 'sevices.id_teknisi', '=', 'users.id')
-        //     ->where([['id_teknisi', '=', auth()->user()->id], ['status_services', '=', 'Diproses']])
-        //     ->orderByDesc('id_service')
-        //     ->get([
-        //         'sevices.id as id_service',
-        //         'sevices.*',
-        //         'users.*',
-        //         'detail_part_services.*',
-        //         'detail_part_services.qty_part as qty_part_toko',
-        //         'detail_part_services.detail_harga_part_service as hpart_toko',
-        //         'detail_part_luar_services.qty_part as qty_part_luar',
-        //         'detail_part_luar_services.*',
-        //     ]);
+        $proses = modelServices::leftjoin('detail_part_services', 'sevices.id', '=', 'kode_services')
+            ->leftjoin('detail_part_luar_services', 'sevices.id', '=', 'detail_part_luar_services.kode_services')
+            ->leftjoin('users', 'sevices.id_teknisi', '=', 'users.id')
+            ->where([['id_teknisi', '=', auth()->user()->id], ['status_services', '=', 'Diproses']])
+            ->orderByDesc('id_service')
+            ->get([
+                'sevices.id as id_service',
+                'sevices.*',
+                'users.*',
+                'detail_part_services.*',
+                'detail_part_services.qty_part as qty_part_toko',
+                'detail_part_services.detail_harga_part_service as hpart_toko',
+                'detail_part_luar_services.qty_part as qty_part_luar',
+                'detail_part_luar_services.*',
+            ]);
 
 
 
