@@ -128,7 +128,10 @@ Route::group(['middleware' => ['auth']], function () {
         Route::put('kategori_sparepart/{id}/update', [SparePartController::class, 'update_kategori_sparepart'])->name('UpdateKategoriSparepart');
         Route::delete('kategori_sparepart/{id}/destroy', [SparePartController::class, 'delete_kategori_sparepart'])->name('DeleteKategoriSparepart');
     });
-
+    //plus
+    // Route::get('/stok_sparepart', [SparePartController::class, 'view_stok'])->name('stok_sparepart');
+    Route::post('/plusUpdate', [SparePartController::class, 'processData'])->name('plusUpdate');
+    Route::get('/plus', [SparePartController::class, 'plus'])->name('plus');
     //Stok Produk
     Route::get('/stok_produk', [HandphoneController::class, 'view_stok'])->name('stok_produk');
 

@@ -13,9 +13,10 @@ return new class extends Migration
      */
     public function up()
     {
-        Schema::table('sevices', function (Blueprint $table) {
-            $table->text('nama_sp')->nullable()->after('dp');
-            $table->string('harga_sp')->default('0')->after('nama_sp');
+        Schema::table('spareparts', function (Blueprint $table) {
+            $table->string('harga_ecer', 255)->nullable()->after('harga_jual');
+            $table->text('kode_spl')->nullable()->after('kode_owner');
+            //
         });
     }
 
@@ -26,9 +27,9 @@ return new class extends Migration
      */
     public function down()
     {
-        Schema::table('sevices', function (Blueprint $table) {
-            Schema::dropColumn('nama_sp');
-            Schema::dropColumn('harga_sp');
+        Schema::table('spareparts', function (Blueprint $table) {
+            $table->dropColumn('harga_ecer');
+            $table->dropColumn('kode_spl');
         });
     }
 };

@@ -76,7 +76,7 @@ class PenjualanController extends Controller
                 'kode_penjualan' => $request->kode_penjualan,
                 'kode_sparepart' => $request->kode_sparepart,
                 'detail_harga_modal' => $update->harga_beli,
-                'detail_harga_jual' => $update->harga_jual,
+                'detail_harga_jual' => $update->harga_ecer,
                 'qty_sparepart' => $request->qty_sparepart,
                 'user_input' => auth()->user()->id,
                 'created_at' => Carbon::now(),

@@ -1,4 +1,4 @@
-@section('page',$page)
+@section('page', $page)
 @include('admin.component.header')
 @include('admin.component.navbar')
 @include('admin.component.sidebar')

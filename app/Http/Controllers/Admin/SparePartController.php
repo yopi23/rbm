@@ -597,4 +597,225 @@ class SparePartController extends Controller
             return redirect()->back();
         }
     }
+    public function plus()
+    {
+        $page = "Pembelian";
+        $kategori = KategoriSparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
+        $supplier = Supplier::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
+        $sparepart = Sparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
+
+        return view('admin.page.plus', compact(['page', 'kategori', 'sparepart', 'supplier']));
+    }
+
+    public function processData(Request $request)
+    {
+        // Validasi data
+        $request->validate([
+            'kode_kategori' => 'required',
+            'kode_supplier' => 'required',
+            'spareparts.*.kode' => 'required',
+            'restocks.*.kode_harga' => 'required',
+        ]);
+
+        // Dapatkan data dari request
+        $kodeKategori = $request->input('kode_kategori');
+        $kodeSupplier = $request->input('kode_supplier');
+        $spareparts = $request->input('spareparts');
+        $restocks = $request->input('restocks');
+
+        // Cek apakah data spareparts
+        if (!empty($spareparts)) {
+            // Simpan data ke tabel "sparepart"
+            foreach ($spareparts as $index => $sparepartData) {
+                // Parsing kode untuk mendapatkan informasi harga
+                $parsedData = $this->parseKode($sparepartData['kode']);
+
+                $sparepart = new Sparepart;
+                $sparepart->nama_sparepart = $sparepartData['nama'];
+                $sparepart->stok_sparepart = $sparepartData['stok'];
+                $sparepart->harga_beli = $parsedData['hargaBeli'];
+                $sparepart->harga_jual = $parsedData['hargaJual'];
+                $sparepart->harga_ecer = $parsedData['hargaEcer'];
+                $sparepart->harga_pasang = $parsedData['hargaPasang'];
+                $sparepart->kode_kategori = $kodeKategori;
+                $sparepart->kode_spl = $kodeSupplier;
+                $sparepart->foto_sparepart = '-';
+
+                // Generate dynamic spare part code
+                $count = Sparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get()->count();
+                $dynamicCount = $count + $index + 1; // Add index to ensure uniqueness for each spare part
+                $kode_sparepart = 'SP' . date('Ymdhis') . $dynamicCount;
+
+                $sparepart->kode_sparepart = $kode_sparepart;
+                $sparepart->kode_owner = $this->getThisUser()->id_upline;
+                $sparepart->save();
+            }
+        }
+
+        // Cek apakah data restocks
+        if (!empty($restocks)) {
+            // Simpan data ke tabel "sparepart"
+            foreach ($restocks as $index => $restockData) {
+                // Lakukan operasi update pada data restocks berdasarkan ID
+                $sparepart = Sparepart::find($restockData['id']);
+
+                if ($sparepart) {
+                    // Parsing kode untuk mendapatkan informasi harga
+                    $parsedData = $this->parseKode($restockData['kode_harga']);
+
+                    $sparepart->nama_sparepart = $restockData['nama_sparepart'];
+                    $sparepart->stok_sparepart += $restockData['stok_sparepart'];
+                    $sparepart->harga_beli = $parsedData['hargaBeli'];
+                    // Biarkan nilai yang lain tidak berubah jika tidak ada input
+                    $sparepart->harga_jual = $parsedData['hargaJual'] ?? $sparepart->harga_jual;
+                    $sparepart->harga_ecer = $parsedData['hargaEcer'] ?? $sparepart->harga_ecer;
+                    $sparepart->harga_pasang = $parsedData['hargaPasang'] ?? $sparepart->harga_pasang;
+                    $sparepart->kode_kategori = $kodeKategori;
+                    $sparepart->kode_spl = $kodeSupplier;
+                    $sparepart->foto_sparepart = '-';
+
+                    // Simpan perubahan pada data restock
+                    $sparepart->save();
+                }
+            }
+        }
+
+
+        // Berikan respons yang sesuai
+        return response()->json(['message' => 'Data berhasil disimpan'], 200);
+    }
+
+    private function parseKode($kode)
+    {
+        $teks = $kode;
+        $hasil_parsing = explode('n', $teks);
+
+        $label = ['hargaBeli', 'hargaJual', 'hargaEcer', 'hargaPasang'];
+        $hasil_final = array_combine($label, $hasil_parsing);
+
+        // Rumus konversi
+        $konversi = [
+            'a' => 0,
+            'b' => 1,
+            'c' => 2,
+            'd' => 3,
+            'e' => 4,
+            'f' => 5,
+            'g' => 6,
+            'h' => 7,
+            'i' => 8,
+            'j' => 9,
+            'r' => '000',
+            's' => '00'
+        ];
+
+        // Mengonversi nilai
+        foreach ($hasil_final as $label => $nilai) {
+            $hasil_final[$label] = strtr($nilai, $konversi);
+        }
+
+        // Mengembalikan hasil setelah konversi
+        return $hasil_final;
+    }
+
+
+
+    // kode lama
+    // public function processData(Request $request)
+    // {
+    //     // Validasi data
+    //     $request->validate([
+    //         'kode_kategori' => 'required',
+    //         'kode_supplier' => 'required',
+    //         'spareparts.*.kode' => 'required',
+    //         'restocks.*.kode_harga' => 'required',
+    //     ]);
+
+    //     // Dapatkan data dari request
+    //     $kodeKategori = $request->input('kode_kategori');
+    //     $kodeSupplier = $request->input('kode_supplier');
+    //     $spareparts = $request->input('spareparts');
+    //     $restocks = $request->input('restocks');
+
+    //     // Cek apakah data spareparts atau restocks
+    //     // if (isset($spareparts)) {
+    //     // Simpan data ke tabel "sparepart"
+    //     foreach ($spareparts as $index => $sparepartData) {
+    //         // Parsing kode untuk mendapatkan informasi harga
+    //         list($hargaBeli, $hargaJual, $hargaEcer, $hargaPasang) = $this->parseKode($sparepartData['kode']);
+    //         // Dump data untuk diperiksa
+    //         dd($sparepartData);
+
+    //         $sparepart = new Sparepart;
+    //         $sparepart->nama_sparepart = $sparepartData['nama'];
+    //         $sparepart->stok_sparepart = $sparepartData['stok'];
+    //         $sparepart->harga_beli = $hargaBeli;
+    //         $sparepart->harga_jual = $hargaJual;
+    //         $sparepart->harga_ecer = $hargaEcer;
+    //         $sparepart->harga_pasang = $hargaPasang;
+    //         $sparepart->kode_kategori = $kodeKategori;
+    //         $sparepart->kode_supplier = $kodeSupplier;
+
+    //         // Generate dynamic spare part code
+    //         $count = Sparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get()->count();
+    //         $dynamicCount = $count + $index + 1; // Add index to ensure uniqueness for each spare part
+    //         $kode_sparepart = 'SP' . date('Ymdhis') . $dynamicCount;
+
+    //         $sparepart->kode_sparepart = $kode_sparepart;
+    //         $sparepart->kode_owner = $this->getThisUser()->id_upline;
+    //         $sparepart->save();
+    //         // }
+    //     }
+
+    //     // Cek apakah data restocks
+    //     // if (isset($restocks)) {
+    //     //     // Simpan data ke tabel "restocks"
+    //     //     foreach ($restocks as $restockData) {
+    //     //         // Lakukan operasi update pada data restocks berdasarkan ID
+    //     //         Restock::where('id', $restockData['id'])
+    //     //             ->update([
+    //     //                 'kode_harga' => $restockData['kode_harga'],
+    //     //                 // ... tambahkan kolom lain yang perlu diupdate
+    //     //             ]);
+    //     //     }
+    //     // }
+
+    //     // Berikan respons yang sesuai
+    //     return response()->json(['message' => 'Data berhasil disimpan'], 200);
+    // }
+
+    // private function parseKode($kode)
+    // {
+    //     $teks = $kode;
+    //     $hasil_parsing = preg_split('/n/', $teks, -1, PREG_SPLIT_NO_EMPTY);
+
+    //     $label = ['hargaBeli', 'hargaJual', 'hargaEcer', 'hargaPasang'];
+    //     $hasil_final = array_combine($label, $hasil_parsing);
+
+    //     // Rumus konversi
+    //     $konversi = [
+    //         'a' => 0,
+    //         'b' => 1,
+    //         'c' => 2,
+    //         'd' => 3,
+    //         'e' => 4,
+    //         'f' => 5,
+    //         'g' => 6,
+    //         'h' => 7,
+    //         'i' => 8,
+    //         'j' => 9,
+    //         'r' => '000',
+    //         's' => '00'
+    //     ];
+
+    //     // Mengonversi nilai
+    //     foreach ($hasil_final as $label => $nilai) {
+    //         $hasil_final[$label] = strtr($nilai, $konversi);
+    //     }
+
+    //     // Mengembalikan hasil setelah konversi
+    //     return $hasil_final;
+    // }
+    // kode lama
+
 }

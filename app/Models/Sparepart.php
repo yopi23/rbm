@@ -17,7 +17,9 @@ class Sparepart extends Model
         'stok_sparepart',
         'harga_beli',
         'harga_jual',
+        'harga_ecer',
         'harga_pasang',
         'kode_owner',
+        'kode_spl',
     ];
 }
