@@ -130,6 +130,8 @@ Route::group(['middleware' => ['auth']], function () {
     });
     //plus
     // Route::get('/stok_sparepart', [SparePartController::class, 'view_stok'])->name('stok_sparepart');
+
+    Route::get('/update-harga-ecer',  [SparePartController::class, 'updateHargaEcer'])->name('update.harga.ecer');
     Route::post('/plusUpdate', [SparePartController::class, 'processData'])->name('plusUpdate');
     Route::get('/plus', [SparePartController::class, 'plus'])->name('plus');
     //Stok Produk

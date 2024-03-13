@@ -606,6 +606,24 @@ class SparePartController extends Controller
 
         return view('admin.page.plus', compact(['page', 'kategori', 'sparepart', 'supplier']));
     }
+    public function updateHargaEcer()
+    {
+        // Ambil semua data sparepart
+        $spareparts = Sparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->get();
+
+        // Loop melalui setiap sparepart
+        foreach ($spareparts as $sparepart) {
+            // Ambil harga_jual dari database sesuai dengan ID sparepart
+            $harga_jual = $sparepart->harga_jual;
+
+            // Update harga_ecer dengan nilai harga_jual
+            $sparepart->update([
+                'harga_ecer' => $harga_jual
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Harga ecer telah diperbarui.');
+    }
 
     public function processData(Request $request)
     {
