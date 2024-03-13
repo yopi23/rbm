@@ -150,10 +150,7 @@
                                                     class="fas fa-cash-register"></i>
                                                 Simpan</button>
                                         </div>
-                                        <div class="form-group">
-                                            <a href="{{ route('update.harga.ecer') }}" class="btn btn-primary">Perbarui
-                                                Harga Ecer</a>
-                                        </div>
+
 
                                     </div>
                                 </div>
