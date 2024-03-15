@@ -631,7 +631,7 @@
         function deleteSemuaRSparepart() {
             // Menghapus semua data sparepart
             dataListRSpareparts = [];
-            saveDataList
+            saveDataList();
         }
 
         return {
