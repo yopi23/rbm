@@ -6,13 +6,14 @@
             </div>
             <div class="card-body">
                 <div class="text-center">
-                    @if (isset($this_user) && $this_user->foto_user != '-')
+                    @if (isset($this_user) && $this_user->foto_user != '-' && file_exists(public_path('uploads/' . $this_user->foto_user)))
                         <img class="profile-user-img img-fluid img-circle"
-                            src="{{ asset('uploads/') }}{{ $this_user->foto_user }}" alt="User profile picture">
+                            src="{{ asset('uploads/' . $this_user->foto_user) }}" alt="Foto profil pengguna">
                     @else
                         <img class="profile-user-img img-fluid img-circle" src="{{ asset('img/user-default.png') }}"
-                            alt="User profile picture">
+                            alt="Foto profil pengguna">
                     @endif
+
                     <br><br>
                     @if ($this_user->jabatan != '0')
                         @if ($this_user->jabatan == '1')
