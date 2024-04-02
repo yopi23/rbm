@@ -127,6 +127,9 @@ Route::group(['middleware' => ['auth']], function () {
         Route::post('kategori_sparepart/store', [SparePartController::class, 'store_kategori_sparepart'])->name('StoreKategoriSparepart');
         Route::put('kategori_sparepart/{id}/update', [SparePartController::class, 'update_kategori_sparepart'])->name('UpdateKategoriSparepart');
         Route::delete('kategori_sparepart/{id}/destroy', [SparePartController::class, 'delete_kategori_sparepart'])->name('DeleteKategoriSparepart');
+
+        //penarikan
+        Route::put('update_all_penarikan_statuses', [UserController::class, 'updateAllStatuses'])->name('update_all_penarikan_statuses');
     });
     //plus
     // Route::get('/stok_sparepart', [SparePartController::class, 'view_stok'])->name('stok_sparepart');

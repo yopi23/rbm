@@ -95,7 +95,7 @@ class UserController extends Controller
             'kode_owner' => $this->getThisUser()->id_upline,
             'jumlah_penarikan' => $request->jumlah_penarikan,
             'catatan_penarikan' => $request->catatan_penarikan != null ? $request->catatan_penarikan : '-',
-            'status_penarikan' => '0',
+            'status_penarikan' => '1',
             'dari_saldo' => '1',
         ]);
         if ($create) {
@@ -160,5 +160,15 @@ class UserController extends Controller
         return redirect()->back()->with([
             'error' => 'Oops, Something Went Wrong'
         ]);
+    }
+    public function updateAllStatuses()
+    {
+        $penarikans = Penarikan::where('status_penarikan', 0)->get();
+
+        foreach ($penarikans as $penarikan) {
+            $penarikan->update(['status_penarikan' => 1]);
+        }
+
+        return redirect()->route('profile')->with(['success' => 'Semua status penarikan berhasil diperbarui']);
     }
 }

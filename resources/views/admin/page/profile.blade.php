@@ -92,10 +92,10 @@
                         <li class="nav-item"><a class="nav-link" href="#gaji" data-toggle="tab">Penarikan Gaji</a>
                         </li>
                     @endif
-
                 </ul>
             </div>
             <div class="card-body">
+
                 <div class="tab-content">
                     <div class="tab-pane active" id="profile">
                         <div class="row">
@@ -191,11 +191,30 @@
                     </div>
                     @if ($this_user->jabatan != '0')
                         <div class="tab-pane" id="gaji">
-                            @if ($this_user->jabatan != '1')
-                                <a href="#" class="btn btn-sm btn-success" data-toggle="modal"
-                                    data-target="#modal_tarik_dana"><i class="fas fa-plus"></i> Tambah</a>
-                                <hr>
-                            @endif
+                            {{-- @if ($this_user->jabatan == '1')
+                                <div class="card"> --}}
+                            {{-- <form action="{{ route('update_all_penarikan_statuses') }}" method="POST">
+                                        @csrf
+                                        @method('PUT')
+                                        <button type="submit" class="btn btn-success">Perbarui Semua Status</button>
+                                    </form> --}}
+                            {{-- </div>
+                            @endif --}}
+                            <?php
+                            if ($this_user->jabatan != '1') {
+                                echo '<a href="#" class="btn btn-sm btn-success" data-toggle="modal" data-target="#modal_tarik_dana"><i class="fas fa-plus"></i> Tambah</a>';
+                                echo '<hr>';
+                            } elseif ($this_user->jabatan == '1') {
+                                ?>
+                            <form action="{{ route('update_all_penarikan_statuses') }}" method="POST">
+                                @csrf
+                                @method('PUT')
+                                <button type="submit" class="btn btn-sm btn-success my-2">Selesaikan Semua
+                                    Status</button>
+                            </form>
+                            <?php
+                            }
+                            ?>
 
                             <div class="table responsive">
                                 <table class="table" id="TABLES_1">

@@ -94,7 +94,8 @@
                                         </td>
                                         <td>{{ $item->name }}</td>
                                         <td>
-                                            <form action="{{ route('proses_service', $item->id_service) }}"
+                                            <form id="formSelesai"
+                                                action="{{ route('proses_service', $item->id_service) }}"
                                                 onsubmit="return confirm('Apakah Kamu yakin ingin Menyelesaikan Service ini ?')"
                                                 method="POST">
                                                 @csrf
@@ -103,8 +104,10 @@
                                                     class="btn btn-info btn-sm mt-2">Detail</a>
                                                 <input type="hidden" name="status_services" id="status_services"
                                                     value="Selesai">
-                                                <button type="submit"
+                                                <button type="button" onclick="confirmSelesai()"
                                                     class="btn btn-sm btn-success mt-2">Selesai</button>
+                                                {{-- <button type="submit"
+                                                    class="btn btn-sm btn-success mt-2">Selesai</button> --}}
                                             </form>
 
                                             <form action="{{ route('oper_service', $item->id_service) }}"
@@ -211,3 +214,27 @@
 
     </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
+
+<script>
+    function confirmSelesai() {
+        const username = "{{ strtoupper(auth()->user()->name) }}";
+        Swal.fire({
+            title: 'Apakah kamu yakin?',
+            html: "Anda ingin menyelesaikan pekerjaan ini dengan Akun <strong style='font-size: 18pt'>" +
+                username + " ?</strong>",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Ya, selesaikan!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Lanjutkan proses pengiriman form jika pengguna mengonfirmasi
+                document.getElementById('formSelesai').submit();
+            }
+        });
+        // Mencegah pengiriman form secara langsung
+        return false;
+    }
+</script>
