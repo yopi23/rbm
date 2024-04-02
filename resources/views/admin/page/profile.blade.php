@@ -109,7 +109,7 @@
                                         <div class="col-md-4 text-center">
                                             @if (isset($this_user) && $this_user->foto_user != '-')
                                                 <img class="profile-user-img img-fluid"
-                                                    src="{{ asset('uploads/') }}{{ $this_user->foto_user }}"
+                                                    src="{{ asset('uploads/' . $this_user->foto_user) }}"
                                                     alt="User profile picture" id="view-img">
                                             @else
                                                 <img class="profile-user-img img-fluid"
