@@ -104,7 +104,8 @@
                                                     class="btn btn-info btn-sm mt-2">Detail</a>
                                                 <input type="hidden" name="status_services" id="status_services"
                                                     value="Selesai">
-                                                <button type="button" onclick="confirmSelesai()"
+                                                <button type="button"
+                                                    onclick="return confirmSelesai({{ $index }})"
                                                     class="btn btn-sm btn-success mt-2">Selesai</button>
                                                 {{-- <button type="submit"
                                                     class="btn btn-sm btn-success mt-2">Selesai</button> --}}
@@ -216,13 +217,36 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
 
-<script>
+{{-- <script>
     function confirmSelesai() {
         const username = "{{ strtoupper(auth()->user()->name) }}";
         Swal.fire({
             title: 'Apakah kamu yakin?',
             html: "Anda ingin menyelesaikan pekerjaan ini dengan Akun <strong style='font-size: 18pt'>" +
                 username + " ?</strong>",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Ya, selesaikan!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Lanjutkan proses pengiriman form jika pengguna mengonfirmasi
+                document.getElementById('formSelesai').submit();
+            }
+        });
+        // Mencegah pengiriman form secara langsung
+        return false;
+    }
+</script> --}}
+<script>
+    function confirmSelesai(index) {
+        const username = "{{ strtoupper(auth()->user()->name) }}";
+        const itemName = "{{ $items[$index]->name }}"; // Mengambil nama item yang sesuai dengan indeks
+        Swal.fire({
+            title: 'Apakah kamu yakin?',
+            html: "Anda ingin menyelesaikan pekerjaan ini dengan Akun <strong style='font-size: 18pt'>" +
+                username + "</strong> untuk item <strong>" + itemName + "</strong>?",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#3085d6',
