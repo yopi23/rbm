@@ -105,7 +105,7 @@
                                                 <input type="hidden" name="status_services" id="status_services"
                                                     value="Selesai">
                                                 <button type="button"
-                                                    onclick="return confirmSelesai({{ $index }})"
+                                                    onclick="return confirmSelesai({{ $loop->index }})"
                                                     class="btn btn-sm btn-success mt-2">Selesai</button>
                                                 {{-- <button type="submit"
                                                     class="btn btn-sm btn-success mt-2">Selesai</button> --}}
@@ -242,11 +242,11 @@
 <script>
     function confirmSelesai(index) {
         const username = "{{ strtoupper(auth()->user()->name) }}";
-        const itemName = "{{ $items[$index]->name }}"; // Mengambil nama item yang sesuai dengan indeks
+        const item = @json($proses[$loop->index]); // Mengambil data item dalam bentuk JSON
         Swal.fire({
             title: 'Apakah kamu yakin?',
             html: "Anda ingin menyelesaikan pekerjaan ini dengan Akun <strong style='font-size: 18pt'>" +
-                username + "</strong> untuk item <strong>" + itemName + "</strong>?",
+                username + "</strong> untuk item <strong>" + item.nama_pelanggan + "</strong>?",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#3085d6',
