@@ -245,7 +245,7 @@
         Swal.fire({
             title: 'Apakah kamu yakin?',
             html: "Anda ingin menyelesaikan pekerjaan ini dengan Akun <strong style='font-size: 18pt'>" +
-                username + "</strong> untuk item <strong>" + item.nama_pelanggan + "</strong>?",
+                username + "</strong>",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#3085d6',
