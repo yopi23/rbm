@@ -242,7 +242,6 @@
 <script>
     function confirmSelesai(index) {
         const username = "{{ strtoupper(auth()->user()->name) }}";
-        const item = @json($proses[$loop->index]); // Mengambil data item dalam bentuk JSON
         Swal.fire({
             title: 'Apakah kamu yakin?',
             html: "Anda ingin menyelesaikan pekerjaan ini dengan Akun <strong style='font-size: 18pt'>" +
