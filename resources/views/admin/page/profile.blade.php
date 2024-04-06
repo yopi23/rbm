@@ -83,9 +83,36 @@
                 </form>
             </div>
         </div>
-        <div class="card">
-            <div class="card-header">user detail</div>
-        </div>
+        @if ($this_user->jabatan == '0' || $this_user->jabatan == '1')
+            <div class="card">
+                <div class="card-header"><b>Karyawan</b></div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Nama</th>
+                                    <th>Saldo</th>
+                                    <th>Komisi</th>
+                                    <th>Penarikan</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($employees as $employee)
+                                    <tr>
+                                        <td>{{ $employee->fullname }}</td>
+                                        <td>Rp.{{ number_format($employee->saldo) }},-</td>
+                                        <td>Rp.{{ number_format($employee->total_komisi) }},-</td>
+                                        <td>Rp.{{ number_format($employee->total_penarikan) }},-</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        @endif
+
     </div>
     <div class="col-md-8">
         <div class="card card-success card-outline">

@@ -37,7 +37,32 @@ class UserController extends Controller
         foreach ($data_komisi as $k) {
             $komisi += $k->profit;
         }
-        $content = view('admin.page.profile', compact(['penarikan', 'persentase', 'komisi']));
+
+        // Jika pengguna adalah owner/upline atau admin, ambil daftar karyawan
+        $employees = [];
+        if ($this->getThisUser()->jabatan == '1' || $this->getThisUser()->id == 1) {
+            $employees = UserDetail::where('id_upline', $this->getThisUser()->id)->get();
+            foreach ($employees as $employee) {
+                $employee->saldo = $employee->saldo;
+                $employee->total_penarikan = Penarikan::where([
+                    ['kode_user', $employee->id],
+                    ['created_at', '>=', now()->startOfMonth()],
+                    ['created_at', '<=', now()->endOfMonth()]
+                ])->sum('jumlah_penarikan');
+
+                // Ambil riwayat komisi karyawan
+                $employee->riwayat_komisi = ProfitPresentase::where([
+                    ['kode_user', '=', $employee->id],
+                    ['created_at', '>=', now()->startOfMonth()],
+                    ['created_at', '<=', now()->endOfMonth()]
+                ])->get();
+
+                // Hitung total komisi untuk karyawan tertentu
+                $employee->total_komisi = $employee->riwayat_komisi->sum('profit');
+            }
+        }
+
+        $content = view('admin.page.profile', compact(['penarikan', 'persentase', 'komisi', 'employees']));
         return view('admin.layout.blank_page', compact(['page', 'content', 'data']));
     }
     public function update_profile(Request $request, $id)
