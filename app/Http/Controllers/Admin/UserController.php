@@ -86,6 +86,14 @@ class UserController extends Controller
     }
     public function store_penarikan(Request $request)
     {
+        $user = $this->getThisUser();
+        // Validasi saldo cukup untuk penarikan
+        if ($request->jumlah_penarikan <= 0 || $user->saldo < $request->jumlah_penarikan) {
+            return redirect()->back()->with([
+                'error' => 'Oops, saldo anda tidak mencukupi'
+            ]);
+        }
+
         $count = Penarikan::latest()->get()->count();
         $kode = 'PEN' . date('Ymd') . $this->getThisUser()->id_upline . $this->getThisUser()->kode_user;
         $create = Penarikan::create([

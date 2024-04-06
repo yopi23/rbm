@@ -83,6 +83,9 @@
                 </form>
             </div>
         </div>
+        <div class="card">
+            <div class="card-header">user detail</div>
+        </div>
     </div>
     <div class="col-md-8">
         <div class="card card-success card-outline">

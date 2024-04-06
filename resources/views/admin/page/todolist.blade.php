@@ -94,7 +94,7 @@
                                         </td>
                                         <td>{{ $item->name }}</td>
                                         <td>
-                                            <form id="formSelesai"
+                                            <form id="formSelesai{{ $loop->index }}"
                                                 action="{{ route('proses_service', $item->id_service) }}"
                                                 onsubmit="return confirm('Apakah Kamu yakin ingin Menyelesaikan Service ini ?')"
                                                 method="POST">
@@ -105,7 +105,7 @@
                                                 <input type="hidden" name="status_services" id="status_services"
                                                     value="Selesai">
                                                 <button type="button"
-                                                    onclick="return confirmSelesai({{ $loop->index }})"
+                                                    onclick="return confirmSelesai({{ $loop->index }},'{{ $item->nama_pelanggan }}')"
                                                     class="btn btn-sm btn-success mt-2">Selesai</button>
                                                 {{-- <button type="submit"
                                                     class="btn btn-sm btn-success mt-2">Selesai</button> --}}
@@ -240,12 +240,13 @@
     }
 </script> --}}
 <script>
-    function confirmSelesai(index) {
+    function confirmSelesai(index, pelanggan) {
         const username = "{{ strtoupper(auth()->user()->name) }}";
         Swal.fire({
             title: 'Apakah kamu yakin?',
-            html: "Anda ingin menyelesaikan pekerjaan ini dengan Akun <strong style='font-size: 18pt'>" +
-                username + "</strong>",
+            html: "Anda ingin menyelesaikan pekerjaan untuk perangkat <strong style='font-size: 16pt'>" +
+                pelanggan + "</strong> dengan Akun <strong style='font-size: 18pt'>" +
+                username + "</strong>?",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#3085d6',
@@ -254,7 +255,7 @@
         }).then((result) => {
             if (result.isConfirmed) {
                 // Lanjutkan proses pengiriman form jika pengguna mengonfirmasi
-                document.getElementById('formSelesai').submit();
+                document.getElementById('formSelesai' + index).submit();
             }
         });
         // Mencegah pengiriman form secara langsung
