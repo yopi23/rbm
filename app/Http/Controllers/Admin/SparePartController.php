@@ -706,7 +706,7 @@ class SparePartController extends Controller
     private function parseKode($kode)
     {
         $teks = $kode;
-        $hasil_parsing = explode('n', $teks);
+        $hasil_parsing = preg_split('/[\/n,]+/', $teks);
 
         $label = ['hargaBeli', 'hargaJual', 'hargaEcer', 'hargaPasang'];
         $hasil_final = array_combine($label, $hasil_parsing);
@@ -729,8 +729,21 @@ class SparePartController extends Controller
 
         // Mengonversi nilai
         foreach ($hasil_final as $label => $nilai) {
-            $hasil_final[$label] = strtr($nilai, $konversi);
+            // Menambahkan kondisi untuk memeriksa apakah nilai adalah angka
+            if (is_numeric($nilai)) {
+                // Jika nilai adalah angka, pisahkan dengan garis miring
+                $nilai = ($nilai); // Pisahkan angka dengan format 120000 menjadi 120/000
+            } else {
+                // Jika bukan angka, lakukan konversi sesuai dengan tabel konversi
+                $nilai = strtr($nilai, $konversi);
+            }
+            $hasil_final[$label] = $nilai;
         }
+
+        // Mengonversi nilai
+        // foreach ($hasil_final as $label => $nilai) {
+        //     $hasil_final[$label] = strtr($nilai, $konversi);
+        // }
 
         // Mengembalikan hasil setelah konversi
         return $hasil_final;
