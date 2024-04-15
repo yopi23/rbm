@@ -31,6 +31,8 @@ class LaporanController extends Controller
         $totalPenjualan = 0;
         $totalModalJual = 0;
         $total_part_service = 0;
+        $totalPemasukkanLain = 0; // Variabel baru untuk Total Pendapatan Pemasukkan Lain
+        // Perhitungan totalLaba tanpa memasukkan totalPemasukkanLain
         $totalLaba = ($totalPenjualan - $totalModalJual) + ($totalPendapatanService - $total_part_service);
 
         if (isset($request->tgl_awal) && isset($request->tgl_akhir)) {
@@ -75,8 +77,6 @@ class LaporanController extends Controller
             $pengeluaran_opx = PengeluaranOperasional::where([['kode_owner', '=', $this->getThisUser()->id_upline], ['pengeluaran_operasionals.created_at', '>=', $request->tgl_awal . ' 00:00:00'], ['pengeluaran_operasionals.created_at', '<=', $request->tgl_akhir . ' 23:59:59']])->latest()->get();
             //Penarikan
             $penarikan = Penarikan::join('user_details', 'penarikans.kode_user', '=', 'user_details.kode_user')->where([['penarikans.status_penarikan', '=', '1'], ['penarikans.kode_owner', '=', $this->getThisUser()->id_upline], ['penarikans.created_at', '>=', $request->tgl_awal . ' 00:00:00'], ['penarikans.created_at', '<=', $request->tgl_akhir . ' 23:59:59']])->get(['penarikans.id as id_penarikan', 'penarikans.*', 'user_details.*']);
-            // $content = view('admin.page.laporan', compact(['penarikan', 'barang_pesanan', 'sparepart_pesanan', 'penjualan_barang', 'penjualan_sparepart', 'pengeluaran_opx', 'pengeluaran_toko', 'pemasukkan_lain', 'pesanan', 'penjualan', 'request', 'service', 'part_toko_service', 'part_luar_toko_service', 'all_part_toko_service', 'all_part_luar_toko_service']));
-
 
             //service di ambil
             foreach ($serviceDp as $item) {
@@ -85,9 +85,9 @@ class LaporanController extends Controller
 
                 if ($tglService >= $request->tgl_awal && $tglService <= $request->tgl_akhir) {
                     if ($item->status_services == 'Diambil') {
-                        $totalPendapatanService += $item->total_biaya;
-                    } else {
-                        // $totalPendapatan += $item->dp;
+                        // Kurangi DP dari total_biaya sebelum menambahkan ke totalPendapatanService
+                        $pendapatanServiceSetelahDP = $item->total_biaya - $item->dp;
+                        $totalPendapatanService += $pendapatanServiceSetelahDP;
                     }
                 }
             }
@@ -140,7 +140,7 @@ class LaporanController extends Controller
             foreach ($pemasukkan_lain as $item) {
                 $tglPemasukkan = date('Y-m-d', strtotime($item->created_at));
                 if ($tglPemasukkan >= $request->tgl_awal && $tglPemasukkan <= $request->tgl_akhir) {
-                    $totalPenjualan += $item->jumlah_pemasukkan;
+                    $totalPemasukkanLain += $item->jumlah_pemasukkan;
                 }
             }
             // Total part_toko_service
@@ -164,8 +164,10 @@ class LaporanController extends Controller
                 }
             }
 
+            // Perhitungan totalLaba tetap tanpa memasukkan totalPemasukkanLain
+            $totalLaba = ($totalPenjualan - $totalModalJual) + ($totalPendapatanService - $total_part_service);
 
-            $content = view('admin.page.laporan', compact(['penarikan', 'barang_pesanan', 'sparepart_pesanan', 'penjualan_barang', 'penjualan_sparepart', 'pengeluaran_opx', 'pengeluaran_toko', 'pemasukkan_lain', 'pesanan', 'penjualan', 'request', 'service', 'part_toko_service', 'part_luar_toko_service', 'all_part_toko_service', 'all_part_luar_toko_service', 'totalPendapatanService', 'DpService', 'totalPenjualan', 'total_part_service', 'totalModalJual', 'totalLaba']));
+            $content = view('admin.page.laporan', compact(['penarikan', 'barang_pesanan', 'sparepart_pesanan', 'penjualan_barang', 'penjualan_sparepart', 'pengeluaran_opx', 'pengeluaran_toko', 'pemasukkan_lain', 'pesanan', 'penjualan', 'request', 'service', 'part_toko_service', 'part_luar_toko_service', 'all_part_toko_service', 'all_part_luar_toko_service', 'totalPendapatanService', 'DpService', 'totalPenjualan', 'total_part_service', 'totalModalJual', 'totalLaba', 'totalPemasukkanLain']));
         }
         return view('admin.layout.blank_page', compact(['page', 'content']));
     }

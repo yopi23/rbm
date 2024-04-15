@@ -120,7 +120,7 @@ class ServiceController extends Controller
             'type_unit' => $request->type_unit,
             'keterangan' => $request->keterangan,
             'total_biaya' => $request->total_biaya,
-            'created_at' => Carbon::now(),
+            // 'created_at' => Carbon::now(),
         ]);
         if ($update) {
             return redirect()->route('todolist')->with('success', 'Update Data Service Berhasil');
@@ -137,7 +137,7 @@ class ServiceController extends Controller
             'keterangan' => $request->keterangan,
             'dp' => $request->dp,
             'total_biaya' => $request->total_biaya,
-            'created_at' => Carbon::now(),
+            // 'created_at' => Carbon::now(),
         ]);
         if ($update) {
             return redirect()->route('all_service')->with('success', 'Update Data Service Berhasil');

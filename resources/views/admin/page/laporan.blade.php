@@ -85,7 +85,8 @@
     </div>
     <div class="col-12 col-sm-6 col-md-4">
         <div class="info-box mb-3">
-            <span class="info-box-icon bg-warning elevation-1"><i class="fas">&#xf155;</i></span>
+            <span class="info-box-icon bg-warning elevation-1"><i class="fas"
+                    style="color: #fff;">&#xf155;</i></span>
 
             <div class="info-box-content">
                 <span class="info-box-text">Total Uang Muka</span>
@@ -97,6 +98,23 @@
         </div>
         <!-- /.info-box -->
     </div>
+    {{-- pemasukan lainnya --}}
+    <div class="col-12 col-sm-6 col-md-4">
+        <div class="info-box mb-3">
+            <span class="info-box-icon elevation-1" style="background-color: #00ce90"><i class="fas"
+                    style="color: #fff;">&#xf155;</i></span>
+
+            <div class="info-box-content">
+                <span class="info-box-text">Total pemasukan lainnya</span>
+                @if (isset($totalPemasukkanLain))
+                    <span class="info-box-number">Rp.{{ number_format($totalPemasukkanLain) }},-</span>
+                @endif
+            </div>
+            <!-- /.info-box-content -->
+        </div>
+        <!-- /.info-box -->
+    </div>
+    {{-- pemasukan lainnya --}}
 </div>
 
 {{-- laba --}}

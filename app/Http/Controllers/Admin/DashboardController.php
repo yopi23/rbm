@@ -39,12 +39,31 @@ class DashboardController extends Controller
             $total_pemasukkan_lain = 0;
             $total_pengeluaran = 0;
             foreach ($service as $item) {
+                // Cek jika tanggal service adalah hari ini
                 if ($item->tgl_service == date('Y-m-d')) {
+                    // Cek jika status service adalah 'Diambil'
                     if ($item->status_services == 'Diambil') {
-                        $total_service += $item->total_biaya;
+                        // Cek apakah DP diberikan pada hari yang sama dengan pengambilan service
+                        if ($item->created_at->format('Y-m-d') == $item->tgl_service) {
+                            // DP dan total biaya ditambahkan karena dianggap sebagai transaksi hari ini
+                            $total_service += $item->total_biaya;
+                        } else {
+                            // Hanya total biaya dikurangi DP yang ditambahkan karena DP sudah dihitung sebelumnya
+                            $total_service += $item->total_biaya - $item->dp;
+                        }
                     } else {
-                        $total_service += $item->dp;
+                        // Untuk service yang belum diambil, cek apakah DP diberikan hari ini
+                        if ($item->created_at->format('Y-m-d') == date('Y-m-d')) {
+                            // DP ditambahkan karena dianggap sebagai transaksi hari ini
+                            $total_service += $item->dp;
+                        }
+                        // Jika DP diberikan sebelum hari ini dan service belum diambil, tidak perlu menambahkan apa-apa
+                        // karena DP sudah dihitung pada hari pemberian
                     }
+                } else if ($item->status_services == 'Diambil' && $item->created_at->format('Y-m-d') != date('Y-m-d')) {
+                    // Ini menangani kasus di mana service diambil hari ini tapi DP diberikan pada hari sebelumnya
+                    // DP tidak ditambahkan lagi karena sudah dihitung pada hari pemberian
+                    $total_service += $item->total_biaya - $item->dp;
                 }
             }
             foreach ($penjualan as $item) {
