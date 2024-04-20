@@ -130,6 +130,7 @@ Route::group(['middleware' => ['auth']], function () {
 
         //penarikan
         Route::put('update_all_penarikan_statuses', [UserController::class, 'updateAllStatuses'])->name('update_all_penarikan_statuses');
+        Route::post('/update_stok_sparepart', [SparePartController::class, 'update_stok_sparepart'])->name('update_stok_sparepart');
     });
     //plus
     // Route::get('/stok_sparepart', [SparePartController::class, 'view_stok'])->name('stok_sparepart');
@@ -178,9 +179,11 @@ Route::group(['middleware' => ['auth']], function () {
     Route::delete('sparepart_rusak/{id}/destroy', [SparePartController::class, 'delete_sparepart_rusak'])->name('delete_sparepart_rusak');
 
     //Opname Sparepart
+
     Route::get('/opname_sparepart', [SparePartController::class, 'view_opname'])->name('opname_sparepart');
     Route::put('opname_sparepart/{id}/ubah_stok', [SparePartController::class, 'opname_ubah_stok'])->name('opname_sparepart_ubah_stok');
     Route::get('opname_sparepart/cetak', [PDFController::class, 'opname_sparepart'])->name('cetak_opname');
+
     //Repair Controller
     Route::get('/all_service', [ServiceController::class, 'view_all'])->name('all_service');
     // Route::get('all_service/{id}/edit', [ServiceController::class,'edit_service'])->name('edit_service');

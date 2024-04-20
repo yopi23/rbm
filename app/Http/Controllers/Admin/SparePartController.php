@@ -124,7 +124,7 @@ class SparePartController extends Controller
     {
         $data = Sparepart::findOrFail($id);
         $data->update([
-            'stok_sparepart' => $request->stok_sparepart
+            'stock_asli' => $request->stock_asli
         ]);
         if ($data) {
             $update = SparepartRusak::where([['kode_barang', '=', $id]])->get()->first();
@@ -137,6 +137,36 @@ class SparePartController extends Controller
             return redirect()->back();
         }
     }
+    //update stock opname
+    public function update_stok_sparepart(Request $request)
+    {
+        // Dapatkan semua data sparepart
+        $spareparts = Sparepart::all();
+
+        // Loop melalui setiap sparepart
+        foreach ($spareparts as $sparepart) {
+            // Dapatkan stock_asli dari database
+            $stock_asli = $sparepart->stock_asli;
+
+            // Periksa apakah stock_asli lebih dari 0
+            if ($stock_asli > 0) {
+                // Jika ya, update stok_sparepart dengan nilai stock_asli
+                $sparepart->update([
+                    'stok_sparepart' => $stock_asli
+                ]);
+
+                // Nol kan stock_alis
+                $sparepart->update([
+                    'stock_alis' => 0
+                ]);
+            }
+        }
+
+        return redirect()->back();
+    }
+
+    //update stock opname
+
 
     //Create Functions
     public function create_sparepart(Request $request)

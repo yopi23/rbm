@@ -15,6 +15,7 @@ class Sparepart extends Model
         'nama_sparepart',
         'desc_sparepart',
         'stok_sparepart',
+        'stock_asli',
         'harga_beli',
         'harga_jual',
         'harga_ecer',

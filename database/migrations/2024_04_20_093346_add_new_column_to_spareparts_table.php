@@ -14,10 +14,7 @@ return new class extends Migration
     public function up()
     {
         Schema::table('spareparts', function (Blueprint $table) {
-            $table->string('harga_ecer', 255)->nullable()->after('harga_jual');
-            $table->text('kode_spl')->nullable()->after('kode_owner');
-
-            //
+            $table->string('stock_asli')->nullable()->after('stok_sparepart');
         });
     }
 
@@ -29,8 +26,7 @@ return new class extends Migration
     public function down()
     {
         Schema::table('spareparts', function (Blueprint $table) {
-            $table->dropColumn('harga_ecer');
-            $table->dropColumn('kode_spl');
+            $table->dropColumn('stock_asli');
         });
     }
 };
