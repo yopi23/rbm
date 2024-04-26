@@ -131,6 +131,7 @@ Route::group(['middleware' => ['auth']], function () {
         //penarikan
         Route::put('update_all_penarikan_statuses', [UserController::class, 'updateAllStatuses'])->name('update_all_penarikan_statuses');
         Route::post('/update_stok_sparepart', [SparePartController::class, 'update_stok_sparepart'])->name('update_stok_sparepart');
+        Route::post('/pindah_komisi', [ServiceController::class, 'pindahKomisi'])->name('pindahKomisi');
     });
     //plus
     // Route::get('/stok_sparepart', [SparePartController::class, 'view_stok'])->name('stok_sparepart');

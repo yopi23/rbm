@@ -65,7 +65,7 @@ class ServiceController extends Controller
             ->get([
                 'sevices.id as id_service',
                 'sevices.*',
-                // 'users.*',
+                'users.name as nama_teknisi',
                 'detail_part_services.detail_harga_part_service',
                 'detail_part_services.qty_part as qty_part_toko',
                 'detail_part_luar_services.qty_part as qty_part_luar',
@@ -91,12 +91,13 @@ class ServiceController extends Controller
                         </td>
                          <td>
                          <a href="' . route('nota_tempel_selesai', $item->id_service) . '" target="_blank" class="btn btn-sm btn-primary mt-2"><i class="fas fa-print"></i></a>
-                        <button class="btn btn-secondary btn-sm my-2" data-toggle="modal" data-target="#editteknisi">Edit</button>
+                         <button class="btn btn-secondary btn-sm my-2" data-toggle="modal" data-target="#editteknisi" data-id_teknisi="' . $item->id_teknisi . '" data-id_service="' . $item->id_service . '" data-teknisi="' . $teknisi . '" data-device="' . $item->nama_pelanggan . ' ' . '(' . $item->type_unit . ')' . '">Edit</button>
                          </td>
                         </tr>';
         }
         $data = $this->getTable($thead, $tbody);
-        return view('admin.layout.card_layout', compact(['page', 'data']));
+        $user = UserDetail::where('id_upline', $this->getThisUser()->id)->get();
+        return view('admin.layout.card_layout', compact(['page', 'data', 'user']));
     }
 
     public function detail_service(Request $request, $id)
@@ -453,6 +454,54 @@ class ServiceController extends Controller
         ]);
         if ($update) {
             return redirect()->back();
+        }
+    }
+    public function pindahKomisi(Request $request)
+    {
+        // dd($request->all());
+        $id_service = $request->input('service_id');
+        $teknisi_lama = $request->input('teknisi_lama');
+        $new_teknisi = $request->input('new_teknisi');
+
+        // Lakukan validasi input
+        if (!$id_service || !$teknisi_lama || !$new_teknisi) {
+            return redirect()->back()->with('error', 'Invalid input data');
+        }
+
+        try {
+            // Mulai transaksi database
+            DB::beginTransaction();
+
+            // Update kolom id_teknisi pada tabel services
+            $service = modelServices::find($id_service);
+            $service->id_teknisi = $new_teknisi;
+            $service->save();
+
+            // Kurangi saldo pada tabel user_details berdasarkan kode_user = teknisi_lama
+            // dengan nilai profit yang sesuai dari tabel profit_presentases berdasarkan id_service
+            $profit = ProfitPresentase::where('kode_service', $id_service)->value('profit');
+
+            UserDetail::where('kode_user', $teknisi_lama)->decrement('saldo', $profit);
+
+            // Ambil nilai persentase dari tabel persentase_user berdasarkan kode_user = new_teknisi
+            $persentase = PresentaseUser::where('kode_user', $new_teknisi)->value('id');
+
+            // Update kode_user pada tabel profit_presentases berdasarkan id_service
+            ProfitPresentase::where('kode_service', $id_service)
+                ->update(['kode_user' => $new_teknisi, 'kode_presentase' => $persentase]);
+
+            // Tambahkan profit ke saldo pada tabel user_details berdasarkan kode_user = new_teknisi
+            UserDetail::where('kode_user', $new_teknisi)->increment('saldo', $profit);
+
+            // Commit transaksi jika semua operasi berhasil
+            DB::commit();
+
+            return redirect()->back()->with('success', 'Komisi berhasil dipindahkan');
+        } catch (\Exception $e) {
+            // Rollback transaksi jika terjadi kesalahan
+            DB::rollback();
+
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat memindahkan komisi');
         }
     }
 }

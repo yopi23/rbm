@@ -61,37 +61,56 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="staticBackdropLabel">Modal title</h5>
+                <h5 class="modal-title"><span id="devices"></span></h5>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
-            <div class="modal-body">
-                <form action="" method="post">
-                    @csrf
+            <form action="{{ route('pindahKomisi') }}" method="post">
+                @csrf
+                <div class="modal-body">
                     {{-- <input type="hidden" name="service_id" value="{{ $id }}"> --}}
-                    <label for="debit_account">Akun yang Dikurangi:</label>
-                    <select name="debit_account" id="debit_account" class="form-control">
-                        <!-- Daftar akun yang tersedia untuk dipilih -->
-                    </select>
-                    <label for="credit_account">Akun yang Menerima:</label>
-                    <select name="credit_account" id="credit_account" class="form-control">
-                        <!-- Daftar akun yang tersedia untuk dipilih -->
-                    </select>
-                    <label for="percentage_debit_account">Persentase untuk Akun yang Dikurangi:</label>
-                    <input type="number" name="percentage_debit_account" class="form-control">
-                    <label for="percentage_credit_account">Persentase untuk Akun yang Menerima:</label>
-                    <input type="number" name="percentage_credit_account" class="form-control">
-                    <button type="submit" class="btn btn-primary">Pindahkan Komisi</button>
-                </form>
+                    <label for="debit_account">Dari akun:</label>
+                    <input class="form-control" id="nama_teknisi_lama" readonly>
+                    <input class="form-control" name="teknisi_lama" id="teknisi_lama" hidden>
+                    <input class="form-control" name="service_id" id="service_id" hidden>
 
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary">Understood</button>
-            </div>
+                    <label for="credit_account">Ke akun:</label>
+                    <select name="new_teknisi" id="new_teknisi" class="form-control">
+
+                        @if (isset($user))
+                            @foreach ($user as $users)
+                                <option value="{{ $users->kode_user }}">{{ $users->fullname }}</option>
+                            @endforeach
+                        @endif
+                    </select>
+                    </select>
+
+
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Pindahkan Komisi</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
-
+<script>
+    $(document).ready(function() {
+        $('#editteknisi').on('show.bs.modal', function(event) {
+            const button = $(event.relatedTarget) // Button that triggered the modal
+            const id_teknisi = button.data('id_teknisi') // Extract info from data-* attributes
+            const id_service = button.data('id_service')
+            const teknisi = button.data('teknisi')
+            const device = button.data('device')
+            const modal = $(this)
+            modal.find('.modal-body input#nama_teknisi_lama').val(teknisi)
+            modal.find('.modal-body input#teknisi_lama').val(id_teknisi)
+            modal.find('.modal-body input#service_id').val(id_service)
+            modal.find('.modal-title span#devices').text(device)
+        })
+    })
+</script>
 @include('admin.component.footer')
