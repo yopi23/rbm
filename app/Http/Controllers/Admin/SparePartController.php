@@ -149,15 +149,15 @@ class SparePartController extends Controller
             $stock_asli = $sparepart->stock_asli;
 
             // Periksa apakah stock_asli lebih dari 0
-            if ($stock_asli > 0) {
+            if ($stock_asli != null) {
                 // Jika ya, update stok_sparepart dengan nilai stock_asli
                 $sparepart->update([
-                    'stok_sparepart' => $stock_asli
+                    'stok_sparepart' => strval($stock_asli)
                 ]);
 
                 // Nol kan stock_alis
                 $sparepart->update([
-                    'stock_alis' => 0
+                    'stock_asli' => null
                 ]);
             }
         }
