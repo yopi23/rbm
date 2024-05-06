@@ -66,7 +66,7 @@
                             }
                         }
                         $profit = $item->total_biaya - $totalPart;
-                        $totalProfit += $profit;
+                        $final_profit_service += $profit;
                     @endphp
                 @endif
                 {{-- @if (isset($part_luar_toko_service))
@@ -92,7 +92,7 @@
                 @php
                     $final_total_service += $item->total_biaya;
                     $final_sparepart_service += $total_part;
-                    $final_profit_service += $item->total_biaya - $total_part;
+                    // $final_profit_service = totalProfit;
                 @endphp
             @endforeach
         </tbody>
