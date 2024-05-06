@@ -547,7 +547,7 @@
                         <div class="col-md-12">
                             <div class="text-right">
                                 <strong>Total profit penjualan</strong>
-                                <span>Rp.{{ number_format($totalPendapatanService) }},-</span>
+                                <span>Rp.{{ number_format($totalProfitPenjualan) }},-</span>
                             </div>
                         </div>
                     </div>
