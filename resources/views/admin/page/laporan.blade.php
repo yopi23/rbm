@@ -126,11 +126,13 @@
                 @php
                     $totalPenarikan = 0;
                 @endphp
-                @foreach ($penarikan as $item)
-                    @php
-                        $totalPenarikan += $item->jumlah_penarikan;
-                    @endphp
-                @endforeach
+                @if (isset($penarikan))
+                    @foreach ($penarikan as $item)
+                        @php
+                            $totalPenarikan += $item->jumlah_penarikan;
+                        @endphp
+                    @endforeach
+                @endif
                 <span class="info-box-number">Rp.{{ number_format($totalPenarikan) }},-</span>
 
             </div>
