@@ -75,7 +75,6 @@
                     <td>{{ $item->created_at }}</td>
                     <td>{{ $item->kode_service }}</td>
                     <td>{{ $item->nama_pelanggan }}</td>
-                    <td>{{ $item->no_telp }}</td>
                     <td>{{ $item->type_unit }}</td>
                     <td>Rp.{{ number_format($item->total_biaya) }},-</td>
                     <td>Rp.{{ number_format($totalPart) }},-</td>
