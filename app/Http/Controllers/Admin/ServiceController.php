@@ -506,11 +506,11 @@ class ServiceController extends Controller
     }
 
     //akses kontrol service
-    // public function list_all_service()
-    // {
-    //     $page = "List All Service";
+    public function list_all_service()
+    {
+        $page = "List All Service";
 
-    //     $content = view('admin.page.list_all_service');
-    //     return view('admin.page.list_all_service', compact(['content']));
-    // }
+        $content = view('admin.page.list_all_service');
+        return view('admin.page.list_all_service', compact(['content']));
+    }
 }
