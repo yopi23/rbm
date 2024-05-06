@@ -819,6 +819,7 @@
         </div>
     </div>
 @endif
+
 @if (isset($penarikan))
     <div class="row">
         <div class="col-md-12">
@@ -840,7 +841,13 @@
                                 <th>Jumlah</th>
                             </thead>
                             <tbody>
+                                @php
+                                    $totalPenarikan = 0;
+                                @endphp
                                 @foreach ($penarikan as $item)
+                                    @php
+                                        $totalPenarikan += $item->jumlah_penarikan;
+                                    @endphp
                                     <tr>
                                         <td>{{ $loop->index + 1 }}</td>
                                         <td>{{ $item->created_at }}</td>
@@ -852,6 +859,16 @@
                                 @endforeach
                             </tbody>
                         </table>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="text-right">
+                                <strong>Total Penarikan</strong>
+                                <span>Rp.{{ number_format($totalPenarikan) }},-</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
