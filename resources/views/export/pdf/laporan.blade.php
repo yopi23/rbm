@@ -52,9 +52,10 @@
                 $final_profit_service = 0;
             @endphp
             @foreach ($service as $item)
-                @if (isset($part_toko_service))
-                    @php
-                        $totalPart = 0;
+                @php
+                    $totalPart = 0;
+                    $profit = 0;
+                    if (isset($part_toko_service)) {
                         foreach ($all_part_toko_service as $a) {
                             if ($item->id == $a->kode_services) {
                                 $totalPart += ($a->detail_harga_part_service - $a->total_biaya) * $a->qty_part;
@@ -67,17 +68,8 @@
                         }
                         $profit = $item->total_biaya - $totalPart;
                         $final_profit_service += $profit;
-                    @endphp
-                @endif
-                {{-- @if (isset($part_luar_toko_service))
-                    @php
-                        foreach ($all_part_luar_toko_service as $b) {
-                            if ($item->id == $b->kode_services) {
-                                $total_part += $b->harga_part * $b->qty_part;
-                            }
-                        }
-                    @endphp
-                @endif --}}
+                    }
+                @endphp
                 <tr>
                     <td>{{ $loop->index + 1 }}</td>
                     <td>{{ $item->created_at }}</td>
@@ -91,8 +83,7 @@
                 </tr>
                 @php
                     $final_total_service += $item->total_biaya;
-                    $final_sparepart_service += $total_part;
-                    // $final_profit_service = totalProfit;
+                    $final_sparepart_service += $totalPart;
                 @endphp
             @endforeach
         </tbody>
@@ -105,6 +96,7 @@
             </tr>
         </tfoot>
     </table>
+
 
 
     <center>
