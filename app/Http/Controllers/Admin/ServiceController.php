@@ -504,4 +504,13 @@ class ServiceController extends Controller
             return redirect()->back()->with('error', 'Terjadi kesalahan saat memindahkan komisi');
         }
     }
+
+    //akses kontrol service
+    // public function list_all_service()
+    // {
+    //     $page = "List All Service";
+
+    //     $content = view('admin.page.list_all_service');
+    //     return view('admin.page.list_all_service', compact(['content']));
+    // }
 }

@@ -133,6 +133,10 @@ Route::group(['middleware' => ['auth']], function () {
         Route::post('/update_stok_sparepart', [SparePartController::class, 'update_stok_sparepart'])->name('update_stok_sparepart');
         Route::post('/pindah_komisi', [ServiceController::class, 'pindahKomisi'])->name('pindahKomisi');
     });
+
+
+    Route::get('/list_all_service', [ServiceController::class, 'list_all_service'])->name('list_all_service');
+
     //plus
     // Route::get('/stok_sparepart', [SparePartController::class, 'view_stok'])->name('stok_sparepart');
 

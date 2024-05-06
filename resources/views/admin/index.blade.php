@@ -63,8 +63,9 @@
     <div class="row">
         <div class="col-12 col-sm-6 col-md-4">
             <div class="info-box mb-3">
-                <span class="info-box-icon bg-primary elevation-1"><i class="fas fa-cog"></i></span>
-
+                <a class="info-box-icon bg-primary elevation-1" href="{{ route('list_all_service') }}">
+                    <i class="fas fa-cog"></i>
+                </a>
                 <div class="info-box-content">
                     <span class="info-box-text">Service</span>
                     <span class="info-box-number">Rp.{{ number_format($total_service) }},-</span>
@@ -75,7 +76,9 @@
         </div>
         <div class="col-12 col-sm-6 col-md-4">
             <div class="info-box mb-3">
-                <span class="info-box-icon bg-success elevation-1"><i class="fas fa-shopping-cart"></i></span>
+
+                <a class="info-box-icon bg-success elevation-1" href="{{ route('penjualan') }}"><i
+                        class="fas fa-shopping-cart"></i></a>
 
                 <div class="info-box-content">
                     <span class="info-box-text">Penjualan</span>

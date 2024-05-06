@@ -126,8 +126,7 @@
             <div class="info-box-content">
                 <span class="info-box-text">Laba Service</span>
                 @if (isset($totalPendapatanService))
-                    <span
-                        class="info-box-number">Rp.{{ number_format($totalPendapatanService - $total_part_service) }},-</span>
+                    <span class="info-box-number">Rp.{{ number_format($totalPendapatanService) }},-</span>
                 @endif
             </div>
             <!-- /.info-box-content -->
