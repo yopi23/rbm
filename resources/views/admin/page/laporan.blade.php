@@ -198,7 +198,7 @@
 </div> --}}
 
 {{-- Services --}}
-@if (isset($service))
+{{-- @if (isset($service))
     <form action="{{ route('print_laporan') }}" target="_blank" method="GET">
         <input type="hidden" value="{{ isset($request->tgl_awal) != null ? $request->tgl_awal : '' }}" name="tgl_awal"
             id="tgl_awal">
@@ -268,10 +268,103 @@
                         </table>
                     </div>
                 </div>
+                <div class="card-footer">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="text-right">
+                                <strong>Total Service</strong>
+                                <span>Rp.{{ number_format($totalPendapatanService) }},-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+@endif --}}
+@if (isset($service))
+    <form action="{{ route('print_laporan') }}" target="_blank" method="GET">
+        <input type="hidden" value="{{ isset($request->tgl_awal) != null ? $request->tgl_awal : '' }}" name="tgl_awal"
+            id="tgl_awal">
+        <input type="hidden" value="{{ isset($request->tgl_akhir) != null ? $request->tgl_akhir : '' }}"
+            name="tgl_akhir" id="tgl_akhir">
+        <button type="submit" class="btn btn-success"><i class="fas fa-print"></i> Print</button>
+    </form>
+    <br>
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card card-outline card-success">
+                <div class="card-header">
+                    <div class="card-title">
+                        Laporan Service Tanggal {{ $request->tgl_awal }} S/d {{ $request->tgl_akhir }}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table" id="TABLES_1">
+                            <thead>
+                                <th>#</th>
+                                <th>Tanggal</th>
+                                <th>Invoice</th>
+                                <th>Nama</th>
+                                <th>No Telp</th>
+                                <th>Tipe Device</th>
+                                <th>Total</th>
+                                <th>Sparepart</th>
+                                <th>Profit</th>
+                            </thead>
+                            <tbody>
+                                @php
+                                    $totalProfit = 0;
+                                @endphp
+                                @foreach ($service as $item)
+                                    @php
+                                        $totalPart = 0;
+                                        foreach ($all_part_toko_service as $a) {
+                                            if ($item->id == $a->kode_services) {
+                                                $totalPart +=
+                                                    ($a->detail_harga_part_service - $a->total_biaya) * $a->qty_part;
+                                            }
+                                        }
+                                        foreach ($all_part_luar_toko_service as $b) {
+                                            if ($item->id == $b->kode_services) {
+                                                $totalPart += $b->harga_part * $b->qty_part;
+                                            }
+                                        }
+                                        $profit = $item->total_biaya - $totalPart;
+                                        $totalProfit += $profit;
+                                    @endphp
+                                    <tr>
+                                        <td>{{ $loop->index + 1 }}</td>
+                                        <td>{{ $item->created_at }}</td>
+                                        <td>{{ $item->kode_service }}</td>
+                                        <td>{{ $item->nama_pelanggan }}</td>
+                                        <td>{{ $item->no_telp }}</td>
+                                        <td>{{ $item->type_unit }}</td>
+                                        <td>Rp.{{ number_format($item->total_biaya) }},-</td>
+                                        <td>Rp.{{ number_format($totalPart) }},-</td>
+                                        <td>Rp.{{ number_format($profit) }},-</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="text-right">
+                                <strong>Total Profit</strong>
+                                <span>Rp.{{ number_format($totalProfit) }},-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 @endif
+
 @if (isset($part_toko_service))
     <div class="row">
         <div class="col-md-12">
