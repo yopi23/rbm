@@ -354,7 +354,7 @@
                     <div class="row">
                         <div class="col-md-12">
                             <div class="text-right">
-                                <strong>Total Profit</strong>
+                                <strong>Total Profit service</strong>
                                 <span>Rp.{{ number_format($totalProfit) }},-</span>
                             </div>
                         </div>
@@ -514,7 +514,17 @@
                                 <th>Profit</th>
                             </thead>
                             <tbody>
+                                @php
+                                    $totalProfitPenjualan = 0;
+                                @endphp
+
                                 @foreach ($penjualan_sparepart as $item)
+                                    @php
+                                        $profit =
+                                            $item->detail_harga_jual * $item->qty_sparepart -
+                                            $item->detail_harga_modal * $item->qty_sparepart;
+                                        $totalProfitPenjualan += $profit;
+                                    @endphp
                                     <tr>
                                         <td>{{ $loop->index + 1 }}</td>
                                         <td>{{ $item->tgl_keluar }}</td>
@@ -532,10 +542,21 @@
                         </table>
                     </div>
                 </div>
+                <div class="card-footer">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="text-right">
+                                <strong>Total profit penjualan</strong>
+                                <span>Rp.{{ number_format($totalPendapatanService) }},-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 @endif
+
 @if (isset($penjualan_barang))
     <div class="row">
         <div class="col-md-12">
