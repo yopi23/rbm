@@ -45,27 +45,27 @@
                 $final_total_service = 0;
                 $final_sparepart_service = 0;
                 $final_profit_service = 0;
-            @endphp
+            @
+
             @foreach ($service as $item)
-          
+
             @if (isset($part_toko_service))
-                @php
-                $total_part = 0;
-                    foreach($all_part_toko_service as $a){
-                        if($item->id == $a->kode_services){
-                            $total_part += (($a->detail_harga_part_service - $a->harga_pasang) * $a->qty_part);
-                        }
-                    }
-                @endphp
-            @endif
-            @if (isset($part_luar_toko_service)) 
-                @php
-                    foreach($all_part_luar_toko_service as $b){
-                        if($item->id == $b->kode_services){
-                            $total_part += $b->harga_part * $b->qty_part;
-                        }
-                    }
-                @endphp
+            @php
+                                        $totalPart = 0;
+                                        foreach ($all_part_toko_service as $a) {
+                                            if ($item->id == $a->kode_services) {
+                                                $totalPart +=
+                                                    ($a->detail_harga_part_service - $a->total_biaya) * $a->qty_part;
+                                            }
+                                        }
+                                        foreach ($all_part_luar_toko_service as $b) {
+                                            if ($item->id == $b->kode_services) {
+                                                $totalPart += $b->harga_part * $b->qty_part;
+                                            }
+                                        }
+                                        $profit = $item->total_biaya - $totalPart;
+                                        $totalProfit += $profit;
+                                    @endphp
             @endif
                 <tr>
                     <td>{{$loop->index + 1}}</td>
@@ -77,6 +77,7 @@
                     <td>Rp.{{number_format($total_part)}},-</td>
                     <td>Rp.{{number_format($item->total_biaya - $total_part)}},-</td>
                 </tr>
+
                 @php
                     $final_total_service += $item->total_biaya;
                     $final_sparepart_service += $total_part;
@@ -93,6 +94,8 @@
             </tr>
         </tfoot>
 	</table>
+
+
     <center><h6>Laba Sparepart (Terpakai Untuk Service)</h6></center>
     <table class="table table-bordered" style="width: 100%">
         <thead>
@@ -483,7 +486,7 @@
                     <td>{{$item->fullname}}</td>
                     <td>{{$item->catatan_penarikan}}</td>
                     <td>Rp.{{number_format($item->jumlah_penarikan)}},-</td>
-                    
+
                 </tr>
             @endforeach
         </tbody>
