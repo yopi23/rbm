@@ -68,23 +68,33 @@
                         $profit = $item->total_biaya - $totalPart;
                         $totalProfit += $profit;
                     @endphp
-                    <tr>
-                        <td>{{ $loop->index + 1 }}</td>
-                        <td>{{ $item->created_at }}</td>
-                        <td>{{ $item->kode_service }}</td>
-                        <td>{{ $item->nama_pelanggan }}</td>
-                        <td>{{ $item->no_telp }}</td>
-                        <td>{{ $item->type_unit }}</td>
-                        <td>Rp.{{ number_format($item->total_biaya) }},-</td>
-                        <td>Rp.{{ number_format($totalPart) }},-</td>
-                        <td>Rp.{{ number_format($profit) }},-</td>
-                    </tr>
+                @endif
+                {{-- @if (isset($part_luar_toko_service))
                     @php
-                        $final_total_service += $item->total_biaya;
-                        $final_sparepart_service += $total_part;
-                        $final_profit_service += $item->total_biaya - $total_part;
+                        foreach ($all_part_luar_toko_service as $b) {
+                            if ($item->id == $b->kode_services) {
+                                $total_part += $b->harga_part * $b->qty_part;
+                            }
+                        }
                     @endphp
-                @endforeach
+                @endif --}}
+                <tr>
+                    <td>{{ $loop->index + 1 }}</td>
+                    <td>{{ $item->created_at }}</td>
+                    <td>{{ $item->kode_service }}</td>
+                    <td>{{ $item->nama_pelanggan }}</td>
+                    <td>{{ $item->no_telp }}</td>
+                    <td>{{ $item->type_unit }}</td>
+                    <td>Rp.{{ number_format($item->total_biaya) }},-</td>
+                    <td>Rp.{{ number_format($totalPart) }},-</td>
+                    <td>Rp.{{ number_format($profit) }},-</td>
+                </tr>
+                @php
+                    $final_total_service += $item->total_biaya;
+                    $final_sparepart_service += $total_part;
+                    $final_profit_service += $item->total_biaya - $total_part;
+                @endphp
+            @endforeach
         </tbody>
         <tfoot class="font-weight-bold">
             <tr>
