@@ -204,9 +204,49 @@
                 <!-- /.modal-dialog -->
             </div>
 
-            <div class="modal fade" id="modalEditSparepart">
+            {{-- <div class="modal fade" id="modalEditSparepart">
                 <!-- ... (kode modal edit) ... -->
+            </div> --}}
+            <div class="modal fade" id="modalEditRestock">
+                <div class="modal-dialog modal-xl">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h4 class="modal-title" id="modalTitle">Edit Sparepart Restock</h4>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <!-- Formulir untuk menambah/edit data restock sparepart -->
+                            <form id="formRestock">
+                                <div class="form-group">
+                                    <label>Nama Barang</label>
+                                    <input type="text" name="nama_barangRestock" id="nama_barangRestock"
+                                        class="form-control" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Kode</label>
+                                    <input type="text" name="kode_barangRestock" id="kode_barangRestock"
+                                        class="form-control" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Stok</label>
+                                    <input type="number" name="stok_barangRestock" id="stok_barangRestock"
+                                        class="form-control" required>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer justify-content-between">
+                            <button type="button" class="btn btn-default" data-dismiss="modal">Tutup</button>
+                            <button type="button" class="btn btn-primary" onclick="simpanEditSparepart()"
+                                id="btnSimpanSparepart">Update</button>
+                        </div>
+                    </div>
+                    <!-- /.modal-content -->
+                </div>
+                <!-- /.modal-dialog -->
             </div>
+
             {{-- modal restock --}}
             <div class="modal fade" id="modal_restock">
                 <div class="modal-dialog modal-xl">
@@ -536,7 +576,7 @@
         });
     }
 </script>
-
+{{-- ini pencarian part --}}
 <script>
     $(document).ready(function() {
         $('#modal_restock').on('shown.bs.modal', function() {
@@ -587,6 +627,7 @@
     }
 </script>
 
+// {{-- end pencarian part --}}
 
 <script>
     function manageListRSpareparts() {
@@ -599,6 +640,10 @@
 
         function getAllRSpareparts() {
             return dataListRSpareparts;
+        }
+
+        function getRSparepart(index) {
+            return dataListRSpareparts[index];
         }
 
         function addRSparepart(listsparepart) {
@@ -639,7 +684,8 @@
             addRSparepart,
             updateRSparepart,
             deleteRSparepart,
-            deleteSemuaRSparepart
+            deleteSemuaRSparepart,
+            getRSparepart
         };
     }
 
@@ -686,7 +732,8 @@
                 <td>${dataTabelKedua[i].kode_harga}</td>
                 <td>${dataTabelKedua[i].stok_sparepart}</td>
                 <td>
-                    <button class="btn btn-danger" onclick="hapusDataListRestock(${i})">Hapus</button>
+                    <button class="btn btn-success my-2" onclick="EditRestock(${i})" data-index="${i}"><i class="fa fa-cog"></i></button>
+                    <button class="btn btn-danger my-2" onclick="hapusDataListRestock(${i})"><i class="fa fa-trash"></i></button>
                 </td>
             </tr>`;
 
@@ -718,6 +765,74 @@
         simpanDataTabelKedua(dataRestock);
         tampilkanDataListRestock();
     }
+    // edit restock
+    function EditRestock(index) {
+        const restock = listSparepartManager.getRSparepart(index);
+
+        // Mengisi nilai form dengan data dari restock yang akan di-edit
+        $("#nama_barangRestock").val(restock.nama_sparepart);
+        $("#kode_barangRestock").val(restock.kode_harga);
+        $("#stok_barangRestock").val(restock.stok_sparepart);
+
+        // Menyimpan indeks yang sedang diedit sebagai data tambahan pada tombol "Update"
+        $("#btnSimpanSparepart").attr("data-index", index);
+
+        // Menyimpan data-id sebagai atribut pada tombol "Update"
+        $("#btnSimpanSparepart").attr("data-id", restock.id);
+
+        // Mengubah judul modal
+        $("#modalTitle").text("Edit Sparepart Restock");
+
+        // Menampilkan kembali modal edit
+        $("#modalEditRestock").modal('show');
+    }
+
+    function simpanEditSparepart() {
+        const index = $("#btnSimpanSparepart").attr("data-index");
+        if (index === undefined) {
+            // Tidak ada indeks yang disimpan, mungkin karena belum pernah mengklik tombol "Edit"
+            return;
+        }
+
+        const namaBarang = $("#nama_barangRestock").val();
+        const kodeBarang = $("#kode_barangRestock").val();
+        const stokBarang = $("#stok_barangRestock").val();
+
+        // Update data pada array dataListRSpareparts
+        const updatedSparepart = {
+            id: $("#btnSimpanSparepart").attr("data-id"), // Diperlukan karena data-id belum diubah
+            nama_sparepart: namaBarang,
+            kode_harga: kodeBarang,
+            stok_sparepart: stokBarang
+        };
+
+        // Perbarui data restock sparepart menggunakan fungsi updateRSparepart
+        listSparepartManager.updateRSparepart(index, updatedSparepart);
+
+        // Tampilkan notifikasi bahwa data berhasil diubah
+        Swal.fire({
+            position: 'center',
+            icon: 'success',
+            title: 'Berhasil!',
+            text: 'Data ' + namaBarang + ' berhasil diubah.',
+            showConfirmButton: false,
+            timer: 2000,
+            customClass: {
+                popup: 'sweet-alert-center' // Menambahkan class CSS untuk styling
+            }
+        });
+
+        // Tampilkan kembali data restock sparepart setelah perubahan
+        tampilkanDataListRestock();
+
+        // Sembunyikan modal edit
+        $("#modalEditRestock").modal('hide');
+
+        // Reset form
+        $("#formSparepart")[0].reset();
+    }
+
+    // edit
 
     function hapusDataListRestock(index) {
         listSparepartManager.deleteRSparepart(index);

@@ -675,6 +675,15 @@ class SparePartController extends Controller
         if (!empty($spareparts)) {
             // Simpan data ke tabel "sparepart"
             foreach ($spareparts as $index => $sparepartData) {
+
+                // Check if spare part name already exists
+                $existingSparepart = Sparepart::where('nama_sparepart', $sparepartData['nama'])->first();
+
+                if ($existingSparepart) {
+                    // If spare part name already exists, skip this iteration
+                    continue;
+                }
+
                 // Parsing kode untuk mendapatkan informasi harga
                 $parsedData = $this->parseKode($sparepartData['kode']);
 
