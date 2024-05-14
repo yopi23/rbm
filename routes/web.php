@@ -141,8 +141,8 @@ Route::group(['middleware' => ['auth']], function () {
     // Route::get('/stok_sparepart', [SparePartController::class, 'view_stok'])->name('stok_sparepart');
 
     Route::get('/update-harga-ecer',  [SparePartController::class, 'updateHargaEcer'])->name('update.harga.ecer');
-    Route::post('/plusUpdate', [SparePartController::class, 'processData'])->name('plusUpdate');
-    Route::get('/plus', [SparePartController::class, 'plus'])->name('plus');
+    // Route::post('/plusUpdate', [SparePartController::class, 'processData'])->name('plusUpdate');
+    // Route::get('/plus', [SparePartController::class, 'plus'])->name('plus');
     //Stok Produk
     Route::get('/stok_produk', [HandphoneController::class, 'view_stok'])->name('stok_produk');
 
@@ -272,4 +272,14 @@ Route::group(['middleware' => ['auth']], function () {
 
     //Supplier
     Route::resource('supplier', SupplierController::class);
+});
+
+// baru di tambahkan
+Route::group(['middleware' => 'checkRole:0,1,2'], function () {
+    // Tambahkan routing khusus untuk pengguna dengan jabatan 0, 1, atau 2 di sini
+    Route::post('/plusUpdate', [SparePartController::class, 'processData'])->name('plusUpdate');
+    Route::get('/plus', [SparePartController::class, 'plus'])->name('plus');
+    Route::get('/pekerjaan', [ServiceController::class, 'list_all_service'])->name('job');
+    Route::get('/cari-service', [ServiceController::class, 'list_all_service'])->name('cariService');
+    Route::post('/serviceUpdate', [ServiceController::class, 'selesaikan'])->name('serviceUpdate');
 });

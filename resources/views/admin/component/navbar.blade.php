@@ -1,5 +1,5 @@
 <!-- Navbar -->
-<nav class="main-header navbar navbar-expand navbar-success navbar-dark  " >
+<nav class="main-header navbar navbar-expand navbar-success navbar-dark  ">
     <!-- Left navbar links -->
     <ul class="navbar-nav">
         <li class="nav-item">
@@ -12,6 +12,13 @@
             <a href="{{ route('plus') }}" class=" btn btn-success"> <i class="fa fa-plus-circle" aria-hidden="true">
                     Plus</i></a>
         </li>
+        @if ($this_user->jabatan == '1' || $this_user->jabatan == '2')
+            <li class="nav-item d-none d-sm-inline-block">
+                <a href="{{ route('job') }}" class=" btn btn-success"> <i class="fa fa-notes-medical"
+                        aria-hidden="true">
+                        Job</i></a>
+            </li>
+        @endif
     </ul>
 
     <!-- Right navbar links -->

@@ -366,27 +366,6 @@ class ServiceController extends Controller
                 'users.name',
             )
             ->get();
-
-        // $proses = modelServices::leftjoin('detail_part_services', 'sevices.id', '=', 'kode_services')
-        //     ->leftjoin('detail_part_luar_services', 'sevices.id', '=', 'detail_part_luar_services.kode_services')
-        //     ->leftjoin('users', 'sevices.id_teknisi', '=', 'users.id')
-        //     ->where([['id_teknisi', '=', auth()->user()->id], ['status_services', '=', 'Diproses']])
-        //     ->orderByDesc('id_service')
-        //     ->get([
-        //         'sevices.id as id_service',
-        //         'sevices.*',
-        //         'users.*',
-        //         'detail_part_services.*',
-        //         'detail_part_services.qty_part as qty_part_toko',
-        //         'detail_part_services.detail_harga_part_service as hpart_toko',
-        //         'detail_part_luar_services.qty_part as qty_part_luar',
-        //         'detail_part_luar_services.*',
-        //     ]);
-
-
-
-
-
         $selesai = modelServices::join('users', 'sevices.id_teknisi', '=', 'users.id')->where([['id_teknisi', '=', auth()->user()->id], ['status_services', '=', 'Selesai']])->get(['sevices.id as id_service', 'sevices.*', 'users.*']);
         $batal = modelServices::join('users', 'sevices.id_teknisi', '=', 'users.id')->where([['id_teknisi', '=', auth()->user()->id], ['status_services', '=', 'Cancel']])->get(['sevices.id as id_service', 'sevices.*', 'users.*']);
         $content = view('admin.page.todolist', compact(['antrian', 'proses', 'selesai', 'batal']));
@@ -410,38 +389,38 @@ class ServiceController extends Controller
                     ]);
                 }
             }
-            if ($request->status_services == 'Selesai') {
-                if ($this->getThisUser()->jabatan != '1') {
-                    $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')->where([['kode_services', '=', $id]])->get(['detail_part_services.id as id_detail_part', 'detail_part_services.*', 'spareparts.*']);
-                    $part_luar_toko_service = DetailPartLuarService::where([['kode_services', '=', $id]])->get();
-                    $presentase = PresentaseUser::where([['kode_user', '=', $this->getThisUser()->kode_user]])->get()->first();
-                    if ($presentase) {
-                        $total_part = 0;
-                        foreach ($part_toko_service as $a) {
-                            $total_part += $a->harga_jual * $a->qty_part;
-                        }
-                        foreach ($part_luar_toko_service as $b) {
-                            $total_part += $b->harga_part * $b->qty_part;
-                        }
-                        $profit = $update->total_biaya - $total_part;
-                        $fix_profit =  $profit * $presentase->presentase / 100;
-                        $komisi = ProfitPresentase::create([
-                            'tgl_profit' => date('Y-m-d'),
-                            'kode_service' => $id,
-                            'kode_presentase' => $presentase->id,
-                            'kode_user' => $this->getThisUser()->kode_user,
-                            'profit' => $fix_profit,
-                        ]);
-                        if ($komisi) {
-                            $pegawais = UserDetail::where([['kode_user', '=', $this->getThisUser()->kode_user]])->get()->first();
-                            $new_saldo = $pegawais->saldo + $fix_profit;
-                            $pegawais->update([
-                                'saldo' => $new_saldo
-                            ]);
-                        }
-                    }
-                }
-            }
+            // if ($request->status_services == 'Selesai') {
+            //     if ($this->getThisUser()->jabatan != '1') {
+            //         $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')->where([['kode_services', '=', $id]])->get(['detail_part_services.id as id_detail_part', 'detail_part_services.*', 'spareparts.*']);
+            //         $part_luar_toko_service = DetailPartLuarService::where([['kode_services', '=', $id]])->get();
+            //         $presentase = PresentaseUser::where([['kode_user', '=', $this->getThisUser()->kode_user]])->get()->first();
+            //         if ($presentase) {
+            //             $total_part = 0;
+            //             foreach ($part_toko_service as $a) {
+            //                 $total_part += $a->harga_jual * $a->qty_part;
+            //             }
+            //             foreach ($part_luar_toko_service as $b) {
+            //                 $total_part += $b->harga_part * $b->qty_part;
+            //             }
+            //             $profit = $update->total_biaya - $total_part;
+            //             $fix_profit =  $profit * $presentase->presentase / 100;
+            //             $komisi = ProfitPresentase::create([
+            //                 'tgl_profit' => date('Y-m-d'),
+            //                 'kode_service' => $id,
+            //                 'kode_presentase' => $presentase->id,
+            //                 'kode_user' => $this->getThisUser()->kode_user,
+            //                 'profit' => $fix_profit,
+            //             ]);
+            //             if ($komisi) {
+            //                 $pegawais = UserDetail::where([['kode_user', '=', $this->getThisUser()->kode_user]])->get()->first();
+            //                 $new_saldo = $pegawais->saldo + $fix_profit;
+            //                 $pegawais->update([
+            //                     'saldo' => $new_saldo
+            //                 ]);
+            //             }
+            //         }
+            //     }
+            // }
             return redirect()->route('todolist');
         }
     }
@@ -506,11 +485,127 @@ class ServiceController extends Controller
     }
 
     //akses kontrol service
-    public function list_all_service()
+    public function list_all_service(Request $request)
     {
-        $page = "List All Service";
+        $page = "Service";
 
-        $content = view('admin.page.list_all_service');
-        return view('admin.page.list_all_service', compact(['content']));
+        $cari = $request->input('cari');
+        $year = date('Y');
+        $data_service = modelServices::leftJoin(DB::raw('(SELECT kode_services, SUM(qty_part * harga_part) AS part_luar FROM detail_part_luar_services GROUP BY kode_services) AS part_luar_services'), 'sevices.id', '=', 'part_luar_services.kode_services')
+            ->leftJoin(DB::raw('(SELECT kode_services, SUM(qty_part * detail_harga_part_service) AS part_toko FROM detail_part_services GROUP BY kode_services) AS part_toko'), 'sevices.id', '=', 'part_toko.kode_services')
+            ->leftjoin('users', 'sevices.id_teknisi', '=', 'users.id')
+            ->select([
+                'sevices.id as id_service',
+                'sevices.kode_service',
+                'sevices.tgl_service',
+                'sevices.nama_pelanggan',
+                'sevices.no_telp',
+                'sevices.type_unit',
+                'sevices.keterangan',
+                'sevices.total_biaya',
+                'sevices.dp',
+                'sevices.id_teknisi',
+                'sevices.kode_pengambilan',
+                'sevices.status_services',
+                'sevices.kode_owner',
+                DB::raw('COALESCE(SUM(part_luar_services.part_luar), 0) + COALESCE(SUM(part_toko.part_toko), 0) AS total_harga_part'),
+                'users.id as teknisi_id',
+                'users.name as teknisi_name'
+            ])
+            ->where([
+                ['kode_owner', '=', $this->getThisUser()->id_upline],
+                ['sevices.status_services', '=', 'Antri'],
+            ])
+            ->orwhere([
+                ['kode_owner', '=', $this->getThisUser()->id_upline],
+                ['sevices.status_services', '=', 'Diproses'],
+            ])
+            ->groupBy(
+                'sevices.id',
+                'sevices.kode_service',
+                'sevices.tgl_service',
+                'sevices.nama_pelanggan',
+                'sevices.no_telp',
+                'sevices.type_unit',
+                'sevices.keterangan',
+                'sevices.total_biaya',
+                'sevices.dp',
+                'sevices.id_teknisi',
+                'sevices.kode_pengambilan',
+                'sevices.status_services',
+                'sevices.kode_owner',
+                'users.id',
+                'users.name',
+            )
+            ->get();
+
+        $user = UserDetail::where('id_upline', $this->getThisUser()->id)->get();
+        $content = view('admin.page.job');
+        return view('admin.page.job', compact(['data_service', 'user']));
+    }
+    // selesaikan
+    public function selesaikan(Request $request)
+    {
+        // Validasi data
+        $request->validate([
+            'id_teknisi' => 'required',
+            'service.*.id_service' => 'required',
+        ]);
+
+        // Dapatkan data dari request
+        $id_teknisi = $request->input('id_teknisi');
+        $services = $request->input('service');
+
+        // Loop melalui setiap layanan yang akan diselesaikan
+        foreach ($services as $service_id) {
+            // Update data service
+            $service = modelServices::findOrFail($service_id['id_service']);
+            $service->update([
+                'id_teknisi' => $id_teknisi,
+                'status_services' => 'Selesai',
+            ]);
+
+            // Hitung total biaya part
+            $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+                ->where('kode_services', $service_id['id_service'])
+                ->get([
+                    'detail_part_services.detail_harga_part_service as harga_modal',
+                    'detail_part_services.qty_part',
+                    // 'spareparts.harga_jual'
+                ]);
+
+            $part_luar_toko_service = DetailPartLuarService::where('kode_services', $service_id['id_service'])->get();
+
+            $total_part = 0;
+            foreach ($part_toko_service as $part) {
+                $total_part += $part->harga_modal * $part->qty_part;
+            }
+            foreach ($part_luar_toko_service as $partl) {
+                $total_part += $partl->harga_part * $partl->qty_part;
+            }
+            // Hitung profit dan komisi
+            $presentase = PresentaseUser::where('kode_user', $id_teknisi)->first();
+            if ($presentase) {
+                $profit = $service->total_biaya - $total_part;
+                $fix_profit =  $profit * $presentase->presentase / 100;
+
+                // Simpan data komisi ke tabel profit_presentases
+                ProfitPresentase::create([
+                    'tgl_profit' => date('Y-m-d'),
+                    'kode_service' => $service_id['id_service'],
+                    'kode_presentase' => $presentase->id,
+                    'kode_user' => $id_teknisi,
+                    'profit' => $fix_profit,
+                ]);
+
+                // Perbarui saldo user_detail
+                $user_detail = UserDetail::where('kode_user',  $id_teknisi)->first();
+                $user_detail->saldo += $fix_profit;
+                $user_detail->save();
+            }
+        }
+
+        // Berikan respons yang sesuai
+        return response()->json(['message' => 'Data berhasil disimpan'], 200);
     }
 }

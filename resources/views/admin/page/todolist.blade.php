@@ -102,13 +102,15 @@
                                                 @method('PUT')
                                                 <a href="{{ route('detail_service', $item->id_service) }}"
                                                     class="btn btn-info btn-sm mt-2">Detail</a>
-                                                <input type="hidden" name="status_services" id="status_services"
+                                                @if ($this_user->jabatan == '1' || $this_user->jabatan == '2')
+                                                    {{-- <input type="hidden" name="status_services" id="status_services"
                                                     value="Selesai">
                                                 <button type="button"
                                                     onclick="return confirmSelesai({{ $loop->index }},'{{ $item->nama_pelanggan }}')"
-                                                    class="btn btn-sm btn-success mt-2">Selesai</button>
-                                                {{-- <button type="submit"
                                                     class="btn btn-sm btn-success mt-2">Selesai</button> --}}
+                                                    {{-- <button type="submit"
+                                                    class="btn btn-sm btn-success mt-2">Selesai</button> --}}
+                                                @endif
                                             </form>
 
                                             <form action="{{ route('oper_service', $item->id_service) }}"

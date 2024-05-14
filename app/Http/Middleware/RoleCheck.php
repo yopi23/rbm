@@ -16,16 +16,15 @@ class RoleCheck
      * @param  \Closure(\Illuminate\Http\Request): (\Illuminate\Http\Response|\Illuminate\Http\RedirectResponse)  $next
      * @return \Illuminate\Http\Response|\Illuminate\Http\RedirectResponse
      */
-    public function handle(Request $request, Closure $next,$role)
+    public function handle(Request $request, Closure $next, $role)
     {
-        if(!Auth::check()){
+        if (!Auth::check()) {
             return route('login');
         }
-        $this_user = User::join('user_details','user_details.kode_user','=','users.id')->where([['users.id','=',auth()->user()->id]])->get(['users.*','user_details.*','users.id as id_user'])->first();
-        if($this_user->jabatan == $role){
+        $this_user = User::join('user_details', 'user_details.kode_user', '=', 'users.id')->where([['users.id', '=', auth()->user()->id]])->get(['users.*', 'user_details.*', 'users.id as id_user'])->first();
+        if ($this_user->jabatan == $role) {
             return $next($request);
         }
         return redirect()->back();
-        
     }
 }
