@@ -539,7 +539,7 @@ class ServiceController extends Controller
             )
             ->get();
 
-        $user = UserDetail::where('id_upline', $this->getThisUser()->id)->get();
+        $user = UserDetail::where('id_upline', $this->getThisUser()->id_upline)->get();
         $content = view('admin.page.job');
         return view('admin.page.job', compact(['data_service', 'user']));
     }
