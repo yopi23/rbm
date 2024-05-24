@@ -74,7 +74,7 @@
           }
 
           rupiah = split[1] != undefined ? rupiah + ',' + split[1] :
-          rupiah; // Tambahkan kondisi untuk menghilangkan angka 0 di depan jika tidak ada koma
+              rupiah; // Tambahkan kondisi untuk menghilangkan angka 0 di depan jika tidak ada koma
           return prefix == undefined ? rupiah : (rupiah ? 'Rp. ' + rupiah : '');
       }
 
@@ -103,7 +103,24 @@
           dphidden.value = numericValue;
       });
   </script>
-
+  <script>
+      $(function() {
+          $("#table_data").DataTable({
+              "dom": 'Bfrtip',
+              "buttons": [
+                  'pdf', 'print'
+              ]
+          });
+          $('#table_data2').DataTable({
+              "paging": true,
+              "lengthChange": false,
+              "searching": false,
+              "ordering": true,
+              "info": true,
+              "autoWidth": false,
+          });
+      });
+  </script>
   </body>
 
   </html>
