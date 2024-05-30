@@ -16,6 +16,8 @@ use App\Models\User;
 use App\Models\UserDetail;
 use Milon\Barcode\Facades\DNS1DFacade;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use PDO;
 
@@ -124,7 +126,14 @@ class ServiceController extends Controller
             // 'created_at' => Carbon::now(),
         ]);
         if ($update) {
-            return redirect()->route('todolist')->with('success', 'Update Data Service Berhasil');
+            $currentUser = Auth::user();
+            $userDetail = UserDetail::where('kode_user', $currentUser->id)->first();
+
+            if ($userDetail->jabatan == '1' || $userDetail->jabatan == '2') {
+                return redirect()->route('job');
+            } else {
+                return redirect()->route('todolist')->with('success', 'Update Data Service Berhasil');
+            }
         }
     }
     public function update_service(Request $request, $id)
