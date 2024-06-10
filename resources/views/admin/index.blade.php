@@ -112,19 +112,33 @@
             {{ session('success') }}
         </div>
     @endif
+    @if ($this_user->jabatan == '1' || $this_user->jabatan == '2')
+        <span class="alert alert-primary" style="display: block; margin-bottom:5px">
+            @if ($penarikan->isNotEmpty())
+                @foreach ($penarikan as $data)
+                    Nama: {{ $data->name }}/ Amount: Rp. {{ number_format($data->jumlah_penarikan) }}
+                    <br>
+                @endforeach
+            @else
+                No recent withdrawals available.
+            @endif
+        </span>
+    @endif
     <div class="row">
         <div class="col-md-12">
-            <div class="card card-primary card-outline">
+            <div class="card card-primary card-outline mt-3">
                 <div class="card-header">
                     <ul class="nav nav-pills">
                         <li class="nav-item"><a class="nav-link active" href="#servis" data-toggle="tab">Servis</a>
                         </li>
-                        <li class="nav-item"><a class="nav-link" href="#catatan" data-toggle="tab">Catatan</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#catatan" data-toggle="tab">Catatan</a>
+                        </li>
                         <li class="nav-item"><a class="nav-link" href="#order" data-toggle="tab">List Order</a>
                         </li>
                         <li class="nav-item"><a class="nav-link" href="#stok_kosong" data-toggle="tab">Stok
                                 Kosong</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ route('penjualan') }}">Penjualan</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ route('penjualan') }}">Penjualan</a>
+                        </li>
                         <li class="nav-item"><a class="nav-link"
                                 href="{{ route('pengembalian') }}">Pengembalian</a></li>
                         <li class="nav-item"><a class="nav-link" href="#pemasukan_lain" data-toggle="tab">Pemasukan

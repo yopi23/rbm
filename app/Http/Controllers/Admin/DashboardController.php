@@ -15,6 +15,8 @@ use App\Models\Sevices as modelServices;
 use App\Models\Sparepart;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Models\Penarikan;
+
 
 class DashboardController extends Controller
 {
@@ -22,7 +24,20 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         $page = "Dashboard";
+
         if ($this->getThisUser()->jabatan != '0') {
+            // Penarikan
+
+            $penarikanQuery = Penarikan::join('users', 'penarikans.kode_user', '=', 'users.id')
+                ->where('penarikans.kode_owner', '=', $this->getThisUser()->id_upline)
+                ->where('penarikans.created_at', '>=', now()->subMinutes(30)); // Memfilter data dalam satu jam terakhir
+
+            $penarikan = $penarikanQuery->orderBy('penarikans.created_at', 'desc')
+                ->take(2)
+                ->get(['penarikans.id as id_penarikan', 'penarikans.*', 'users.name']);
+            // dd($penarikan);
+            // End Penarikan
+
             $service = modelServices::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
             $penjualan = Penjualan::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
             $sparepart = Sparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
@@ -68,7 +83,7 @@ class DashboardController extends Controller
                 }
             }
 
-            return view('admin.index', compact(['total_pengeluaran', 'list_order', 'total_pemasukkan_lain', 'total_service', 'total_penjualan', 'pemasukkan_lain', 'page', 'kode_service', 'sparepart', 'catatan', 'service', 'penjualan', 'supplier']));
+            return view('admin.index', compact(['total_pengeluaran', 'list_order', 'total_pemasukkan_lain', 'total_service', 'total_penjualan', 'pemasukkan_lain', 'page', 'kode_service', 'sparepart', 'catatan', 'service', 'penjualan', 'supplier', 'penarikan']));
         }
         if ($this->getThisUser()->jabatan == '0') {
             $data = User::join('user_details', 'users.id', '=', 'user_details.kode_user')->where('user_details.jabatan', '=', '1')->get(['users.*', 'user_details.*', 'users.id as id_user']);
