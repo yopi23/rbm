@@ -626,7 +626,7 @@
                     data-id="${data[i].id}" data-kode="${data[i].kode_harga}"
                     data-index="${i}" onclick="restockSparepart(event,this)">Tambahkan</button>
                     <button class="btn btn-info" onclick="return copyNamaBarang('${data[i].nama_sparepart}')">
-                        <i class="fas fa-copy"></i> Salin Nama
+                        <i class="fas fa-copy"></i> Salin
                     </button>
                 </td>
             </tr>`;

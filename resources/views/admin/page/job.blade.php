@@ -87,7 +87,7 @@
                                                     Pilih ---</option>
                                                 @if (isset($user))
                                                     @foreach ($user as $users)
-                                                        <option value="{{ $users->kode_user }}">
+                                                        <option class="my2" value="{{ $users->kode_user }}">
                                                             {{ $users->fullname }}
                                                         </option>
                                                     @endforeach
