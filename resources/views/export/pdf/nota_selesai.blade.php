@@ -2,8 +2,9 @@
 <html>
 
 <head>
-    <title>Nota Tempel Service YOYOYCELL {{date('d-m-Y')}}</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <title>Nota Tempel Service YOYOYCELL {{ date('d-m-Y') }}</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+        integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
 </head>
 <style>
     * {
@@ -24,48 +25,59 @@
     <div class="ticket">
         <table style="width: 100%;">
             <tbody>
+                <tr class="text-center">
+                    <td colspan="3">===================</td>
+                </tr>
+                <tr class="text-center" style="font-size: 14px">
+                    <td colspan="3">YOYOY CELL<p style="margin-bottom: 0;">085603124871 (CS) <br> www.yoyoycell.my.id
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3">===================</td>
+                </tr>
                 <tr class="border border-dark text-center" style="font-size: 10pt">
-                    <td colspan="3">{{$data->kode_service}}</td>
+                    <td colspan="3">{{ $data->kode_service }}</td>
                 </tr>
                 <tr style="font-size: 8pt">
                     <td> Nama</td>
-            <td>:</td>
-                    <td > {{ucfirst($data->nama_pelanggan)}} </td>
+                    <td>:</td>
+                    <td> {{ ucfirst($data->nama_pelanggan) }} </td>
                 </tr>
                 <tr style="font-size: 8pt">
                     <td>Device</td>
-            <td>:</td>
-                    <td > {{ucfirst($data->type_unit)}} </td>
+                    <td>:</td>
+                    <td> {{ ucfirst($data->type_unit) }} </td>
                 </tr>
                 <tr style="font-size: 8pt">
                     <td>Ket</td>
-            <td>:</td>
-                    <td>{{ucfirst($data->keterangan)}} </td>
+                    <td>:</td>
+                    <td>{{ ucfirst($data->keterangan) }} </td>
                 </tr>
                 <tr style="font-size: 8pt">
                     <td>Biaya</td>
-            <td>:</td>
-                    <td >Rp.{{number_format($data->total_biaya)}} </td>
+                    <td>:</td>
+                    <td>Rp.{{ number_format($data->total_biaya) }} </td>
                 </tr>
                 <tr style="font-size: 8pt">
                     <td>DP</td>
-            <td>:</td>
-                    <td>Rp.{{number_format($data->dp)}} </td>
+                    <td>:</td>
+                    <td>Rp.{{ number_format($data->dp) }} </td>
                 </tr>
                 <tr style="font-size: 8pt">
                     <td>Telepon</td>
-            <td>:</td>
-                    <td>{{$data->no_telp}}</td>
+                    <td>:</td>
+                    <td>{{ $data->no_telp }}</td>
                 </tr>
                 <tr style="font-size: 8pt">
                     <td>Teknisi</td>
-            <td>:</td>
-                    <td>{{ucfirst($data->name)}}</td>
+                    <td>:</td>
+                    <td>{{ ucfirst($data->name) }}</td>
                 </tr>
                 <tr style="font-size: 8pt">
                     <td>Selesai</td>
-            <td>:</td>
-                    <td >{{$data->tgl_selesai}}</td>
+                    <td>:</td>
+                    <td>{{ $data->tgl_selesai }}</td>
                 </tr>
             </tbody>
         </table>
