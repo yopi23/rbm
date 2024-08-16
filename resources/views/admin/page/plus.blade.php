@@ -625,9 +625,10 @@
                     nabar="${data[i].nama_sparepart}"
                     data-id="${data[i].id}" data-kode="${data[i].kode_harga}"
                     data-index="${i}" onclick="restockSparepart(event,this)">Tambahkan</button>
-                    <button class="btn btn-info" onclick="return copyNamaBarang('${data[i].nama_sparepart}')">
+                    <button class="btn btn-info" onclick="return copyNamaBarang(event, '${data[i].nama_sparepart}')">
                         <i class="fas fa-copy"></i> Salin
                     </button>
+
                 </td>
             </tr>`;
 
@@ -944,7 +945,9 @@
 </script>
 
 <script>
-    function copyNamaBarang(namaBarang) {
+    function copyNamaBarang(event, namaBarang) {
+        console.log('Event:', event);
+        console.log('Nama Barang:', namaBarang);
         // Mencegah event default dan propagasi
         event.preventDefault();
         event.stopPropagation();
