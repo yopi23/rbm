@@ -954,7 +954,7 @@
                 position: 'center',
                 icon: 'success',
                 title: 'Berhasil!',
-                text: 'Nama barang berhasil disalin ke clipboard.',
+                text: 'Nama barang berhasil disalin.',
                 showConfirmButton: false,
                 timer: 1500
             });
