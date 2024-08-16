@@ -87,7 +87,8 @@
                                                     Pilih ---</option>
                                                 @if (isset($user))
                                                     @foreach ($user as $users)
-                                                        <option value="{{ $users->kode_user }}">{{ $users->fullname }}
+                                                        <option value="{{ $users->kode_user }}">
+                                                            {{ $users->fullname }}
                                                         </option>
                                                     @endforeach
                                                 @endif
@@ -124,7 +125,7 @@
                 <div class="modal-dialog modal-xl">
                     <div class="modal-content">
                         <div class="modal-header">
-                            <h4 class="modal-title" id="modalTitle">Restock Sparepart</h4>
+                            <h4 class="modal-title" id="modalTitle">Data Service</h4>
                             <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                                 <span aria-hidden="true">&times;</span>
                             </button>
@@ -421,7 +422,7 @@
             service: serviceManager.getAllServices(),
         };
 
-        // Kirim permintaan AJAX ke server
+        // Kirim permintaan AJAX ke FFserver
         $.ajax({
             type: "POST",
             url: "/serviceUpdate", // Gantilah dengan URL endpoint sesuai dengan struktur server Anda

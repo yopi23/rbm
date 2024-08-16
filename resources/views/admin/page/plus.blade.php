@@ -253,9 +253,16 @@
                     <div class="modal-content">
                         <div class="modal-header">
                             <h4 class="modal-title" id="modalTitle">Restock Sparepart</h4>
-                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                <span aria-hidden="true">&times;</span>
-                            </button>
+                            <div>
+                                <a href="#" class="btn btn-success mr-2" data-toggle="modal"
+                                    data-target="#modal_sparepart" name="tambah_sparepart" id="tambah_sparepart"
+                                    onclick="openNewDataModal()">
+                                    <i class="fas fa-plus"></i> Data Baru
+                                </a>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
                         </div>
                         <div class="modal-body">
                             <!-- Formulir untuk menambah/edit data sparepart -->
@@ -290,7 +297,6 @@
                         </div>
                         <div class="modal-footer justify-content-between">
                             <button type="button" class="btn btn-default" data-dismiss="modal">Tutup</button>
-
                         </div>
                     </div>
                     <!-- /.modal-content -->
@@ -619,6 +625,9 @@
                     nabar="${data[i].nama_sparepart}"
                     data-id="${data[i].id}" data-kode="${data[i].kode_harga}"
                     data-index="${i}" onclick="restockSparepart(event,this)">Tambahkan</button>
+                    <button class="btn btn-info" onclick="return copyNamaBarang('${data[i].nama_sparepart}')">
+                        <i class="fas fa-copy"></i> Salin Nama
+                    </button>
                 </td>
             </tr>`;
 
@@ -934,7 +943,48 @@
     }
 </script>
 
+<script>
+    function copyNamaBarang(namaBarang) {
+        // Mencegah event default dan propagasi
+        event.preventDefault();
+        event.stopPropagation();
 
+        navigator.clipboard.writeText(namaBarang).then(function() {
+            Swal.fire({
+                position: 'center',
+                icon: 'success',
+                title: 'Berhasil!',
+                text: 'Nama barang berhasil disalin ke clipboard.',
+                showConfirmButton: false,
+                timer: 1500
+            });
+        }).catch(function(err) {
+            console.error('Gagal menyalin teks: ', err);
+            Swal.fire({
+                icon: 'error',
+                title: 'Oops...',
+                text: 'Gagal menyalin nama barang.',
+            });
+        });
 
+        // Menghentikan eksekusi fungsi
+        return false;
+    }
+</script>
+
+<script>
+    function openNewDataModal() {
+        // Menutup semua modal yang terbuka
+        $('.modal').modal('hide');
+
+        // Menunggu sebentar sebelum membuka modal baru
+        setTimeout(function() {
+            $('#modal_sparepart').modal('show');
+        }, 500);
+
+        // Memanggil fungsi reset form jika diperlukan
+        resetFormSparepart();
+    }
+</script>
 
 @include('admin.component.footer')

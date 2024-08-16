@@ -41,6 +41,7 @@
     <!-- jQuery -->
     <script src="{{ asset('admin/plugins/jquery/jquery.min.js') }}"></script>
     <link href="https://cdn.jsdelivr.net/npm/sweetalert2@10">
+
 </head>
 
 <body class="hold-transition sidebar-mini layout-fixed">
