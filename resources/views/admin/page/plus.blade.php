@@ -621,11 +621,11 @@
                     <input class="form-control" id="jumlah${i}" autocomplete="off" placeholder="Jumlah">
                 </td>
                 <td>
-                    <button class="btn btn-success"
+                    <button class="btn btn-success mb-2"
                     nabar="${data[i].nama_sparepart}"
                     data-id="${data[i].id}" data-kode="${data[i].kode_harga}"
                     data-index="${i}" onclick="restockSparepart(event,this)">Tambahkan</button>
-                    <button class="btn btn-info" onclick="return copyNamaBarang(event, '${data[i].nama_sparepart}')">
+                    <button class="btn btn-info mb-2" onclick="return copyNamaBarang(event, '${data[i].nama_sparepart}')">
                         <i class="fas fa-copy"></i> Salin
                     </button>
 
@@ -946,29 +946,52 @@
 
 <script>
     function copyNamaBarang(event, namaBarang) {
-        console.log('Event:', event);
-        console.log('Nama Barang:', namaBarang);
         // Mencegah event default dan propagasi
         event.preventDefault();
         event.stopPropagation();
 
-        navigator.clipboard.writeText(namaBarang).then(function() {
-            Swal.fire({
-                position: 'center',
-                icon: 'success',
-                title: 'Berhasil!',
-                text: 'Nama barang berhasil disalin.',
-                showConfirmButton: false,
-                timer: 1500
+        // Fungsi untuk menangani penyalinan teks
+        function copyText(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                // Menggunakan Clipboard API jika tersedia
+                return navigator.clipboard.writeText(text);
+            } else {
+                // Fallback ke metode lama jika Clipboard API tidak tersedia
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    return Promise.resolve();
+                } catch (err) {
+                    return Promise.reject(err);
+                } finally {
+                    document.body.removeChild(textArea);
+                }
+            }
+        }
+
+        // Mencoba menyalin teks
+        copyText(namaBarang)
+            .then(function() {
+                Swal.fire({
+                    position: 'center',
+                    icon: 'success',
+                    title: 'Berhasil!',
+                    text: 'Nama barang berhasil disalin.',
+                    showConfirmButton: false,
+                    timer: 1500
+                });
+            })
+            .catch(function(err) {
+                console.error('Gagal menyalin teks: ', err);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Oops...',
+                    text: 'Gagal menyalin nama barang.',
+                });
             });
-        }).catch(function(err) {
-            console.error('Gagal menyalin teks: ', err);
-            Swal.fire({
-                icon: 'error',
-                title: 'Oops...',
-                text: 'Gagal menyalin nama barang.',
-            });
-        });
 
         // Menghentikan eksekusi fungsi
         return false;
