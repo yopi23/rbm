@@ -97,7 +97,12 @@ class ServiceController extends Controller
                          </td>
                         </tr>';
         }
-        $data = $this->getTable($thead, $tbody);
+        // $data = $this->getTable($thead, $tbody);
+        // Menambahkan ID ke tabel
+        $data = '<table id="table_data" class="table table-bordered table-striped">';
+        $data .= '<thead>' . $thead . '</thead>';
+        $data .= '<tbody>' . $tbody . '</tbody>';
+        $data .= '</table>';
         $user = UserDetail::where('id_upline', $this->getThisUser()->id)->get();
         return view('admin.layout.card_layout', compact(['page', 'data', 'user']));
     }
