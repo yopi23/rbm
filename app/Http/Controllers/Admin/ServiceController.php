@@ -99,10 +99,10 @@ class ServiceController extends Controller
         }
         // $data = $this->getTable($thead, $tbody);
         // Menambahkan ID ke tabel
-        $data = '<table id="table_data" class="table table-bordered table-striped">';
+        $data = '<div class="table-responsive"><table id="table_data" class="table table-bordered table-striped">';
         $data .= '<thead>' . $thead . '</thead>';
         $data .= '<tbody>' . $tbody . '</tbody>';
-        $data .= '</table>';
+        $data .= '</table></div>';
         $user = UserDetail::where('id_upline', $this->getThisUser()->id)->get();
         return view('admin.layout.card_layout', compact(['page', 'data', 'user']));
     }
