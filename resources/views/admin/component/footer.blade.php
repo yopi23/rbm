@@ -108,7 +108,19 @@
           $("#table_data").DataTable({
               "dom": 'Bfrtip',
               "buttons": [
-                  'pdf', 'print'
+                  'pdf',
+                  'print'
+              ]
+          });
+          $("#service_data").DataTable({
+              "dom": 'Bfrtip',
+              "buttons": [{
+                      extend: 'pdfHtml5',
+                      orientation: 'landscape',
+                      pageSize: 'LEGAL'
+                  },
+
+                  'print'
               ]
           });
           $('#table_data2').DataTable({

@@ -99,7 +99,7 @@ class ServiceController extends Controller
         }
         // $data = $this->getTable($thead, $tbody);
         // Menambahkan ID ke tabel
-        $data = '<div class="table-responsive"><table id="table_data" class="table table-bordered table-striped">';
+        $data = '<div class="table-responsive"><table id="service_data" class="table table-bordered table-striped">';
         $data .= '<thead>' . $thead . '</thead>';
         $data .= '<tbody>' . $tbody . '</tbody>';
         $data .= '</table></div>';
