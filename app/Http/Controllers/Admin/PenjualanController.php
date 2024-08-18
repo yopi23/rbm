@@ -41,7 +41,17 @@ class PenjualanController extends Controller
                 $data = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '=', '0']])->get()->first();
             }
         }
-        $view_penjualan = Penjualan::where([['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '!=', '0']])->latest()->get();
+        // Mengambil data 5 hari terakhir
+        $fiveDaysAgo = Carbon::now()->subDays(5)->startOfDay();
+
+        $view_penjualan = Penjualan::where([
+            ['kode_owner', '=', $this->getThisUser()->id_upline],
+            ['status_penjualan', '!=', '0']
+        ])
+            ->where('created_at', '>=', $fiveDaysAgo)
+            ->latest()
+            ->get();
+        // $view_penjualan = Penjualan::where([['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '!=', '0']])->latest()->get();
         $view_barang = DetailBarangPenjualan::join('handphones', 'detail_barang_penjualans.kode_barang', '=', 'handphones.id')->get(['detail_barang_penjualans.id as id_detail', 'detail_barang_penjualans.*', 'handphones.*']);
         $view_sparepart = DetailSparepartPenjualan::join('spareparts', 'detail_sparepart_penjualans.kode_sparepart', '=', 'spareparts.id')->get(['detail_sparepart_penjualans.id as id_detail', 'detail_sparepart_penjualans.*', 'spareparts.*']);
         $view_garansi = Garansi::where([['type_garansi', '=', 'penjualan']])->get();
