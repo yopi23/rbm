@@ -146,7 +146,8 @@
                                         {{-- jenis nota --}}
                                         <div class="form-group">
                                             <label>Kode Nota</label>
-                                            <input class="form-control" id="nota" name="nota">
+                                            <input class="form-control" id="nota" name="nota"
+                                                autocomplete="off">
                                         </div>
                                         {{-- jenis nota --}}
 
