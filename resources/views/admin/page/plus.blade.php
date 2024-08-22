@@ -143,6 +143,12 @@
                                                 Pilih supplier.
                                             </div>
                                         </div>
+                                        {{-- jenis nota --}}
+                                        <div class="form-group">
+                                            <label>Kode Nota</label>
+                                            <input class="form-control" id="nota" name="nota">
+                                        </div>
+                                        {{-- jenis nota --}}
 
                                         <div class="form-group">
                                             <button type="submit" name="upload"
@@ -907,6 +913,7 @@
             _token: "{{ csrf_token() }}",
             kode_kategori: $("#kategori").val(),
             kode_supplier: $("#supplier").val(),
+            kode_nota: $("#nota").val(),
             spareparts: sparepartManager.getAllSpareparts(),
             restocks: listSparepartManager.getAllRSpareparts(),
         };
@@ -928,8 +935,10 @@
                     text: 'Data berhasil disimpan ke server.',
                     showConfirmButton: false,
                     timer: 2000,
+                }).then(() => {
+                    // Lakukan penghapusan data setelah sukses alert muncul
+                    hapusSemuaRSparepart();
                 });
-                // Lakukan tindakan lain setelah data disimpan ke server
             },
             error: function(error) {
                 // Tambahkan logika atau respons yang sesuai dengan kebutuhan Anda

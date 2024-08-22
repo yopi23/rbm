@@ -272,6 +272,9 @@ Route::group(['middleware' => ['auth']], function () {
 
     //Supplier
     Route::resource('supplier', SupplierController::class);
+
+    // web.php atau api.php
+    Route::delete('/hutang/{id}', [LaporanController::class, 'destroy'])->name('hutang.destroy');
 });
 
 // baru di tambahkan

@@ -1,5 +1,6 @@
 @section('laporan', 'active')
 
+
 <div class="row">
     <div class="col">
         <div class="info-box mb-3">
@@ -192,6 +193,64 @@
 </div>
 {{-- end laba --}}
 
+{{-- hutang --}}
+@if (@isset($hutang))
+    <div class="row">
+        <div class="col">
+            <div class="info-box mb-3">
+                <div class="info-box-content">
+                    <h4>Hutang</h4>
+                    <div class="table responsive">
+                        <table class="table table-bordered table-hover">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Tanggal</th>
+                                    <th>Nota</th>
+                                    <th>Toko</th>
+                                    <th>Jumlah</th>
+                                    <th>Status</th>
+                                    <th>Opsi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($hutang as $item)
+                                    <tr data-id="{{ $item->id }}">
+                                        <td>{{ $loop->index + 1 }}</td>
+                                        <td>{{ $item->created_at }}</td>
+                                        <td>{{ $item->kode_nota }}</td>
+                                        <td>{{ $item->nama_supplier }}</td>
+                                        <td>Rp.{{ number_format($item->total_hutang) }},-</td>
+                                        <td>
+                                            @if ($item->status == 1)
+                                                <strong>
+                                                    <span class="text-danger">Belum Lunas</span>
+                                                </strong>
+                                            @endif
+                                        </td>
+                                        <td><button class="btn btn-danger">Hapus</button></td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="4" class="text-right"><strong>Total:</strong></td>
+                                    <td>Rp.{{ number_format($totalJumlah) }},-</td>
+                                    <td colspan="2" class="bg-warning text-dark font-weight-bold text-center">
+                                        <strong>Ingat!!
+                                            Hutang Dibawa Mati</strong>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+@endif
+{{-- hutang --}}
+
 {{-- <div class="row">
     <div class="col-md-12">
         <div class="card card-success card-outline">
@@ -310,8 +369,8 @@
 @endif --}}
 @if (isset($service))
     <form action="{{ route('print_laporan') }}" target="_blank" method="GET">
-        <input type="hidden" value="{{ isset($request->tgl_awal) != null ? $request->tgl_awal : '' }}" name="tgl_awal"
-            id="tgl_awal">
+        <input type="hidden" value="{{ isset($request->tgl_awal) != null ? $request->tgl_awal : '' }}"
+            name="tgl_awal" id="tgl_awal">
         <input type="hidden" value="{{ isset($request->tgl_akhir) != null ? $request->tgl_akhir : '' }}"
             name="tgl_akhir" id="tgl_akhir">
         <button type="submit" class="btn btn-success"><i class="fas fa-print"></i> Print</button>
@@ -979,5 +1038,57 @@
         }, cb);
 
         cb(start, end);
+    });
+</script>
+<script>
+    $(document).ready(function() {
+        // Event handler untuk tombol hapus
+        $('button.btn-danger').on('click', function() {
+            const button = $(this);
+            const row = button.closest('tr');
+            const id = row.data('id'); // Ambil ID dari data-id
+
+            // Konfirmasi penghapusan
+            Swal.fire({
+                title: 'Apakah Anda yakin?',
+                text: 'Data ini akan dihapus.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Ya, Hapus!',
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Kirim permintaan AJAX ke server
+                    $.ajax({
+                        url: `/hutang/${id}`,
+                        type: 'DELETE',
+                        data: {
+                            _token: "{{ csrf_token() }}" // Sertakan CSRF token
+                        },
+                        success: function(response) {
+                            Swal.fire({
+                                position: 'center',
+                                icon: 'success',
+                                title: 'Berhasil!',
+                                text: response.message,
+                                showConfirmButton: false,
+                                timer: 2000,
+                            });
+
+                            // Hapus baris dari tabel
+                            row.remove();
+                        },
+                        error: function(error) {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Oops...',
+                                text: 'Terjadi kesalahan saat menghapus data.',
+                            });
+                        }
+                    });
+                }
+            });
+        });
     });
 </script>

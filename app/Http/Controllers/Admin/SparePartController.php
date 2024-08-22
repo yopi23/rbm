@@ -9,6 +9,7 @@ use App\Models\KategoriSparepart;
 use App\Models\RestokSparepart;
 use App\Models\ReturSparepart;
 use App\Models\Sparepart;
+use App\Models\Hutang;
 use App\Models\SparepartRusak;
 use App\Models\Supplier;
 use Illuminate\Http\Request;
@@ -456,9 +457,7 @@ class SparePartController extends Controller
             }
         }
     }
-    public function delete_sparepart_rusak(Request $request, $id)
-    {
-    }
+    public function delete_sparepart_rusak(Request $request, $id) {}
 
     // Restok Sparepart
 
@@ -663,6 +662,7 @@ class SparePartController extends Controller
             'kode_supplier' => 'required',
             'spareparts.*.kode' => 'required',
             'restocks.*.kode_harga' => 'required',
+            'kode_nota' => 'nullable',
         ]);
 
         // Dapatkan data dari request
@@ -670,6 +670,10 @@ class SparePartController extends Controller
         $kodeSupplier = $request->input('kode_supplier');
         $spareparts = $request->input('spareparts');
         $restocks = $request->input('restocks');
+        $kodeNota = $request->input('kode_nota'); // Ambil kode_nota dari request
+
+        $totalHutang = 0; // Initialize total hutang
+
 
         // Cek apakah data spareparts
         if (!empty($spareparts)) {
@@ -706,6 +710,8 @@ class SparePartController extends Controller
                 $sparepart->kode_sparepart = $kode_sparepart;
                 $sparepart->kode_owner = $this->getThisUser()->id_upline;
                 $sparepart->save();
+                // Tambahkan harga beli ke total hutang
+                $totalHutang += $parsedData['hargaBeli'] * $sparepartData['stok'];
             }
         }
 
@@ -733,7 +739,25 @@ class SparePartController extends Controller
 
                     // Simpan perubahan pada data restock
                     $sparepart->save();
+                    // Tambahkan harga beli ke total hutang
+                    $totalHutang += $parsedData['hargaBeli'] * $restockData['stok_sparepart'];
                 }
+            }
+        }
+        // Simpan total hutang ke tabel "hutang"
+        if ($kodeNota) {
+            // Cek apakah kode_nota sudah ada
+            $existingHutang = Hutang::where('kode_nota', $kodeNota)->first();
+
+            if (!$existingHutang) {
+                // Hanya simpan jika tidak ada entri dengan kode_nota yang sama
+                $hutang = new Hutang;
+                $hutang->kode_supplier = $kodeSupplier;
+                $hutang->kode_owner = $this->getThisUser()->id_upline;
+                $hutang->total_hutang = $totalHutang;
+                $hutang->kode_nota = $kodeNota; // Pastikan kode_nota disimpan
+                $hutang->status = 1;
+                $hutang->save();
             }
         }
 
