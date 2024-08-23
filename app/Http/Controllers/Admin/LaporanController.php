@@ -168,16 +168,42 @@ class LaporanController extends Controller
             // Perhitungan totalLaba tetap tanpa memasukkan totalPemasukkanLain
             $totalLaba = ($totalPenjualan - $totalModalJual) + ($totalPendapatanService - $total_part_service);
 
-            $content = view('admin.page.laporan', compact(['penarikan', 'barang_pesanan', 'sparepart_pesanan', 'penjualan_barang', 'penjualan_sparepart', 'pengeluaran_opx', 'pengeluaran_toko', 'pemasukkan_lain', 'pesanan', 'penjualan', 'request', 'service', 'part_toko_service', 'part_luar_toko_service', 'all_part_toko_service', 'all_part_luar_toko_service', 'totalPendapatanService', 'DpService', 'totalPenjualan', 'total_part_service', 'totalModalJual', 'totalLaba', 'totalPemasukkanLain']));
+            $content = view('admin.page.laporan', compact([
+                'penarikan',
+                'barang_pesanan',
+                'sparepart_pesanan',
+                'penjualan_barang',
+                'penjualan_sparepart',
+                'pengeluaran_opx',
+                'pengeluaran_toko',
+                'pemasukkan_lain',
+                'pesanan',
+                'penjualan',
+                'request',
+                'service',
+                'part_toko_service',
+                'part_luar_toko_service',
+                'all_part_toko_service',
+                'all_part_luar_toko_service',
+                'totalPendapatanService',
+                'DpService',
+                'totalPenjualan',
+                'total_part_service',
+                'totalModalJual',
+                'totalLaba',
+                'totalPemasukkanLain'
+            ]))->render();
+        } else {
+            $hutang = Hutang::join('suppliers', 'hutang.kode_supplier', '=', 'suppliers.id')
+                ->where('hutang.kode_owner', '=', $this->getThisUser()->id_upline)
+                ->latest('hutang.created_at')
+                ->select('suppliers.nama_supplier', 'hutang.*')
+                ->get();
+            // Hitung total jumlah
+            $totalJumlah = $hutang->sum('total_hutang');
+            $content = view('admin.page.laporan', compact(['hutang', 'totalJumlah']))->render();
         }
-        $hutang = Hutang::join('suppliers', 'hutang.kode_supplier', '=', 'suppliers.id')
-            ->where('hutang.kode_owner', '=', $this->getThisUser()->id_upline)
-            ->latest('hutang.created_at')
-            ->select('suppliers.nama_supplier', 'hutang.*')
-            ->get();
-        // Hitung total jumlah
-        $totalJumlah = $hutang->sum('total_hutang');
-        $content = view('admin.page.laporan', compact(['hutang', 'totalJumlah']));
+
         return view('admin.layout.blank_page', compact(['page', 'content']));
     }
 
