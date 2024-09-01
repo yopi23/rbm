@@ -91,10 +91,20 @@ class DashboardController extends Controller
                 ->exists();
             $laciData = Laci::where('tanggal', $today)->get();
 
+
+            $totalPenarikan = Penarikan::join('user_details', 'penarikans.kode_user', '=', 'user_details.kode_user')
+                ->where([
+                    ['penarikans.status_penarikan', '=', '1'],
+                    ['penarikans.kode_owner', '=', $this->getThisUser()->id_upline],
+                ])
+                ->whereDate('penarikans.created_at', '=', $today)
+                ->sum('penarikans.jumlah_penarikan');
+
+            $debit = $total_pengeluaran + $totalPenarikan;
             // Hitung total receh jika diperlukan
             $toReceh = $laciData->sum('receh');
             $sumreal = $laciData->sum('real');
-            $totalReceh = $toReceh + $total_service + $total_penjualan + $total_pemasukkan_lain - $total_pengeluaran;
+            $totalReceh = $toReceh + $total_service + $total_penjualan + $total_pemasukkan_lain - $debit;
 
             $isModalRequired = !$hasLaciEntry;
             return view('admin.index', compact([
@@ -114,7 +124,8 @@ class DashboardController extends Controller
                 'penarikan',
                 'isModalRequired',
                 'totalReceh',
-                'sumreal'
+                'sumreal',
+                'debit'
             ]));
         }
         if ($this->getThisUser()->jabatan == '0') {

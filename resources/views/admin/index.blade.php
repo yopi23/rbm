@@ -60,107 +60,109 @@
 <section class="content">
 <div class="container-fluid">
     <!-- Small boxes (Stat box) -->
-    <div class="row">
-        <div class="col-12 col-sm-6 col-md-4">
-            <div class="info-box mb-3">
-                <a class="info-box-icon bg-primary elevation-1" href="{{ route('list_all_service') }}">
-                    <i class="fas fa-cog"></i>
-                </a>
-                <div class="info-box-content">
-                    <span class="info-box-text">Service</span>
-                    <span class="info-box-number">Rp.{{ number_format($total_service) }},-</span>
+    @if ($this_user->jabatan == '1' || $this_user->jabatan == '2')
+        <div class="row">
+            <div class="col-12 col-sm-6 col-md-4">
+                <div class="info-box mb-3">
+                    <a class="info-box-icon bg-primary elevation-1" href="{{ route('list_all_service') }}">
+                        <i class="fas fa-cog"></i>
+                    </a>
+                    <div class="info-box-content">
+                        <span class="info-box-text">Service</span>
+                        <span class="info-box-number">Rp.{{ number_format($total_service) }},-</span>
+                    </div>
+                    <!-- /.info-box-content -->
                 </div>
-                <!-- /.info-box-content -->
+                <!-- /.info-box -->
             </div>
-            <!-- /.info-box -->
-        </div>
-        <div class="col-12 col-sm-6 col-md-4">
-            <div class="info-box mb-3">
+            <div class="col-12 col-sm-6 col-md-4">
+                <div class="info-box mb-3">
 
-                <a class="info-box-icon bg-success elevation-1" href="{{ route('penjualan') }}"><i
-                        class="fas fa-shopping-cart"></i></a>
-
-                <div class="info-box-content">
-                    <span class="info-box-text">Penjualan</span>
-                    <span class="info-box-number">Rp.{{ number_format($total_penjualan) }},-</span>
-                </div>
-                <!-- /.info-box-content -->
-            </div>
-            <!-- /.info-box -->
-        </div>
-        <div class="col-12 col-sm-6 col-md-4">
-            <div class="info-box mb-3">
-                <span class="info-box-icon bg-dark elevation-1"><i class="fas">&#xf155;</i></span>
-
-                <div class="info-box-content">
-                    <span class="info-box-text">Hari Ini</span>
-                    <span
-                        class="info-box-number">Rp.{{ number_format($total_penjualan + $total_service + $total_pemasukkan_lain - $total_pengeluaran) }},-</span>
-                </div>
-                <!-- /.info-box-content -->
-            </div>
-            <!-- /.info-box -->
-        </div>
-    </div>
-
-    <div class="row">
-        <div class="col-12 col-sm-6 col-md-4">
-            <div class="info-box mb-3">
-                <a class="info-box-icon bg-info elevation-1" href="{{ route('list_all_service') }}">
-                    <i class="fas fa-cog"></i>
-                </a>
-                <div class="info-box-content">
-                    <span class="info-box-text">Laci</span>
-                    <span class="info-box-number">Rp.{{ number_format($totalReceh) }},-</span>
-                </div>
-                <!-- /.info-box-content -->
-            </div>
-            <!-- /.info-box -->
-        </div>
-        <div class="col-12 col-sm-6 col-md-4">
-            <div class="info-box mb-3">
-
-                <a class="info-box-icon bg-warning elevation-1" href="{{ route('penjualan') }}"><i
-                        class="fas fa-cogs text-white"></i></a>
-
-                <div class="info-box-content">
-                    <span class="info-box-text">Pengeluaran</span>
-                    <span class="info-box-number">Rp.{{ number_format($total_pengeluaran) }},-</span>
-                </div>
-                <!-- /.info-box-content -->
-            </div>
-            <!-- /.info-box -->
-        </div>
-        <div class="col-12 col-sm-6 col-md-4">
-            <div class="info-box mb-3">
-                @if ($sumreal >= $totalReceh)
-                    <a class="info-box-icon bg-success elevation-1" href="#" data-toggle="modal"
-                        data-target="#reallaci">
-                        <i class="fas">&#xf155;</i></a>
+                    <a class="info-box-icon bg-success elevation-1" href="{{ route('penjualan') }}"><i
+                            class="fas fa-shopping-cart"></i></a>
 
                     <div class="info-box-content">
-                        <span class="info-box-text">Uang sebenarnya</span>
-                        <span class="info-box-number">
-                            Rp.{{ number_format($sumreal) }},-
-                        </span>
+                        <span class="info-box-text">Penjualan</span>
+                        <span class="info-box-number">Rp.{{ number_format($total_penjualan) }},-</span>
                     </div>
-                @else
-                    <a class="info-box-icon bg-danger elevation-1" href="#" data-toggle="modal"
-                        data-target="#reallaci"><i class="fas">&#xf155;</i></a>
+                    <!-- /.info-box-content -->
+                </div>
+                <!-- /.info-box -->
+            </div>
+            <div class="col-12 col-sm-6 col-md-4">
+                <div class="info-box mb-3">
+                    <span class="info-box-icon bg-dark elevation-1"><i class="fas">&#xf155;</i></span>
 
                     <div class="info-box-content">
-                        <span class="info-box-text">Uang sebenarnya <strong class="bg-danger"
-                                style="padding: 5px;border-radius: 20px;">HILANG</strong></span>
-                        <span class="info-box-number">
-                            Rp.{{ number_format($sumreal) }},-
-                        </span>
+                        <span class="info-box-text">Hari Ini</span>
+                        <span
+                            class="info-box-number">Rp.{{ number_format($total_penjualan + $total_service + $total_pemasukkan_lain - $total_pengeluaran) }},-</span>
                     </div>
-                @endif
-                <!-- /.info-box-content -->
+                    <!-- /.info-box-content -->
+                </div>
+                <!-- /.info-box -->
             </div>
-            <!-- /.info-box -->
         </div>
-    </div>
+
+        <div class="row">
+            <div class="col-12 col-sm-6 col-md-4">
+                <div class="info-box mb-3">
+                    <a class="info-box-icon bg-info elevation-1" href="{{ route('list_all_service') }}">
+                        <i class="fas fa-cog"></i>
+                    </a>
+                    <div class="info-box-content">
+                        <span class="info-box-text">Laci</span>
+                        <span class="info-box-number">Rp.{{ number_format($totalReceh) }},-</span>
+                    </div>
+                    <!-- /.info-box-content -->
+                </div>
+                <!-- /.info-box -->
+            </div>
+            <div class="col-12 col-sm-6 col-md-4">
+                <div class="info-box mb-3">
+
+                    <a class="info-box-icon bg-warning elevation-1" href="{{ route('penjualan') }}"><i
+                            class="fas fa-cogs text-white"></i></a>
+
+                    <div class="info-box-content">
+                        <span class="info-box-text">Pengeluaran</span>
+                        <span class="info-box-number">Rp.{{ number_format($debit) }},-</span>
+                    </div>
+                    <!-- /.info-box-content -->
+                </div>
+                <!-- /.info-box -->
+            </div>
+            <div class="col-12 col-sm-6 col-md-4">
+                <div class="info-box mb-3">
+                    @if ($sumreal >= $totalReceh)
+                        <a class="info-box-icon bg-success elevation-1" href="#" data-toggle="modal"
+                            data-target="#reallaci">
+                            <i class="fas">&#xf155;</i></a>
+
+                        <div class="info-box-content">
+                            <span class="info-box-text">Uang sebenarnya</span>
+                            <span class="info-box-number">
+                                Rp.{{ number_format($sumreal) }},-
+                            </span>
+                        </div>
+                    @else
+                        <a class="info-box-icon bg-danger elevation-1" href="#" data-toggle="modal"
+                            data-target="#reallaci"><i class="fas">&#xf155;</i></a>
+
+                        <div class="info-box-content">
+                            <span class="info-box-text">Uang sebenarnya <strong class="bg-danger"
+                                    style="padding: 5px;border-radius: 20px;">Kurang</strong></span>
+                            <span class="info-box-number">
+                                Rp.{{ number_format($sumreal) }},-
+                            </span>
+                        </div>
+                    @endif
+                    <!-- /.info-box-content -->
+                </div>
+                <!-- /.info-box -->
+            </div>
+        </div>
+    @endif
     @if (session('error'))
         <div class="alert alert-danger">
             {{ session('error') }}
