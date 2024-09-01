@@ -102,6 +102,65 @@
             <!-- /.info-box -->
         </div>
     </div>
+
+    <div class="row">
+        <div class="col-12 col-sm-6 col-md-4">
+            <div class="info-box mb-3">
+                <a class="info-box-icon bg-info elevation-1" href="{{ route('list_all_service') }}">
+                    <i class="fas fa-cog"></i>
+                </a>
+                <div class="info-box-content">
+                    <span class="info-box-text">Laci</span>
+                    <span class="info-box-number">Rp.{{ number_format($totalReceh) }},-</span>
+                </div>
+                <!-- /.info-box-content -->
+            </div>
+            <!-- /.info-box -->
+        </div>
+        <div class="col-12 col-sm-6 col-md-4">
+            <div class="info-box mb-3">
+
+                <a class="info-box-icon bg-warning elevation-1" href="{{ route('penjualan') }}"><i
+                        class="fas fa-cogs text-white"></i></a>
+
+                <div class="info-box-content">
+                    <span class="info-box-text">Pengeluaran</span>
+                    <span class="info-box-number">Rp.{{ number_format($total_pengeluaran) }},-</span>
+                </div>
+                <!-- /.info-box-content -->
+            </div>
+            <!-- /.info-box -->
+        </div>
+        <div class="col-12 col-sm-6 col-md-4">
+            <div class="info-box mb-3">
+                @if ($sumreal >= $totalReceh)
+                    <a class="info-box-icon bg-success elevation-1" href="#" data-toggle="modal"
+                        data-target="#reallaci">
+                        <i class="fas">&#xf155;</i></a>
+
+                    <div class="info-box-content">
+                        <span class="info-box-text">Uang sebenarnya</span>
+                        <span class="info-box-number">
+                            Rp.{{ number_format($sumreal) }},-
+                        </span>
+                    </div>
+                @else
+                    <a class="info-box-icon bg-danger elevation-1" href="#" data-toggle="modal"
+                        data-target="#reallaci"><i class="fas">&#xf155;</i></a>
+
+                    <div class="info-box-content">
+                        <span class="info-box-text">Uang sebenarnya <strong class="bg-danger"
+                                style="padding: 5px;border-radius: 20px;">HILANG</strong></span>
+                        <span class="info-box-number">
+                            Rp.{{ number_format($sumreal) }},-
+                        </span>
+                    </div>
+                @endif
+                <!-- /.info-box-content -->
+            </div>
+            <!-- /.info-box -->
+        </div>
+    </div>
     @if (session('error'))
         <div class="alert alert-danger">
             {{ session('error') }}
@@ -141,7 +200,8 @@
                         </li>
                         <li class="nav-item"><a class="nav-link"
                                 href="{{ route('pengembalian') }}">Pengembalian</a></li>
-                        <li class="nav-item"><a class="nav-link" href="#pemasukan_lain" data-toggle="tab">Pemasukan
+                        <li class="nav-item"><a class="nav-link" href="#pemasukan_lain"
+                                data-toggle="tab">Pemasukan
                                 Lain</a></li>
                     </ul>
                 </div>
@@ -158,8 +218,8 @@
                                                 <div class="form-group">
                                                     <label>Kode Service</label>
                                                     <input type="text" value="{{ $kode_service }}"
-                                                        name="kode_service" id="kode_service" class="form-control"
-                                                        readonly>
+                                                        name="kode_service" id="kode_service"
+                                                        class="form-control" readonly>
                                                 </div>
                                             </div>
                                             <div class="col-md-4">
@@ -562,12 +622,83 @@
         </div>
         <!-- /.modal-dialog -->
     </div>
+    {{-- uang sebenarnya --}}
+    <div class="modal fade" id="reallaci" tabindex="-1" role="dialog" aria-labelledby="recehModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="recehModalLabel">Input uang real</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <form action="{{ route('laci.real') }}" method="POST">
+                    @csrf
+                    <div class="modal-body">
+                        <!-- Form input receh -->
+                        <div class="form-group">
+                            <label for="amount">Jumlah uang</label>
+                            <input type="number" class="form-control" id="real" name="real" required>
+                        </div>
+                        <!-- Tambahkan field lainnya jika diperlukan -->
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Tutup</button>
+                        <button type="submit" class="btn btn-primary">Kirim</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {{-- uang sebenarnya --}}
 
 </div><!-- /.container-fluid -->
 </section>
 <!-- /.content -->
 </div>
+
+@if ($isModalRequired)
+<!-- Modal untuk input receh -->
+<div class="modal fade" id="recehModal" tabindex="-1" role="dialog" aria-labelledby="recehModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="recehModalLabel">Input Receh</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form action="{{ route('laci.store') }}" method="POST">
+                @csrf
+                <div class="modal-body">
+                    <!-- Form input receh -->
+                    <div class="form-group">
+                        <label for="amount">Jumlah Receh</label>
+                        <input type="number" class="form-control" id="receh" name="receh" required>
+                    </div>
+                    <!-- Tambahkan field lainnya jika diperlukan -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Tutup</button>
+                    <button type="submit" class="btn btn-primary">Kirim</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function() {
+        $('#recehModal').modal('show');
+    });
+</script>
+@endif
 @endsection
+
+
+
 @section('content-script')
 <script>
     var i = 0;

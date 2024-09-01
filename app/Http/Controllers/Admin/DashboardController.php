@@ -16,6 +16,8 @@ use App\Models\Sparepart;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Penarikan;
+use App\Models\Laci;
+use Illuminate\Support\Facades\Http;
 
 
 class DashboardController extends Controller
@@ -82,8 +84,38 @@ class DashboardController extends Controller
                     $total_pengeluaran += $item->jml_pengeluaran;
                 }
             }
+            $today = date('Y-m-d');
+            $hasLaciEntry = Laci::where('kode_owner', $this->getThisUser()->id_upline)
+                ->whereDate('tanggal', $today)
+                ->whereNotNull('receh')
+                ->exists();
+            $laciData = Laci::where('tanggal', $today)->get();
 
-            return view('admin.index', compact(['total_pengeluaran', 'list_order', 'total_pemasukkan_lain', 'total_service', 'total_penjualan', 'pemasukkan_lain', 'page', 'kode_service', 'sparepart', 'catatan', 'service', 'penjualan', 'supplier', 'penarikan']));
+            // Hitung total receh jika diperlukan
+            $toReceh = $laciData->sum('receh');
+            $sumreal = $laciData->sum('real');
+            $totalReceh = $toReceh + $total_service + $total_penjualan + $total_pemasukkan_lain - $total_pengeluaran;
+
+            $isModalRequired = !$hasLaciEntry;
+            return view('admin.index', compact([
+                'total_pengeluaran',
+                'list_order',
+                'total_pemasukkan_lain',
+                'total_service',
+                'total_penjualan',
+                'pemasukkan_lain',
+                'page',
+                'kode_service',
+                'sparepart',
+                'catatan',
+                'service',
+                'penjualan',
+                'supplier',
+                'penarikan',
+                'isModalRequired',
+                'totalReceh',
+                'sumreal'
+            ]));
         }
         if ($this->getThisUser()->jabatan == '0') {
             $data = User::join('user_details', 'users.id', '=', 'user_details.kode_user')->where('user_details.jabatan', '=', '1')->get(['users.*', 'user_details.*', 'users.id as id_user']);
@@ -190,6 +222,7 @@ class DashboardController extends Controller
                 'status_services' => 'Antri',
                 'kode_owner' => $this->getThisUser()->id_upline
             ]);
+
             if ($create) {
                 if ($request->kode_sparepart != null) {
                     $data_service = modelServices::where([['kode_service', '=', $request->kode_service]])->get()->first();
@@ -211,9 +244,101 @@ class DashboardController extends Controller
                         }
                     }
                 }
+
                 return redirect()->back()->with('success', 'Tambah Service Berhasil');
             }
             return redirect()->back()->with('error', 'Tambah Service Gagal, Ada Kendala Teknis');
         }
+    }
+    public function create_service_api(Request $request)
+    {
+        // Validasi input tanpa 'kode_service'
+        $validate = $request->validate([
+            'tgl_service' => ['required'],
+            'nama_pelanggan' => ['nullable', 'string'],
+            'no_telp' => ['nullable', 'string'],
+            'type_unit' => ['nullable', 'string'],
+            'ket' => ['nullable', 'string'],
+            'biaya_servis' => ['nullable', 'numeric'],
+            'dp' => ['nullable', 'numeric'],
+            'kode_sparepart' => ['nullable', 'array'],
+            'qty_kode_sparepart' => ['nullable', 'array'],
+        ]);
+
+        if ($validate) {
+            // Generate kode_service otomatis
+            $kode_service = $this->generateKodeService();
+
+            // Simpan data service dengan kode_service yang dihasilkan
+            $create = modelServices::create([
+                'kode_service' => $kode_service,
+                'tgl_service' => $request->tgl_service,
+                'nama_pelanggan' => $request->nama_pelanggan,
+                'no_telp' => $request->no_telp,
+                'type_unit' => $request->type_unit,
+                'keterangan' => $request->ket,
+                'total_biaya' => $request->biaya_servis,
+                'dp' => $request->dp,
+                'status_services' => 'Antri',
+                'kode_owner' => 2
+            ]);
+
+            if ($create) {
+                if ($request->kode_sparepart != null) {
+                    $data_service = modelServices::where([['kode_service', '=', $kode_service]])->first();
+
+                    for ($i = 0; $i < count($request->kode_sparepart); $i++) {
+                        if ($request['kode_sparepart'][$i] != null) {
+                            $update_sparepart = Sparepart::findOrFail($request['kode_sparepart'][$i]);
+                            DetailPartServices::create([
+                                'kode_services' => $data_service->id,
+                                'kode_sparepart' => $request['kode_sparepart'][$i],
+                                'detail_modal_part_service' => $update_sparepart->harga_beli,
+                                'detail_harga_part_service' => $update_sparepart->harga_jual,
+                                'qty_part' => $request['qty_kode_sparepart'][$i],
+                                'user_input' => 1,
+                            ]);
+
+                            $stok_baru = $update_sparepart->stok_sparepart - $request['qty_kode_sparepart'][$i];
+                            $update_sparepart->update([
+                                'stok_sparepart' => $stok_baru,
+                            ]);
+                        }
+                    }
+                }
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Tambah Service Berhasil',
+                ], 200);
+            }
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tambah Service Gagal, Ada Kendala Teknis',
+            ], 500);
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Validasi Gagal',
+        ], 400);
+    }
+
+    private function generateKodeService()
+    {
+        // Format tanggal hari ini
+        $date = date('Ymd'); // YYYYMMDD
+
+        // Generate nomor acak dalam rentang 000 hingga 999
+        $randomNumber = str_pad(rand(0, 999), 3, '0', STR_PAD_LEFT);
+
+        // Pastikan nomor acak tersebut belum ada dalam database untuk hari yang sama
+        while (modelServices::where('kode_service', 'like', $date . $randomNumber . '%')->exists()) {
+            $randomNumber = str_pad(rand(0, 999), 3, '0', STR_PAD_LEFT);
+        }
+
+        // Format kode service
+        return 'SV' . $date . $randomNumber;
     }
 }

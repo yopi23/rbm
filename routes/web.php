@@ -24,6 +24,7 @@ use App\Http\Controllers\FrontController\ServiceController as FrontControllerSer
 use App\Http\Controllers\FrontController\SparepartController as FrontControllerSparepartController;
 use App\Http\Controllers\PDFController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\LaciController;
 
 /*
 |--------------------------------------------------------------------------
@@ -65,6 +66,11 @@ Route::post('/checkout/submit', [FrontControllerPesananController::class, 'buat_
 //Ajax Controller
 Route::get('search_kode_invite', [AjaxRequestController::class, 'search_kode_invite'])->name('search_kode_invite');
 
+// Route untuk form pengisian laci
+Route::get('/laci/form', [LaciController::class, 'form'])->name('laci.form');
+Route::post('/laci/store', [LaciController::class, 'store'])->name('laci.store');
+
+//admin
 Route::group(['middleware' => ['auth']], function () {
     //Admin Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
@@ -275,7 +281,11 @@ Route::group(['middleware' => ['auth']], function () {
 
     // web.php atau api.php
     Route::delete('/hutang/{id}', [LaporanController::class, 'destroy'])->name('hutang.destroy');
-});
+}); //admin
+
+Route::get('/laci/form', [LaciController::class, 'form'])->name('laci.form');
+Route::post('/laci/store', [LaciController::class, 'store'])->name('laci.store');
+Route::post('/laci/real', [LaciController::class, 'updatereal'])->name('laci.real');
 
 // baru di tambahkan
 Route::group(['middleware' => 'checkRole:0,1,2'], function () {
