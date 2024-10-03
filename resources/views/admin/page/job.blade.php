@@ -35,7 +35,7 @@
                             <div class="card card-outline card-success">
                                 <div class="card-header">
                                     <div class="card-title">
-                                        Service
+                                        <strong> Service</strong>
                                     </div>
                                     <div class="card-tools">
                                         <button class="btn btn-danger my-2" onclick="hapusSemuaRSparepart()">Hapus
@@ -174,8 +174,59 @@
 
             {{-- modal Service --}}
         </div>
-    </section>
-    <!-- /.content -->
+        {{-- list hari ini --}}
+        <div class="container-fluid">
+            <div class="card card-outline card-success">
+                <div class="card-header">
+                    <div class="card-title">
+                        <strong>Selesai <?php echo $today; ?></strong>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped border">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Nama</th>
+                                    <th>Device</th>
+                                    <th>Keterangan</th>
+                                    <th>Biaya</th>
+                                    <th>Opsi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if ($data_selesai_hari_ini->isEmpty())
+                                    <tr>
+                                        <td colspan="6" class="text-center">Tidak ada data yang ditemukan.</td>
+                                    </tr>
+                                @else
+                                    @foreach ($data_selesai_hari_ini as $index => $service)
+                                        <tr>
+                                            <td>{{ $index + 1 }}</td>
+                                            <td>{{ $service->nama_pelanggan }}</td>
+                                            <td>{{ $service->type_unit }}</td>
+                                            <td>{{ $service->keterangan }}</td>
+                                            <td>{{ number_format($service->total_biaya, 0, ',', '.') }}</td>
+                                            <td><a href="{{ route('nota_tempel_selesai', $service->id) }}"
+                                                    target="_blank" class="btn btn-sm btn-primary mt-2">
+                                                    <i class="fas fa-print"></i>
+                                                </a>
+
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                @endif
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+</div>
+</section>
+<!-- /.content -->
 </div>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
 
@@ -195,8 +246,6 @@
 
         const cariJob = $("#carijob").val().toLowerCase();
         const serviceData = <?php echo json_encode($data_service); ?>;
-
-
 
         const hasilPencarian = serviceData.filter(service => {
             return service.nama_pelanggan.toLowerCase().includes(cariJob) ||

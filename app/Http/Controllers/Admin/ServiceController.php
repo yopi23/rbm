@@ -504,6 +504,7 @@ class ServiceController extends Controller
         $page = "Service";
 
         $cari = $request->input('cari');
+        $today = date('Y-m-d');
         $year = date('Y');
         $data_service = modelServices::leftJoin(DB::raw('(SELECT kode_services, SUM(qty_part * harga_part) AS part_luar FROM detail_part_luar_services GROUP BY kode_services) AS part_luar_services'), 'sevices.id', '=', 'part_luar_services.kode_services')
             ->leftJoin(DB::raw('(SELECT kode_services, SUM(qty_part * detail_harga_part_service) AS part_toko FROM detail_part_services GROUP BY kode_services) AS part_toko'), 'sevices.id', '=', 'part_toko.kode_services')
@@ -512,6 +513,7 @@ class ServiceController extends Controller
                 'sevices.id as id_service',
                 'sevices.kode_service',
                 'sevices.tgl_service',
+                'sevices.updated_at',
                 'sevices.nama_pelanggan',
                 'sevices.no_telp',
                 'sevices.type_unit',
@@ -538,6 +540,7 @@ class ServiceController extends Controller
                 'sevices.id',
                 'sevices.kode_service',
                 'sevices.tgl_service',
+                'sevices.updated_at',
                 'sevices.nama_pelanggan',
                 'sevices.no_telp',
                 'sevices.type_unit',
@@ -552,11 +555,17 @@ class ServiceController extends Controller
                 'users.name',
             )
             ->get();
+        // Ambil data selesai hari ini
+        $data_selesai_hari_ini = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+            ->where('status_services', 'Selesai')
+            ->whereDate('updated_at', $today) // Mengecek hanya tanggal
+            ->get();
 
         $user = UserDetail::where('id_upline', $this->getThisUser()->id_upline)->get();
         $content = view('admin.page.job');
-        return view('admin.page.job', compact(['data_service', 'user']));
+        return view('admin.page.job', compact(['data_service', 'user', 'today', 'data_selesai_hari_ini']));
     }
+
     // selesaikan
     public function selesaikan(Request $request)
     {
