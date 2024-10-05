@@ -18,15 +18,17 @@ use App\Models\User;
 use App\Models\Penarikan;
 use App\Models\Laci;
 use Illuminate\Support\Facades\Http;
+use App\Traits\KategoriLaciTrait;
 
 
 class DashboardController extends Controller
 {
+    use KategoriLaciTrait;
     //
     public function index(Request $request)
     {
         $page = "Dashboard";
-
+        $listLaci = $this->getKategoriLaci();
         if ($this->getThisUser()->jabatan != '0') {
             // Penarikan
 
@@ -125,7 +127,8 @@ class DashboardController extends Controller
                 'isModalRequired',
                 'totalReceh',
                 'sumreal',
-                'debit'
+                'debit',
+                'listLaci'
             ]));
         }
         if ($this->getThisUser()->jabatan == '0') {
@@ -186,6 +189,7 @@ class DashboardController extends Controller
             'tgl_pemasukan' => ['required'],
             'jumlah_pemasukan' => ['required'],
         ]);
+
         if ($validate) {
             $create = PemasukkanLain::create([
                 'tgl_pemasukkan' => $request->tgl_pemasukan,
@@ -194,6 +198,17 @@ class DashboardController extends Controller
                 'jumlah_pemasukkan' => $request->jumlah_pemasukan,
                 'kode_owner' => $this->getThisUser()->id_upline
             ]);
+            
+            // laci
+            // Misalnya, ambil kategori dari request
+            $kategoriId = $request->input('id_kategorilaci');
+            $uangMasuk = $request->input('jumlah_pemasukan');
+            $keterangan = $request->input('judul_pemasukan') . "-" . $request->input('catatan_pemasukan');
+
+            // Catat histori laci
+            $this->recordLaciHistory($kategoriId, $uangMasuk, null, $keterangan);
+            //end laci
+
             if ($create) {
                 return redirect()->back()->with('success', 'Tambah Pemasukkan Berhasil');
             }

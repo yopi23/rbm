@@ -287,6 +287,9 @@ Route::get('/laci/form', [LaciController::class, 'form'])->name('laci.form');
 Route::post('/laci/store', [LaciController::class, 'store'])->name('laci.store');
 Route::post('/laci/real', [LaciController::class, 'updatereal'])->name('laci.real');
 
+
+Route::post('/kategori-laci', [LaciController::class, 'kategori_laci'])->name('kategori_laci');
+
 // baru di tambahkan
 Route::group(['middleware' => 'checkRole:0,1,2'], function () {
     // Tambahkan routing khusus untuk pengguna dengan jabatan 0, 1, atau 2 di sini

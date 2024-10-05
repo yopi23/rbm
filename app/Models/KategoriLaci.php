@@ -13,7 +13,10 @@ class KategoriLaci extends Model
     protected $table = 'kategori_lacis';
 
     // Kolom yang dapat diisi secara massal
-    protected $fillable = ['kode_owner', 'name_laci'];
+    protected $fillable = [
+        'kode_owner',
+        'name_laci'
+    ];
 
     // Jika Anda menggunakan timestamps
     public $timestamps = true;

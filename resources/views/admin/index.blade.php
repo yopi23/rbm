@@ -107,9 +107,16 @@
         <div class="row">
             <div class="col-12 col-sm-6 col-md-4">
                 <div class="info-box mb-3">
-                    <a class="info-box-icon bg-info elevation-1" href="{{ route('list_all_service') }}">
-                        <i class="fas fa-cog"></i>
-                    </a>
+                    @if ($this_user->jabatan == '1')
+                        <a class="info-box-icon bg-info elevation-1" href="{{ route('laci.form') }}">
+                            <i class="fas fa-cog"></i>
+                        </a>
+                    @else
+                        <a class="info-box-icon bg-info elevation-1" href="#">
+                            <i class="fas
+                            fa-cog"></i>
+                        </a>
+                    @endif
                     <div class="info-box-content">
                         <span class="info-box-text">Laci</span>
                         <span class="info-box-number">Rp.{{ number_format($totalReceh) }},-</span>
@@ -190,7 +197,8 @@
             <div class="card card-primary card-outline mt-3">
                 <div class="card-header">
                     <ul class="nav nav-pills">
-                        <li class="nav-item"><a class="nav-link active" href="#servis" data-toggle="tab">Servis</a>
+                        <li class="nav-item"><a class="nav-link active" href="#servis"
+                                data-toggle="tab">Servis</a>
                         </li>
                         <li class="nav-item"><a class="nav-link" href="#catatan" data-toggle="tab">Catatan</a>
                         </li>
@@ -408,6 +416,16 @@
                                             <label>Tanggal</label>
                                             <input type="date" name="tgl_pemasukan" id="tgl_pemasukan_lain"
                                                 class="form-control" value="{{ date('Y-m-d') }}">
+                                        </div>
+
+                                        <div class="form-group">
+                                            <select name="id_kategorilaci" class="form-control" required>
+                                                <option value="">Pilih Kategori Laci</option>
+                                                @foreach ($listLaci as $kategori)
+                                                    <option value="{{ $kategori->id }}">
+                                                        {{ $kategori->name_laci }}</option>
+                                                @endforeach
+                                            </select>
                                         </div>
                                         <div class="form-group">
                                             <label>Judul</label>

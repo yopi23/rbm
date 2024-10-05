@@ -5,14 +5,20 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class HistoriLaci extends Model
+class HistoryLaci extends Model
 {
     use HasFactory;
     // Nama tabel yang sesuai dengan model
     protected $table = 'history_laci';
 
     // Kolom yang dapat diisi secara massal
-    protected $fillable = ['kode_owner', 'id_laci', 'keterangan'];
+    protected $fillable = [
+        'kode_owner',
+        'id_kategori',
+        'masuk',
+        'keluar',
+        'keterangan'
+    ];
 
     // Jika Anda menggunakan timestamps
     public $timestamps = true;

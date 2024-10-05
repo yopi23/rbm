@@ -16,8 +16,10 @@ return new class extends Migration
         Schema::create('history_laci', function (Blueprint $table) {
             $table->id();
             $table->integer('kode_owner');
-            $table->integer('id_laci');
-            $table->string('keterangan');
+            $table->integer('id_kategori');
+            $table->string('masuk')->nullable();
+            $table->string('keluar')->nullable();
+            $table->string('keterangan')->nullable();
             $table->timestamps();
         });
     }
