@@ -561,7 +561,10 @@ class ServiceController extends Controller
             ->whereDate('updated_at', $today) // Mengecek hanya tanggal
             ->get();
 
-        $user = UserDetail::where('id_upline', $this->getThisUser()->id_upline)->get();
+        $jab = [1, 2];
+        $user = UserDetail::where('id_upline', $this->getThisUser()->id_upline)
+            ->whereNotIn('jabatan', $jab)
+            ->get();
         $content = view('admin.page.job');
         return view('admin.page.job', compact(['data_service', 'user', 'today', 'data_selesai_hari_ini']));
     }
