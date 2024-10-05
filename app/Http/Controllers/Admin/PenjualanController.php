@@ -12,15 +12,17 @@ use App\Models\Sparepart;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Redis;
+use App\Traits\KategoriLaciTrait;
 use PDO;
 
 class PenjualanController extends Controller
 {
-
+    use KategoriLaciTrait;
     //
     public function view_penjualan(Request $request)
     {
         $page = "Penjualan";
+        $listLaci = $this->getKategoriLaci();
         $data = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '=', '0']])->get()->first();
         $count = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline]])->get()->count();
         if (!$data) {
@@ -60,8 +62,8 @@ class PenjualanController extends Controller
         $sparepart = DetailSparepartPenjualan::join('spareparts', 'detail_sparepart_penjualans.kode_sparepart', '=', 'spareparts.id')->where([['detail_sparepart_penjualans.kode_penjualan', '=', $data->id]])->get(['detail_sparepart_penjualans.id as id_detail', 'detail_sparepart_penjualans.*', 'spareparts.*']);
         $all_sparepart = Sparepart::where([['kode_owner', '=', $this->getThisUser()->id_upline]])->latest()->get();
         $all_barang = Handphone::where([['kode_owner', '=', $this->getThisUser()->id_upline]])->latest()->get();
-        $content = view('admin.page.penjualan', compact(['data', 'barang', 'sparepart', 'all_sparepart', 'all_barang', 'view_penjualan', 'view_barang', 'view_sparepart', 'view_garansi', 'garansi']));
-        return view('admin.layout.blank_page', compact(['page', 'content']));
+        $content = view('admin.page.penjualan', compact(['data', 'barang', 'sparepart', 'all_sparepart', 'all_barang', 'view_penjualan', 'view_barang', 'view_sparepart', 'view_garansi', 'garansi', 'listLaci']));
+        return view('admin.layout.blank_page', compact(['page', 'content', 'listLaci']));
     }
     //Sparepart
     public function create_detail_sparepart(Request $request)
@@ -233,6 +235,16 @@ class PenjualanController extends Controller
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
             ];
+
+            // laci
+            // Misalnya, ambil kategori dari request
+            $kategoriId = $request->input('id_kategorilaci');
+            $uangMasuk = $request->input('total_penjualan');
+            $keterangan = $request->input('nama_customer') . "-" . $request->input('catatan_customer');
+
+            // Catat histori laci
+            $this->recordLaciHistory($kategoriId, $uangMasuk, null, $keterangan);
+            //end laci
         }
         if ($request->simpan == 'simpan') {
             $data_update = [

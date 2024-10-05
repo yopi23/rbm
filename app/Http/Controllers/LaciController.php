@@ -14,6 +14,17 @@ class LaciController extends Controller
 {
     public function form(Request $request)
     {
+        // Pengecekan apakah pengguna sudah login
+        if (!Auth::check()) {
+            return redirect()->route('home'); // Alihkan ke halaman home jika belum login
+        }
+        $this_user = Auth::user(); // Ambil data pengguna yang sedang login
+
+        // Pengecekan jabatan
+        // if ($this_user->jabatan = '1') {
+        //     return redirect()->route('dashboard'); // Alihkan ke halaman home jika jabatan tidak sesuai
+        // }
+
         $page = 'laci';
         $today = date('Y-m-d');
 
@@ -32,6 +43,29 @@ class LaciController extends Controller
                 ])
                 ->groupBy('kategori_lacis.id', 'kategori_lacis.name_laci')
                 ->get();
+
+            $riwayat = HistoryLaci::join('kategori_lacis', 'history_laci.id_kategori', '=', 'kategori_lacis.id')
+                ->select(
+                    'history_laci.*',
+                    'kategori_lacis.name_laci'
+                )
+                ->where([
+                    ['kategori_lacis.kode_owner', '=', $this->getThisUser()->id_upline],
+                    ['history_laci.updated_at', '>=', $request->tgl_awal . ' 00:00:00'],
+                    ['history_laci.updated_at', '<=', $request->tgl_akhir . ' 23:59:59']
+                ])
+                ->groupBy(
+                    'history_laci.id',
+                    'history_laci.id_kategori',
+                    'history_laci.kode_owner',
+                    'history_laci.masuk',
+                    'history_laci.keluar',
+                    'history_laci.keterangan',
+                    'history_laci.created_at',
+                    'history_laci.updated_at',
+                    'kategori_lacis.name_laci'
+                )
+                ->get();
         } else {
             $listLaci = HistoryLaci::join('kategori_lacis', 'history_laci.id_kategori', '=', 'kategori_lacis.id')
                 ->select(
@@ -46,6 +80,29 @@ class LaciController extends Controller
                     ['history_laci.updated_at', '<=', $today . ' 23:59:59']
                 ])
                 ->groupBy('kategori_lacis.id', 'kategori_lacis.name_laci')
+                ->get();
+
+            $riwayat = HistoryLaci::join('kategori_lacis', 'history_laci.id_kategori', '=', 'kategori_lacis.id')
+                ->select(
+                    'history_laci.*',
+                    'kategori_lacis.name_laci'
+                )
+                ->where([
+                    ['kategori_lacis.kode_owner', '=', $this->getThisUser()->id_upline],
+                    ['history_laci.updated_at', '>=', $today . ' 00:00:00'],
+                    ['history_laci.updated_at', '<=', $today . ' 23:59:59']
+                ])
+                ->groupBy(
+                    'history_laci.id',
+                    'history_laci.id_kategori',
+                    'history_laci.kode_owner',
+                    'history_laci.masuk',
+                    'history_laci.keluar',
+                    'history_laci.keterangan',
+                    'history_laci.created_at',
+                    'history_laci.updated_at',
+                    'kategori_lacis.name_laci'
+                )
                 ->get();
         }
 
@@ -67,10 +124,8 @@ class LaciController extends Controller
             $listLaci = $listLaci->toArray();
         }
 
-        return view('laci.form', compact('page', 'listLaci'));
+        return view('laci.form', compact('page', 'listLaci', 'allLaci', 'riwayat'));
     }
-
-
 
 
     public function store(Request $request)
@@ -162,5 +217,17 @@ class LaciController extends Controller
                 return redirect()->back()->with('error', 'Gagal menyimpan kategori laci: ' . $e->getMessage());
             }
         }
+    }
+
+    public function deleteKategoriLaci(Request $request)
+    {
+        $request->validate([
+            'id_kategorilaci' => 'required|exists:kategori_lacis,id', // Pastikan id ada di database
+        ]);
+
+        $kategoriLaci = KategoriLaci::findOrFail($request->id_kategorilaci);
+        $kategoriLaci->delete();
+
+        return redirect()->back()->with('success', 'Kategori Laci berhasil dihapus.');
     }
 }

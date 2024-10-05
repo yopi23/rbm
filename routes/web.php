@@ -287,6 +287,7 @@ Route::get('/laci/form', [LaciController::class, 'form'])->name('laci.form');
 Route::post('/laci/store', [LaciController::class, 'store'])->name('laci.store');
 Route::post('/laci/real', [LaciController::class, 'updatereal'])->name('laci.real');
 
+Route::delete('/kategori-laci', [LaciController::class, 'deleteKategoriLaci'])->name('delete_kategori_laci');
 
 Route::post('/kategori-laci', [LaciController::class, 'kategori_laci'])->name('kategori_laci');
 

@@ -201,16 +201,27 @@
                         <div class="card-body">
                             <input type="hidden" name="total_penjualan" id="total_penjualan" class="form-control"
                                 value="{{ $total_part_penjualan + $total_barang_penjualan }}">
-                            <div class="form-group">
-                                <label>Kode Invoice</label>
-                                <input type="text" name="kode_penjualan" id="kode_penjualan" class="form-control"
-                                    value="{{ $data->kode_penjualan }}" disabled>
-                            </div>
+
+                            <label>Kode Invoice : <span
+                                    style="color: rgb(160, 148, 148)">{{ $data->kode_penjualan }}</span> </label>
+                            <input type="text" name="kode_penjualan" id="kode_penjualan" class="form-control"
+                                value="{{ $data->kode_penjualan }}" hidden>
+
                             <div class="form-group">
                                 <label>Tanggal</label>
                                 <input type="date" name="tgl_penjualan" id="tgl_penjualan"
                                     value="{{ $data->tgl_penjualan != null ? $data->tgl_penjualan : date('Y-m-d') }}"
                                     class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <select name="id_kategorilaci" class="form-control" required>
+                                    <option value="">Pilih Kategori Laci</option>
+                                    @foreach ($listLaci as $kategori)
+                                        <option value="{{ $kategori->id }}">
+                                            {{ $kategori->name_laci }}</option>
+                                    @endforeach
+                                </select>
+
                             </div>
                             <div class="form-group">
                                 <label>Total Bayar</label>

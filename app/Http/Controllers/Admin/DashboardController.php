@@ -198,7 +198,7 @@ class DashboardController extends Controller
                 'jumlah_pemasukkan' => $request->jumlah_pemasukan,
                 'kode_owner' => $this->getThisUser()->id_upline
             ]);
-            
+
             // laci
             // Misalnya, ambil kategori dari request
             $kategoriId = $request->input('id_kategorilaci');

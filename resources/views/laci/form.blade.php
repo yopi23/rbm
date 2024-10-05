@@ -33,27 +33,6 @@
                     </div>
                 </div>
             </form>
-            <!-- Small boxes (Stat box) -->
-            {{-- @if ($this_user->jabatan == '1' || $this_user->jabatan == '2') --}}
-            <div class="row">
-                @foreach ($listLaci as $laci)
-                    <div class="col-12 col-sm-6 col-md-4">
-                        <div class="info-box mb-3">
-                            <div class="info-box-content">
-                                <span class="info-box-text">{{ $laci['name_laci'] }}</span>
-                                <span class="info-box-number">Uang Masuk: Rp.
-                                    {{ number_format($laci['total_uang_masuk']) }}</span>
-                                <span class="info-box-number">Uang Keluar: Rp.
-                                    {{ number_format($laci['total_uang_keluar']) }}</span>
-                            </div>
-                            <!-- /.info-box-content -->
-                        </div>
-                        <!-- /.info-box -->
-                    </div>
-                @endforeach
-
-            </div>
-            {{-- @endif --}}
 
             @if (session('error'))
                 <div class="alert alert-danger">
@@ -66,8 +45,108 @@
                     {{ session('success') }}
                 </div>
             @endif
+            <!-- Small boxes (Stat box) -->
+            {{-- @if ($this_user->jabatan == '1' || $this_user->jabatan == '2') --}}
+            <div class="row">
+                @foreach ($listLaci as $laci)
+                    <div class="col-12 col-sm-6 col-md-4">
+                        <div class="info-box mb-3">
 
-            <button class="btn btn-primary" data-toggle="modal" data-target="#mdkategori">Tambah Laci</button>
+                            <div class="info-box-content">
+                                <h5><span class="info-box-text"><strong>{{ $laci['name_laci'] }}</strong></span></h5>
+                                <span class="info-box-number" style="color: rgb(0, 138, 57)">Uang Masuk: Rp.
+                                    {{ number_format($laci['total_uang_masuk']) }}</span>
+                                <div class="progress">
+                                    <div class="progress-bar bg-info" style="width: 70%"></div>
+                                </div>
+
+                                <span class="progress-description" style="color: red">Uang Keluar: Rp.
+                                    {{ number_format($laci['total_uang_keluar']) }} </span>
+                            </div>
+                            <!-- /.info-box-content -->
+                        </div>
+                        <!-- /.info-box -->
+                    </div>
+                @endforeach
+
+            </div>
+            {{-- @endif --}}
+            <div class="card">
+                <div class="card-header">
+                    <div class="row">
+                        <div class="col">
+                            <button class="btn btn-primary" data-toggle="modal" data-target="#mdkategori">Tambah
+                                Laci</button>
+                        </div>
+                        <div class="col-8">
+                            <form action="{{ route('delete_kategori_laci') }}" method="POST"
+                                onsubmit="return confirm('Apakah Anda yakin ingin menghapus kategori ini?');">
+                                @csrf
+                                @method('DELETE')
+                                <!-- Ini untuk menyatakan bahwa metode HTTP yang digunakan adalah DELETE -->
+                                <div class="form-group">
+                                    <select name="id_kategorilaci" class="form-control" required>
+                                        <option value="">Pilih Kategori Laci</option>
+                                        @foreach ($allLaci as $kategori)
+                                            <option value="{{ $kategori->id }}">
+                                                {{ $kategori->name_laci }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                        </div>
+                        <div class="col">
+                            <button type="submit" class="btn btn-danger">Hapus Laci</button>
+                        </div>
+
+                        </form>
+
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover ">
+                            <div class="thead">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Laci</th>
+                                    <th>Masuk</th>
+                                    <th>Keluar</th>
+                                    <th>Keterangan</th>
+                                    <th>Tanggal</th>
+                                </tr>
+                            </div>
+                            <div class="tbody">
+                                @foreach ($riwayat as $index => $rincian)
+                                    <tr>
+                                        <td>{{ $index + 1 }}</td>
+                                        <td>{{ $rincian->name_laci }}</td>
+                                        <td>
+                                            @if ($rincian->masuk > 0)
+                                                <span style="color: rgb(0, 138, 57)">+
+                                                    {{ number_format($rincian->masuk) }}</span>
+                                            @else
+                                                <span style="color: rgb(0, 138, 57)">+0</span>
+                                            @endif
+                                        </td>
+
+                                        <td>
+                                            @if ($rincian->keluar > 0)
+                                                <span style="color: red">-{{ number_format($rincian->keluar) }}</span>
+                                            @else
+                                                <span style="color: red">-0</span>
+                                            @endif
+                                        </td>
+
+                                        <td>{{ $rincian->keterangan }}</td>
+                                        <td>{{ $rincian->updated_at }}</td>
+                                    </tr>
+                                @endforeach
+                            </div>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
         {{-- modal kategori --}}
         <div class="modal fade" id="mdkategori" tabindex="-1" role="dialog" aria-labelledby="recehModalLabel"
