@@ -37,7 +37,7 @@
             /* Menyembunyikan teks yang melampaui batas */
             text-overflow: ellipsis;
             /* Menambahkan ellipsis (...) */
-            max-width: 350px;
+            max-width: 550px;
             /* Ganti dengan lebar maksimum yang diinginkan */
         }
     </style>
