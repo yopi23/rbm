@@ -31,14 +31,19 @@
     <link href="{{ asset('front/assets/css/style.css') }}" rel="stylesheet">
     <style>
         .nama-sparepart {
-            white-space: nowrap;
-            /* Menghindari teks terpotong ke baris baru */
+            display: -webkit-box;
+            /* Menggunakan flexbox */
+            -webkit-box-orient: vertical;
+            /* Mengatur orientasi kotak */
+            -webkit-line-clamp: 2;
+            /* Membatasi menjadi 2 baris */
             overflow: hidden;
-            /* Menyembunyikan teks yang melampaui batas */
+            /* Menyembunyikan teks yang melampaui */
             text-overflow: ellipsis;
             /* Menambahkan ellipsis (...) */
-            max-width: 550px;
-            /* Ganti dengan lebar maksimum yang diinginkan */
+            max-height: 3em;
+            /* Mengatur tinggi maksimum (2 baris) */
+            line-height: 1.5em;
         }
     </style>
 </head>
