@@ -91,7 +91,9 @@
                                         @endif
                                         <div class="d-flex justify-content-between">
                                             <small
-                                                class="border p-1">{{ $item->stok_sparepart > 0 ? 'Tersedia' : 'Kosong' }}</small>
+                                                class="border p-1 {{ $item->stok_sparepart > 0 ? 'bg-green-500 text-white' : 'bg-red-500 text-white' }}">
+                                                {{ $item->stok_sparepart > 0 ? 'Tersedia' : 'Kosong' }}
+                                            </small>
                                             @if ($ismember)
                                                 <form action="{{ route('add_sparepart_cart', $item->id_produk) }}"
                                                     method="POST">
