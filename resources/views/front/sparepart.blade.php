@@ -101,7 +101,11 @@
                                                     @method('PUT')
                                                     <input type="hidden" name="kode_invite" id="kode_invite"
                                                         value="{{ $request->ref }}">
-                                                    <button class="btn btn-success">Pesan</button>
+                                                    <button
+                                                        class="btn {{ $item->stok_sparepart > 0 ? 'btn-success' : 'btn-danger' }}"
+                                                        {{ $item->stok_sparepart <= 0 ? 'disabled' : '' }}>
+                                                        Pesan
+                                                    </button>
                                                 </form>
                                             @endif
                                         </div>
