@@ -54,7 +54,7 @@ class PesananController extends Controller
                 $id => [
                     "name" => $data->nama_sparepart,
                     "qty" => 1,
-                    "price" => $data->harga_jual,
+                    "price" => $data->harga_ecer,
                     "photo" => $data->foto_sparepart,
                     "kode_invite" => $request->kode_invite
                 ]
@@ -70,7 +70,7 @@ class PesananController extends Controller
         $cart[$id] = [
             "name" => $data->nama_sparepart,
             "qty" => 1,
-            "price" => $data->harga_jual,
+            "price" => $data->harga_ecer,
             "photo" => $data->foto_sparepart,
             "kode_invite" => $request->kode_invite
         ];
