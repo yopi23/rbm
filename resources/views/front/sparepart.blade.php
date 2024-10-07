@@ -91,7 +91,7 @@
                                         @endif
                                         <div class="d-flex justify-content-between">
                                             <small
-                                                class="border p-1 {{ $item->stok_sparepart > 0 ? 'bg-green-500 text-white' : 'bg-red-500 text-white' }}">
+                                                class="border p-1 {{ $item->stok_sparepart > 0 ? 'btn btn-success' : 'btn btn-danger' }}">
                                                 {{ $item->stok_sparepart > 0 ? 'Tersedia' : 'Kosong' }}
                                             </small>
                                             @if ($ismember)
