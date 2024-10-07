@@ -76,10 +76,10 @@
                                 <div class="card card-outline my-2">
                                     <div class="text-center">
                                         @if ($item->foto_sparepart != '-')
-                                            <img src="{{ asset('public/uploads/' . $item->foto_sparepart) }}" width="100%"
+                                            <img src="{{ asset('uploads/' . $item->foto_sparepart) }}" width="100%"
                                                 height="100%" class="card-img-top img-fluid img-thumbnail" id="view-img">
                                         @else
-                                            <img src="{{ asset('public/img/no_image.png') }}" width="100%" height="100%"
+                                            <img src="{{ asset('img/no_image.png') }}" width="100%" height="100%"
                                                 class="card-img-top img-fluid img-thumbnail" id="view-img">
                                         @endif
                                     </div>
