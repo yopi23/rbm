@@ -84,7 +84,7 @@
                                         @endif
                                     </div>
                                     <div class="card-body">
-                                        <h5>{{ $item->nama_sparepart }}</h5>
+                                        <h5 class="nama-sparepart">{{ $item->nama_sparepart }}</h5>
                                         <p>{{ $item->nama_kategori }}</p>
                                         @if ($ismember)
                                             <h5 class="">Rp.{{ number_format($item->harga_ecer) }},-</h5>

@@ -29,5 +29,18 @@
 
     <!-- Template Main CSS File -->
     <link href="{{ asset('front/assets/css/style.css') }}" rel="stylesheet">
+    <style>
+        .nama-sparepart {
+            white-space: nowrap;
+            /* Menghindari teks terpotong ke baris baru */
+            overflow: hidden;
+            /* Menyembunyikan teks yang melampaui batas */
+            text-overflow: ellipsis;
+            /* Menambahkan ellipsis (...) */
+            max-width: 350px;
+            /* Ganti dengan lebar maksimum yang diinginkan */
+        }
+    </style>
 </head>
+
 <body>
