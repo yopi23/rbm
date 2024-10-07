@@ -73,7 +73,7 @@
                     @if (isset($data) != null)
                         @forelse ($data as $item)
                             <div class="col-md-3">
-                                <div class="card card-outline">
+                                <div class="card card-outline my-2">
                                     <div class="text-center">
                                         @if ($item->foto_sparepart != '-')
                                             <img src="{{ asset('public/uploads/' . $item->foto_sparepart) }}" width="100%"
