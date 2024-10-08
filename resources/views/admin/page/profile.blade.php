@@ -7,8 +7,8 @@
             <div class="card-body">
                 <div class="text-center">
                     @if (isset($this_user) && $this_user->foto_user != '-' && file_exists(public_path('uploads/' . $this_user->foto_user)))
-                        <img class="profile-user-img img-fluid img-circle"
-                            src="{{ asset('uploads/' . $this_user->foto_user) }}" alt="Foto profil pengguna">
+                        <img class="profile-user-img img-fluid img-circle" src="{{ asset($this_user->foto_user) }}"
+                            alt="Foto profil pengguna">
                     @else
                         <img class="profile-user-img img-fluid img-circle" src="{{ asset('img/user-default.png') }}"
                             alt="Foto profil pengguna">

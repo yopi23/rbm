@@ -79,7 +79,6 @@
                             hidden>
                     </div>
                     <div class="form-group">
-                        <label>Tanggal Pengambilan</label>
                         <input type="date" value="{{ date('Y-m-d') }}" name="tgl_pengambilan" id="tgl_pengambilan"
                             class="form-control">
                     </div>
@@ -101,7 +100,11 @@
                     <div class="form-group">
                         <label>Total Bayar</label>
                         <input type="number" min="{{ $total_harga }}" value="0" name="total_bayar"
-                            id="total_bayar" class="form-control" required>
+                            id="total_bayar" class="form-control" hidden>
+                        <input type="number" value="" name="in_bayar" id="in_bayar" class="form-control"
+                            required>
+                        <span style="display:none;" id="kembalian-value">Rp.
+                            0,-</span>
                     </div>
                     <button type="submit" class="btn btn-success form-control">Bayar</button>
                     <a href=""></a>
@@ -172,3 +175,61 @@
     </div>
     <!-- /.modal-dialog -->
 </div>
+<script>
+    function formatRupiah(angka, prefix) {
+        var number_string = angka.toString().replace(/[^,\d]/g, "");
+        var split = number_string.split(",");
+        var sisa = split[0].length % 3;
+        var rupiah = split[0].substr(0, sisa);
+        var ribuan = split[0].substr(sisa).match(/\d{3}/g);
+
+        if (ribuan) {
+            separator = sisa ? "." : "";
+            rupiah += separator + ribuan.join(".");
+        }
+
+        rupiah = split[1] != undefined ? rupiah + ',' + split[1] :
+            rupiah; // Tambahkan kondisi untuk menghilangkan angka 0 di depan jika tidak ada koma
+        return prefix == undefined ? rupiah : (rupiah ? 'Rp. ' + rupiah : '');
+    }
+
+    function getNumericValue(rupiah) {
+        var numericValue = rupiah.replace(/[^0-9]/g, "");
+        return numericValue;
+    }
+
+    var inbayar = document.getElementById("in_bayar");
+    var hiddenTBayar = document.getElementById("total_bayar");
+
+    var kembalianValue = document.getElementById("kembalian-value");
+    var totalHarga = {{ $total_harga }};
+
+    inbayar.addEventListener("input", function(e) {
+        var biaya = e.target.value;
+        var rupiah = formatRupiah(biaya);
+        var numericValue = getNumericValue(biaya);
+        e.target.value = rupiah;
+        hiddenTBayar.value = numericValue;
+
+        //kembalian
+
+        hiddenTBayar.value = numericValue; // Update hidden input
+
+        var selisih = numericValue - totalHarga; // Calculate change
+
+        // Show the kembalian span when there is input
+        kembalianValue.style.display = (numericValue > 0) ? 'block' : 'none';
+
+        // Update kembalian display
+        if (selisih > 0) {
+            kembalianValue.innerText = "Kembalian: " + formatRupiah(selisih);
+            kembalianValue.style.color = "green"; // Change text color to green
+        } else if (selisih < 0) {
+            kembalianValue.innerText = "Kurang: " + formatRupiah(Math.abs(selisih));
+            kembalianValue.style.color = "red"; // Change text color to red
+        } else {
+            kembalianValue.innerText = "Pass";
+            kembalianValue.style.color = "blue"; // Change text color to default
+        }
+    });
+</script>

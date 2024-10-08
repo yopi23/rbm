@@ -208,7 +208,6 @@
                                 value="{{ $data->kode_penjualan }}" hidden>
 
                             <div class="form-group">
-                                <label>Tanggal</label>
                                 <input type="date" name="tgl_penjualan" id="tgl_penjualan"
                                     value="{{ $data->tgl_penjualan != null ? $data->tgl_penjualan : date('Y-m-d') }}"
                                     class="form-control" required>
@@ -229,6 +228,8 @@
                                     value="{{ $data->total_bayar }}" placeholder="Total Bayar" hidden>
                                 <input type="text" name="in_bayar" id="in_bayar" class="form-control"
                                     placeholder="Total Bayar" required>
+                                <span style="display:none;" id="kembalian-value">Rp.
+                                    0,-</span>
                             </div>
                             <div class="form-group">
                                 <button type="submit" name="simpan" value="bayar"
@@ -684,11 +685,36 @@
     var inbayar = document.getElementById("in_bayar");
     var hiddenTBayar = document.getElementById("total_bayar");
 
+    var kembalianValue = document.getElementById("kembalian-value");
+    var totalHarga = {{ $total_part_penjualan + $total_barang_penjualan }};
+    console.info(totalHarga);
+
     inbayar.addEventListener("input", function(e) {
         var biaya = e.target.value;
         var rupiah = formatRupiah(biaya);
         var numericValue = getNumericValue(biaya);
         e.target.value = rupiah;
         hiddenTBayar.value = numericValue;
+
+        //kembalian
+
+        hiddenTBayar.value = numericValue; // Update hidden input
+
+        var selisih = numericValue - totalHarga; // Calculate change
+
+        // Show the kembalian span when there is input
+        kembalianValue.style.display = (numericValue > 0) ? 'block' : 'none';
+
+        // Update kembalian display
+        if (selisih > 0) {
+            kembalianValue.innerText = "Kembalian: " + formatRupiah(selisih);
+            kembalianValue.style.color = "green"; // Change text color to green
+        } else if (selisih < 0) {
+            kembalianValue.innerText = "Kurang: " + formatRupiah(Math.abs(selisih));
+            kembalianValue.style.color = "red"; // Change text color to red
+        } else {
+            kembalianValue.innerText = "Pass";
+            kembalianValue.style.color = "blue"; // Change text color to default
+        }
     });
 </script>

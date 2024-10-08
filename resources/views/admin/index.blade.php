@@ -107,16 +107,16 @@
         <div class="row">
             <div class="col-12 col-sm-6 col-md-4">
                 <div class="info-box mb-3">
-                    @if ($this_user->jabatan == '1')
-                        <a class="info-box-icon bg-info elevation-1" href="{{ route('laci.form') }}">
-                            <i class="fas fa-cog"></i>
-                        </a>
-                    @else
+                    {{-- @if ($this_user->jabatan == '1') --}}
+                    <a class="info-box-icon bg-info elevation-1" href="{{ route('laci.form') }}">
+                        <i class="fas fa-cog"></i>
+                    </a>
+                    {{-- @else
                         <a class="info-box-icon bg-info elevation-1" href="#">
                             <i class="fas
                             fa-cog"></i>
                         </a>
-                    @endif
+                    @endif --}}
                     <div class="info-box-content">
                         <span class="info-box-text">Laci</span>
                         <span class="info-box-number">Rp.{{ number_format($totalReceh) }},-</span>
@@ -181,24 +181,25 @@
         </div>
     @endif
     @if ($this_user->jabatan == '1' || $this_user->jabatan == '2')
-        <span class="alert alert-primary" style="display: block; margin-bottom:5px">
-            @if ($penarikan->isNotEmpty())
-                @foreach ($penarikan as $data)
-                    Nama: {{ $data->name }}/ Amount: Rp. {{ number_format($data->jumlah_penarikan) }}
+
+        @if ($penarikan->isNotEmpty())
+            @foreach ($penarikan as $data)
+                <span class="alert alert-danger" style="display: block; margin-bottom:5px">
+                    Nama: {{ $data->name }} - Mengajukan: Rp. {{ number_format($data->jumlah_penarikan) }}
                     <br>
-                @endforeach
-            @else
-                No recent withdrawals available.
-            @endif
-        </span>
+                </span>
+            @endforeach
+            {{-- @else
+                No recent withdrawals available. --}}
+        @endif
+
     @endif
     <div class="row">
         <div class="col-md-12">
             <div class="card card-primary card-outline mt-3">
                 <div class="card-header">
                     <ul class="nav nav-pills">
-                        <li class="nav-item"><a class="nav-link active" href="#servis"
-                                data-toggle="tab">Servis</a>
+                        <li class="nav-item"><a class="nav-link active" href="#servis" data-toggle="tab">Servis</a>
                         </li>
                         <li class="nav-item"><a class="nav-link" href="#catatan" data-toggle="tab">Catatan</a>
                         </li>

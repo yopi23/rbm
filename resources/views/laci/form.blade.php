@@ -10,23 +10,25 @@
             <!-- Form untuk filter tanggal -->
             <form action="{{ route('laci.form') }}" method="GET">
                 <div class="row">
-                    <div class="col-md-4 col-sm-12 my-2">
-                        <input type="date"
-                            value="{{ isset($request->tgl_awal) ? $request->tgl_awal : '' }}"name="tgl_awal"
-                            id="tgl_awal" class="form-control" hidden>
-                        <input type="date"
-                            value="{{ isset($request->tgl_akhir) ? $request->tgl_akhir : '' }}"name="tgl_akhir"
-                            id="tgl_akhir" class="form-control" hidden>
+                    @if ($this_user->jabatan == '1')
+                        <div class="col-md-4 col-sm-12 my-2">
+                            <input type="date"
+                                value="{{ isset($request->tgl_awal) ? $request->tgl_awal : '' }}"name="tgl_awal"
+                                id="tgl_awal" class="form-control" hidden>
+                            <input type="date"
+                                value="{{ isset($request->tgl_akhir) ? $request->tgl_akhir : '' }}"name="tgl_akhir"
+                                id="tgl_akhir" class="form-control" hidden>
 
-                        <div
-                            id="reportrange"style="background: #fff; cursor: pointer; padding: 5px 10px; border: 1px solid #ccc; width: 100%">
-                            <i class="fa fa-calendar"></i>&nbsp;
-                            <span></span> <i class="fa fa-caret-down"></i>
+                            <div
+                                id="reportrange"style="background: #fff; cursor: pointer; padding: 5px 10px; border: 1px solid #ccc; width: 100%">
+                                <i class="fa fa-calendar"></i>&nbsp;
+                                <span></span> <i class="fa fa-caret-down"></i>
+                            </div>
                         </div>
-                    </div>
-                    <div class="col-sm-4 my-2">
-                        <button type="submit" class="btn btn-primary">Submit</button>
-                    </div>
+                        <div class="col-sm-4 my-2">
+                            <button type="submit" class="btn btn-primary">Submit</button>
+                        </div>
+                    @endif
                     <div class="col text-right">
                         <strong
                             style="font-family: 'Courier New', Courier, monospace;"class="pt-3 pb-3">@php echo date('l,d-M-Y') @endphp</strong>
@@ -72,37 +74,39 @@
             </div>
             {{-- @endif --}}
             <div class="card">
-                <div class="card-header">
-                    <div class="row">
-                        <div class="col">
-                            <button class="btn btn-primary" data-toggle="modal" data-target="#mdkategori">Tambah
-                                Laci</button>
-                        </div>
-                        <div class="col-8">
-                            <form action="{{ route('delete_kategori_laci') }}" method="POST"
-                                onsubmit="return confirm('Apakah Anda yakin ingin menghapus kategori ini?');">
-                                @csrf
-                                @method('DELETE')
-                                <!-- Ini untuk menyatakan bahwa metode HTTP yang digunakan adalah DELETE -->
-                                <div class="form-group">
-                                    <select name="id_kategorilaci" class="form-control" required>
-                                        <option value="">Pilih Kategori Laci</option>
-                                        @foreach ($allLaci as $kategori)
-                                            <option value="{{ $kategori->id }}">
-                                                {{ $kategori->name_laci }}
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                        </div>
-                        <div class="col">
-                            <button type="submit" class="btn btn-danger">Hapus Laci</button>
-                        </div>
+                @if ($this_user->jabatan == '1')
+                    <div class="card-header">
+                        <div class="row">
+                            <div class="col">
+                                <button class="btn btn-primary" data-toggle="modal" data-target="#mdkategori">Tambah
+                                    Laci</button>
+                            </div>
+                            <div class="col-8">
+                                <form action="{{ route('delete_kategori_laci') }}" method="POST"
+                                    onsubmit="return confirm('Apakah Anda yakin ingin menghapus kategori ini?');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <!-- Ini untuk menyatakan bahwa metode HTTP yang digunakan adalah DELETE -->
+                                    <div class="form-group">
+                                        <select name="id_kategorilaci" class="form-control" required>
+                                            <option value="">Pilih Kategori Laci</option>
+                                            @foreach ($allLaci as $kategori)
+                                                <option value="{{ $kategori->id }}">
+                                                    {{ $kategori->name_laci }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                            </div>
+                            <div class="col">
+                                <button type="submit" class="btn btn-danger">Hapus Laci</button>
+                            </div>
 
-                        </form>
+                            </form>
 
+                        </div>
                     </div>
-                </div>
+                @endif
                 <div class="card-body">
                     <div class="table-responsive">
                         <table class="table table-striped table-hover ">
