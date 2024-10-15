@@ -25,6 +25,7 @@ use App\Http\Controllers\FrontController\SparepartController as FrontControllerS
 use App\Http\Controllers\PDFController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\LaciController;
+use App\Http\Controllers\SearchController;
 
 /*
 |--------------------------------------------------------------------------
@@ -85,6 +86,7 @@ Route::group(['middleware' => ['auth']], function () {
     Route::get('dashboard/{id}/cetak_nota_tempel', [PDFController::class, 'nota_tempel'])->name('nota_tempel');
     Route::get('todolist/{id}/cetak_selesai', [PDFController::class, 'nota_tempel_selesai'])->name('nota_tempel_selesai');
     Route::get('sparepart/{id}/cetak_barcode', [PDFController::class, 'tag_name'])->name('Barcode_barang');
+
     //Pemasukkan Lain
     Route::post('pemasukkan_lain/create', [DashboardController::class, 'create_pemasukkan_lain'])->name('create_pemasukkan_lain');
     Route::delete('pemasukkan_lain/{id}/destroy', [DashboardController::class, 'delete_pemasukkan_lain'])->name('delete_pemasukkan_lain');
@@ -230,9 +232,12 @@ Route::group(['middleware' => ['auth']], function () {
     Route::get('/penjualan', [PenjualanController::class, 'view_penjualan'])->name('penjualan');
     Route::get('penjualan/{id}/edit', [PenjualanController::class, 'edit'])->name('edit_penjualan');
     Route::put('penjualan/{id}/update', [PenjualanController::class, 'update'])->name('update_penjualan');
+    Route::get('/penjualan/detail/{id}', [PenjualanController::class, 'getDetailSparepart']);
+
 
     Route::post('penjualan/create_detail_sparepart', [PenjualanController::class, 'create_detail_sparepart'])->name('create_detail_sparepart_penjualan');
     Route::delete('penjualan/{id}/delete_detail_sparepart', [PenjualanController::class, 'delete_detail_sparepart'])->name('delete_detail_sparepart_penjualan');
+    Route::delete('dashboard/{id}/delete_detail_sparepart', [DashboardController::class, 'delete_detail_sparepart'])->name('delete_detail_part_penjualan');
 
     Route::post('penjualan/create_detail_barang', [PenjualanController::class, 'create_detail_barang'])->name('create_detail_barang_penjualan');
     Route::delete('penjualan/{id}/delete_detail_barang', [PenjualanController::class, 'delete_detail_barang'])->name('delete_detail_barang_penjualan');

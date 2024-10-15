@@ -596,14 +596,19 @@
             $('#caripart').focus();
         });
     });
+
     $(document).ready(function() {
         $("#caripart").on("input", function() {
             cariSparepart();
         });
     });
 
+    function sanitizeInput(input) {
+        return $('<div>').text(input).html(); // Menyandikan input untuk menghindari XSS
+    }
+
     function cariSparepart() {
-        const cariPart = $("#caripart").val().toLowerCase();
+        const cariPart = sanitizeInput($("#caripart").val().toLowerCase());
         const sparepartData = <?php echo json_encode($sparepart); ?>;
 
         const hasilPencarian = sparepartData.filter(sparepart => {
@@ -613,14 +618,18 @@
         tampilkanDataTabelRestock(hasilPencarian);
     }
 
+    function sanitizeOutput(output) {
+        return $('<div>').text(output).html(); // Menyandikan output untuk menghindari XSS
+    }
+
     function tampilkanDataTabelRestock(data) {
         $("#tablerestock tbody").empty();
 
         for (let i = 0; i < data.length; i++) {
             const newRow = `<tr>
                 <td>${i + 1}</td>
-                <td style="max-width:200px;">${data[i].nama_sparepart}</td>
-                <td>${data[i].stok_sparepart}</td>
+                <td style="max-width:200px;">${sanitizeOutput(data[i].nama_sparepart)}</td>
+                <td>${sanitizeOutput(data[i].stok_sparepart)}</td>
                 <td style="max-width:150px;">
                     <input class="form-control" id="kode${i}" autocomplete="off" placeholder="Masukan kode" >
                 </td>
@@ -629,13 +638,12 @@
                 </td>
                 <td>
                     <button class="btn btn-success mb-2"
-                    nabar="${data[i].nama_sparepart}"
-                    data-id="${data[i].id}" data-kode="${data[i].kode_harga}"
+                    nabar="${sanitizeOutput(data[i].nama_sparepart)}"
+                    data-id="${sanitizeOutput(data[i].id)}" data-kode="${sanitizeOutput(data[i].kode_harga)}"
                     data-index="${i}" onclick="restockSparepart(event,this)">Tambahkan</button>
-                    <button class="btn btn-info mb-2" onclick="return copyNamaBarang(event, '${data[i].nama_sparepart}')">
+                    <button class="btn btn-info mb-2" onclick="return copyNamaBarang(event, '${sanitizeOutput(data[i].nama_sparepart)}')">
                         <i class="fas fa-copy"></i> Salin
                     </button>
-
                 </td>
             </tr>`;
 
@@ -643,6 +651,7 @@
         };
     }
 </script>
+
 
 // {{-- end pencarian part --}}
 

@@ -636,9 +636,9 @@
                                                 <tr>
                                                     <td>{{ $no++ }}</td>
                                                     <td>{{ $b->nama_sparepart }}</td>
-                                                    <td>Rp.{{ number_format($b->harga_jual) }},-</td>
+                                                    <td>Rp.{{ number_format($b->detail_harga_jual) }},-</td>
                                                     <td>{{ number_format($b->qty_sparepart) }}</td>
-                                                    <td>Rp.{{ number_format($b->harga_jual * $b->qty_sparepart) }},-
+                                                    <td>Rp.{{ number_format($b->detail_harga_jual * $b->qty_sparepart) }},-
                                                     </td>
                                                 </tr>
                                             @endif

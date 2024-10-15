@@ -41,7 +41,24 @@
     <!-- jQuery -->
     <script src="{{ asset('admin/plugins/jquery/jquery.min.js') }}"></script>
     <link href="https://cdn.jsdelivr.net/npm/sweetalert2@10">
-
+    <style>
+        .container-center {
+            width: 80%;
+            /* Atur lebar sesuai keinginan */
+            max-width: 600px;
+            /* Maksimal lebar */
+            margin: 10px auto;
+            /* Margin atas dan bawah, tengah otomatis */
+            padding: 20px;
+            /* Padding di dalam kontainer */
+            border: 1px solid gray;
+            /* Garis abu-abu */
+            border-radius: 8px;
+            /* Sudut melengkung */
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            /* Bayangan */
+        }
+    </style>
 </head>
 
 <body class="hold-transition sidebar-mini layout-fixed">

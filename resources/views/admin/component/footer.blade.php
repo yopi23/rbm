@@ -61,46 +61,53 @@
   @yield('content-script')
 
   <script>
-      function formatRupiah(angka, prefix) {
-          var number_string = angka.toString().replace(/[^,\d]/g, "");
-          var split = number_string.split(",");
-          var sisa = split[0].length % 3;
-          var rupiah = split[0].substr(0, sisa);
-          var ribuan = split[0].substr(sisa).match(/\d{3}/g);
+      // Fungsi untuk format rupiah
+      function formatRupiah(angka) {
+          var number_string = angka.replace(/[^,\d]/g, '').toString(),
+              split = number_string.split(','),
+              sisa = split[0].length % 3,
+              rupiah = split[0].substr(0, sisa),
+              ribuan = split[0].substr(sisa).match(/\d{3}/gi);
 
           if (ribuan) {
-              separator = sisa ? "." : "";
-              rupiah += separator + ribuan.join(".");
+              var separator = sisa ? '.' : '';
+              rupiah += separator + ribuan.join('.');
           }
 
-          rupiah = split[1] != undefined ? rupiah + ',' + split[1] :
-              rupiah; // Tambahkan kondisi untuk menghilangkan angka 0 di depan jika tidak ada koma
-          return prefix == undefined ? rupiah : (rupiah ? 'Rp. ' + rupiah : '');
+          rupiah = split[1] !== undefined ? rupiah + ',' + split[1] : rupiah;
+          return rupiah;
       }
 
+      // Fungsi untuk mendapatkan nilai numerik
       function getNumericValue(rupiah) {
-          var numericValue = rupiah.replace(/[^0-9]/g, "");
-          return numericValue;
+          return rupiah.replace(/\./g, '').replace(/,/g, '.');
       }
 
-      var biayaServisInput = document.getElementById("in_biaya_servis");
-      var hiddenInput = document.getElementById("biaya_servis");
-      var dpInput = document.getElementById("in_dp");
-      var dphidden = document.getElementById("dp");
+      // Menggunakan kelas untuk menerapkan event listener
+      document.querySelectorAll('.biaya-input').forEach(function(input) {
+          input.addEventListener("input", function(e) {
+              var biaya = e.target.value;
+              var rupiah = formatRupiah(biaya);
+              var numericValue = getNumericValue(biaya);
+              e.target.value = rupiah;
 
-      biayaServisInput.addEventListener("input", function(e) {
-          var biaya = e.target.value;
-          var rupiah = formatRupiah(biaya);
-          var numericValue = getNumericValue(biaya);
-          e.target.value = rupiah;
-          hiddenInput.value = numericValue;
+              // Menyimpan nilai numerik di hidden input yang sesuai
+              var hiddenInput = document.getElementById("biaya_servis");
+              hiddenInput.value = numericValue;
+          });
       });
-      dpInput.addEventListener("input", function(e) {
-          var biaya = e.target.value;
-          var rupiah = formatRupiah(biaya);
-          var numericValue = getNumericValue(biaya);
-          e.target.value = rupiah;
-          dphidden.value = numericValue;
+
+      document.querySelectorAll('.dp-input').forEach(function(input) {
+          input.addEventListener("input", function(e) {
+              var biaya = e.target.value;
+              var rupiah = formatRupiah(biaya);
+              var numericValue = getNumericValue(biaya);
+              e.target.value = rupiah;
+
+              // Menyimpan nilai numerik di hidden input yang sesuai
+              var dphidden = document.getElementById("dp");
+              dphidden.value = numericValue;
+          });
       });
   </script>
   <script>

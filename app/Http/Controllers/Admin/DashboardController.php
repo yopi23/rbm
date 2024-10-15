@@ -13,10 +13,13 @@ use App\Models\Penjualan;
 use Illuminate\Http\Request;
 use App\Models\Sevices as modelServices;
 use App\Models\Sparepart;
+use App\Models\DetailBarangPenjualan;
+use App\Models\DetailSparepartPenjualan;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Penarikan;
 use App\Models\Laci;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use App\Traits\KategoriLaciTrait;
 
@@ -107,7 +110,30 @@ class DashboardController extends Controller
             $toReceh = $laciData->sum('receh');
             $sumreal = $laciData->sum('real');
             $totalReceh = $toReceh + $total_service + $total_penjualan + $total_pemasukkan_lain - $debit;
-
+            // kode trx
+            $kodetrx = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '=', '0']])->get()->first();
+            $count = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline]])->get()->count();
+            if (!$kodetrx) {
+                $kode = 'TRX' . date('Ymd') . auth()->user()->id . $count;
+                $create = Penjualan::create([
+                    'kode_penjualan' => $kode,
+                    'kode_owner' => $this->getThisUser()->id_upline,
+                    'nama_customer' => '-',
+                    'catatan_customer' => '',
+                    'total_bayar' => '0',
+                    'total_penjualan' => '0',
+                    'user_input' => auth()->user()->id,
+                    'status_penjualan' => '0',
+                    'created_at' => Carbon::now(),
+                    'updated_at' => Carbon::now(),
+                ]);
+                if ($create) {
+                    $kodetrx = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '=', '0']])->get()->first();
+                }
+            }
+            $detailbarang = DetailBarangPenjualan::join('handphones', 'detail_barang_penjualans.kode_barang', '=', 'handphones.id')->where([['detail_barang_penjualans.kode_penjualan', '=', $kodetrx->id]])->get(['detail_barang_penjualans.id as id_detail', 'detail_barang_penjualans.*', 'handphones.*']);
+            $detailsparepart = DetailSparepartPenjualan::join('spareparts', 'detail_sparepart_penjualans.kode_sparepart', '=', 'spareparts.id')->where([['detail_sparepart_penjualans.kode_penjualan', '=', $kodetrx->id]])->get(['detail_sparepart_penjualans.id as id_detail', 'detail_sparepart_penjualans.*', 'spareparts.*']);
+            // kode trx
             $isModalRequired = !$hasLaciEntry;
             return view('admin.index', compact([
                 'total_pengeluaran',
@@ -128,7 +154,10 @@ class DashboardController extends Controller
                 'totalReceh',
                 'sumreal',
                 'debit',
-                'listLaci'
+                'listLaci',
+                'kodetrx',
+                'detailsparepart',
+                'detailbarang'
             ]));
         }
         if ($this->getThisUser()->jabatan == '0') {
@@ -366,5 +395,17 @@ class DashboardController extends Controller
 
         // Format kode service
         return 'SV' . $date . $randomNumber;
+    }
+    public function delete_detail_sparepart(Request $request, $id)
+    {
+        $data = DetailSparepartPenjualan::findOrFail($id);
+        $data->delete();
+        if ($data) {
+            $update = Sparepart::findOrFail($data->kode_sparepart);
+            $stok_baru = $update->stok_sparepart + $data->qty_sparepart;
+            $update->update([
+                'stok_sparepart' => $stok_baru,
+            ]);
+        }
     }
 }

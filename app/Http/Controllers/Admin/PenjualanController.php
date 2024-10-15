@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\DetailBarangPenjualan;
+use App\Models\DetailPartServices;
 use App\Models\DetailSparepartPenjualan;
 use App\Models\Garansi;
 use App\Models\Handphone;
@@ -84,11 +85,16 @@ class PenjualanController extends Controller
             }
         } else {
             $update = Sparepart::findOrFail($request->kode_sparepart);
+            // Cek apakah ada harga kustom di request
+            $hargaJual = $request->has('custom_harga') && $request->custom_harga > 0
+                ? $request->custom_harga // Jika ada, gunakan harga kustom
+                : $update->harga_ecer; // Jika tidak, gunakan harga jual default
+
             $create = DetailSparepartPenjualan::create([
                 'kode_penjualan' => $request->kode_penjualan,
                 'kode_sparepart' => $request->kode_sparepart,
                 'detail_harga_modal' => $update->harga_beli,
-                'detail_harga_jual' => $update->harga_ecer,
+                'detail_harga_jual' => $hargaJual,
                 'qty_sparepart' => $request->qty_sparepart,
                 'user_input' => auth()->user()->id,
                 'created_at' => Carbon::now(),
@@ -236,6 +242,30 @@ class PenjualanController extends Controller
                 'updated_at' => Carbon::now(),
             ];
 
+
+            // laci
+            // Misalnya, ambil kategori dari request
+            $kategoriId = $request->input('id_kategorilaci');
+            $uangMasuk = $request->input('total_penjualan');
+            $keterangan = $request->input('nama_customer') . "-" . $request->input('catatan_customer');
+
+            // Catat histori laci
+            $this->recordLaciHistory($kategoriId, $uangMasuk, null, $keterangan);
+            //end laci
+        }
+        // Menangani form baru
+        if ($request->simpan == 'newbayar') {
+            $data_update = [
+                'tgl_penjualan' => now(), // Atau ambil dari request jika ada
+                'nama_customer' => $request->customer ?? '-', // Ambil dari form baru
+                'catatan_customer' => $request->ket ?? '-',
+                'user_input' => auth()->user()->id,
+                'status_penjualan' => '1',
+                'total_penjualan' => $request->total_penjualan,
+                'total_bayar' => $request->bayar,
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
+            ];
             // laci
             // Misalnya, ambil kategori dari request
             $kategoriId = $request->input('id_kategorilaci');
@@ -260,7 +290,35 @@ class PenjualanController extends Controller
         }
         $data->update($data_update);
         if ($data) {
-            return redirect()->route('penjualan');
+            return redirect()->back();
         }
+    }
+
+    // PenjualanController.php
+    public function getDetailSparepart($id)
+    {
+
+        $detailsparepart = DetailSparepartPenjualan::join('spareparts', 'detail_sparepart_penjualans.kode_sparepart', '=', 'spareparts.id')
+            ->where('detail_sparepart_penjualans.kode_penjualan', $id)
+            ->get([
+
+                'detail_sparepart_penjualans.id as id_detail',
+                'detail_sparepart_penjualans.*',
+                'spareparts.*'
+            ]);
+
+        $total_part_penjualan = 0;
+        $totalitem = 0;
+
+        foreach ($detailsparepart as $detailpart) {
+            $totalitem += $detailpart->qty_sparepart;
+            $total_part_penjualan += $detailpart->detail_harga_jual * $detailpart->qty_sparepart;
+        }
+
+        return response()->json([
+            'totalitem' => $totalitem,
+            'detailsparepart' => $detailsparepart,
+            'total_part_penjualan' => $total_part_penjualan,
+        ]);
     }
 }
