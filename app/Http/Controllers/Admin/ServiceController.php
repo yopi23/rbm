@@ -573,7 +573,6 @@ class ServiceController extends Controller
         // Validasi data
         $request->validate([
             'id_teknisi' => 'required',
-            'id_kategorilaci' => 'required',
             'service.*.id_service' => 'required',
         ]);
 
