@@ -829,7 +829,7 @@
                 </div>
             </form>
             {{-- end form service --}}
-            {{-- penjualan --}}
+            {{-- form penjualan --}}
             <form action="{{ route('update_penjualan', $kodetrx->id) }}" method="POST">
                 @csrf
                 @method('PUT')
@@ -1236,25 +1236,34 @@
                     hargaFinal += -10000; // Tambah 10.000
                 }
             }
+            const stock = item.stok_sparepart;
+            const stockDisplay = stock > 0 ? sanitizeOutput(stock) :
+                '<span style="color: red;">Kosong</span>';
+            const buttonDisabled = stock > 0 ? '' : 'disabled'; // Menonaktifkan tombol jika stok kosong
+            const buttonClass = stock > 0 ? 'btn-success' : 'btn-secondary'; // Mengubah kelas tombol
 
-            // for (let i = 0; i < data.length; i++) {
             const newRow = `<tr>
                 <td>${i + 1}</td>
                 <td style="max-width:200px;">${sanitizeOutput(item.nama_sparepart)}</td>
-                <td>${sanitizeOutput(item.stok_sparepart)}</td>
+                <td style="max-width:100px; ">
+                ${stockDisplay}
+                </td>
                 <td style="max-width:150px;">
                     ${sanitizeOutput(formatCurrency(hargaFinal))}
                 </td>
                 <td style="max-width:50px;">
-                    <input class="form-control" id="qty${index}" autocomplete="off" placeholder="Jumlah">
+                    <input class="form-control" id="qty${index}" autocomplete="off" placeholder="Jumlah" oninput="validateQty(this, ${stock})">
                 </td>
                 <td>
-                    <button class="btn btn-success mb-2"
-                        data-id="${sanitizeOutput(item.id)}"
-                        data-nama="${sanitizeOutput(item.nama_sparepart)}"
-                        data-harga="${sanitizeOutput(hargaFinal)}"
-                        data-qty="${sanitizeOutput(item.qty)}"
-                        onclick="jualSparepart(event, this)"><i class="fa fa-plus"></i></button>
+                    <button class="btn ${buttonClass} mb-2"
+                    data-id="${sanitizeOutput(item.id)}"
+                    data-nama="${sanitizeOutput(item.nama_sparepart)}"
+                    data-harga="${sanitizeOutput(hargaFinal)}"
+                    data-qty="${sanitizeOutput(item.qty)}"
+                    ${buttonDisabled}
+                    onclick="jualSparepart(event, this)">
+                    <i class="fa fa-plus"></i>
+                </button>
 
                 </td>
             </tr>`;
@@ -1262,6 +1271,30 @@
             $("#searchResults tbody").append(newRow);
         });
     };
+
+    // Fungsi untuk validasi input jumlah
+    function validateQty(input, stock) {
+        const qty = parseInt(input.value);
+        if (stock <= 0) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Stok Kosong',
+                text: 'Tidak dapat melakukan pembelian, stok tidak tersedia.',
+                confirmButtonText: 'Ok'
+            });
+            input.value = ''; // Reset input
+            return; // Keluar dari fungsi
+        }
+        if (qty > stock) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Jumlah tidak valid',
+                text: `Jumlah tidak boleh melebihi stok (${stock})`,
+                confirmButtonText: 'Ok'
+            });
+            input.value = stock; // Reset ke stok maksimum
+        }
+    }
 </script>
 {{-- pencarian --}}
 {{-- simpan ke lokal --}}
@@ -1297,13 +1330,26 @@
             },
             success: function(response) {
                 // Tangani respon dari server (misalnya, update tampilan)
-                alert("Detail penjualan berhasil ditambahkan.");
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Data ditambahkan',
+                    text: `${nama} (${qty})`,
+                    showConfirmButton: false,
+                    timer: 2500
+                });
                 // Muat ulang data atau tampilkan pesan sesuai kebutuhan
 
             },
             error: function(xhr) {
                 // Tangani error
-                alert("Terjadi kesalahan: " + xhr.responseText);
+                Swal.fire({
+                    icon: 'danger',
+                    title: 'Gagal ditambahkan',
+                    text: "Terjadi kesalahan: " + xhr.responseText,
+                    showConfirmButton: false,
+                    timer: 2500
+                });
+
             }
         });
     }
@@ -1332,37 +1378,54 @@
                     <td>${formatCurrency(item.detail_harga_jual)}</td>
                     <td>${sanitizeOutput(item.qty_sparepart)}</td>
                     <td>
-                        <button class="btn btn-danger" onclick="removeItem(${item.id_detail})">Hapus</button>
+                        <button class="btn btn-danger" data-nama="${item.nama_sparepart}" data-qty="${item.qty_sparepart}" onclick="removeItem(this,${item.id_detail})">Hapus</button>
                     </td>
                 </tr>`;
                         sparepartList.append(newRow);
                     });
                 },
-                error: function(xhr, status, error) {
-                    console.error('Error fetching data:', error);
-                }
+
             });
         }
     });
 
     // Fungsi untuk menghapus item dari
-    function removeItem(id) {
-        if (confirm('Apakah Kamu Yakin ?')) {
-            $.ajax({
-                url: `dashboard/${id}/delete_detail_sparepart`, // Sesuaikan dengan endpoint di server
-                method: 'DELETE',
-                data: {
-                    _token: '{{ csrf_token() }}', // Tambahkan token CSRF
-                },
-                success: function(response) {
-                    // Tindakan setelah penghapusan berhasil
-                    alert('Detail sparepart berhasil dihapus!');
-                },
-                error: function(xhr) {
-                    alert('Terjadi kesalahan saat menghapus detail sparepart.');
-                }
-            });
-        }
+    function removeItem(button, id) {
+        const namaSparepart = button.getAttribute('data-nama');
+        const qty = button.getAttribute('data-qty');
+        Swal.fire({
+            title: 'Apakah Kamu Yakin?',
+            text: `Menghapus ${namaSparepart} (qty: ${qty})`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Ya, hapus!',
+            cancelButtonText: 'Tidak, batalkan'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: `dashboard/${id}/delete_detail_sparepart`, // Sesuaikan dengan endpoint di server
+                    method: 'DELETE',
+                    data: {
+                        _token: '{{ csrf_token() }}', // Tambahkan token CSRF
+                    },
+                    success: function(response) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Berhasil!',
+                            text: 'Detail sparepart berhasil dihapus!',
+                        });
+                    },
+                    error: function(xhr) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Gagal!',
+                            text: 'Terjadi kesalahan saat menghapus detail sparepart.',
+                        });
+                    }
+                });
+            }
+        });
+
     };
 </script>
 {{-- untuk update otomatis --}}
@@ -1395,5 +1458,6 @@
         });
     });
 </script>
+//
 @endsection
 @endif
