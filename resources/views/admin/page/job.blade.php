@@ -98,16 +98,13 @@
                                             </div>
                                         </div>
 
-
                                         <div class="form-group">
-
                                             <input type="hidden" name="status_services" id="status_services"
                                                 value="Selesai">
                                             <button type="submit" name="selesaikan"
                                                 class="form-control btn btn-success">
                                                 <i class="fa fa-cogs"></i> Selesaikan
                                             </button>
-
                                         </div>
 
                                     </div>
@@ -470,7 +467,7 @@
             id_teknisi: $("#teknisi").val(),
             service: serviceManager.getAllServices(),
         };
-
+        console.log('Data yang akan dikirim:', dataToSend);
         // Kirim permintaan AJAX ke FFserver
         $.ajax({
             type: "POST",

@@ -67,6 +67,30 @@
         <input type="radio" class="btn-check" name="btn-dashboard" id="btn-dashboard" autocomplete="off" hidden>
         <label class="btn btn-outline-primary" for="btn-dashboard">Dashboard</label>
     </div>
+    @if (session('error'))
+        <div class="alert alert-danger">
+            {{ session('error') }}
+        </div>
+    @endif
+    @if (session('success'))
+        <div class="alert alert-primary">
+            {{ session('success') }}
+        </div>
+    @endif
+    @if ($this_user->jabatan == '1' || $this_user->jabatan == '2')
+
+        @if ($penarikan->isNotEmpty())
+            @foreach ($penarikan as $data)
+                <span class="alert alert-danger" style="display: block; margin-bottom:5px">
+                    Nama: {{ $data->name }} - Mengajukan: Rp. {{ number_format($data->jumlah_penarikan) }}
+                    <br>
+                </span>
+            @endforeach
+            {{-- @else
+                    No recent withdrawals available. --}}
+        @endif
+
+    @endif
     <div class="my-2" id="main">
         <!-- Small boxes (Stat box) -->
         @if ($this_user->jabatan == '1' || $this_user->jabatan == '2')
@@ -87,7 +111,9 @@
                 <div class="col-12 col-sm-6 col-md-4">
                     <div class="info-box mb-3">
 
-                        <a class="info-box-icon bg-success elevation-1" href="{{ route('penjualan') }}"><i
+                        {{-- <a class="info-box-icon bg-success elevation-1" href="{{ route('penjualan') }}"><i
+                                class="fas fa-shopping-cart"></i></a> --}}
+                        <a class="info-box-icon bg-success elevation-1" href="#"><i
                                 class="fas fa-shopping-cart"></i></a>
 
                         <div class="info-box-content">
@@ -137,7 +163,7 @@
                 <div class="col-12 col-sm-6 col-md-4">
                     <div class="info-box mb-3">
 
-                        <a class="info-box-icon bg-warning elevation-1" href="{{ route('penjualan') }}"><i
+                        <a class="info-box-icon bg-warning elevation-1" href="#"><i
                                 class="fas fa-cogs text-white"></i></a>
 
                         <div class="info-box-content">
@@ -179,30 +205,7 @@
                 </div>
             </div>
         @endif
-        @if (session('error'))
-            <div class="alert alert-danger">
-                {{ session('error') }}
-            </div>
-        @endif
-        @if (session('success'))
-            <div class="alert alert-primary">
-                {{ session('success') }}
-            </div>
-        @endif
-        @if ($this_user->jabatan == '1' || $this_user->jabatan == '2')
 
-            @if ($penarikan->isNotEmpty())
-                @foreach ($penarikan as $data)
-                    <span class="alert alert-danger" style="display: block; margin-bottom:5px">
-                        Nama: {{ $data->name }} - Mengajukan: Rp. {{ number_format($data->jumlah_penarikan) }}
-                        <br>
-                    </span>
-                @endforeach
-                {{-- @else
-                    No recent withdrawals available. --}}
-            @endif
-
-        @endif
         <div class="row">
             <div class="col-md-12">
                 <div class="card card-primary card-outline mt-3">
@@ -219,8 +222,7 @@
                             </li>
                             <li class="nav-item"><a class="nav-link" href="#stok_kosong" data-toggle="tab">Stok
                                     Kosong</a></li>
-                            <li class="nav-item"><a class="nav-link"
-                                    href="{{ route('penjualan') }}">Penjualan</a>
+                            <li class="nav-item"><a class="nav-link" href="#">Penjualan</a>
                             </li>
                             <li class="nav-item"><a class="nav-link"
                                     href="{{ route('pengembalian') }}">Pengembalian</a></li>
@@ -576,55 +578,6 @@
                 </div>
             </div>
         </div>
-        <br>
-        <h4>Data Services</h4>
-        <hr>
-        <div class="card card-success card-outline">
-            <div class="card-body">
-                <table class="table" id="dataTable">
-                    <thead>
-                        <th>No</th>
-                        <th>Kode</th>
-                        <th>Nama Pelanggan</th>
-                        <th>Type unit</th>
-                        <th>No Hp</th>
-                        <th>Keterangan</th>
-                        <th>Aksi</th>
-                    </thead>
-                    <tbody>
-                        @forelse ($service as $item)
-                            @if ($item->status_services == 'Antri')
-                                <tr>
-                                    <td>{{ $loop->index + 1 }}</td>
-                                    <td>{{ $item->kode_service }}</td>
-                                    <td>{{ $item->nama_pelanggan }}</td>
-                                    <td>{{ $item->type_unit }}</td>
-                                    <td>{{ $item->no_telp }}</td>
-                                    <td>{{ $item->keterangan }}</td>
-                                    <td>
-                                        <a href="{{ route('nota_service', $item->id) }}" target="_blank"
-                                            class="btn btn-sm btn-success mt-2"><i class="fas fa-print"></i></a>
-                                        <a href="{{ route('nota_tempel', $item->id) }}" target="_blank"
-                                            class="btn btn-sm btn-warning mt-2"><i class="fas fa-print"></i></a>
-                                        <form action="{{ route('proses_service', $item->id) }}"
-                                            onsubmit="return confirm('Apakah Kamu yakin ingin memproses Service ini ?')"
-                                            method="POST">
-                                            @csrf
-                                            @method('PUT')
-                                            <input type="hidden" name="status_services" id="status_services"
-                                                value="Diproses">
-                                            <button type="submit"
-                                                class="btn btn-sm btn-primary mt-2">Proses</button>
-                                        </form>
-                                    </td>
-                                </tr>
-                            @endif
-                        @empty
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
         <!-- /.row -->
         {{-- Modal --}}
         <div class="modal fade" id="modal_list_order">
@@ -714,7 +667,7 @@
                 </select>
             </div>
 
-            <div class="listservice table-responsive" style="max-height: 400px; overflow-y: auto;">
+            <div class="listservice table-responsive">
                 <table class="table table-hover" id="dataTable">
                     <thead>
                         <th>No</th>
@@ -882,8 +835,11 @@
                     </div>
                     <div class="input-group my-2">
                         <label class="input-group-text" for="bayar">Bayar</label>
-                        <input type="number" name="bayar" id="bayar" class="form-control" required />
+                        <input type="number" name="bayar" id="bayar" class="form-control" hidden />
+                        <input type="text" name="in_bayar" id="in_bayar" class="form-control" required />
                     </div>
+                    <span style="display:none;" id="kembalian-value">Rp.
+                        0,-</span>
                     <div class="d-flex align-item-center">
                         <button type="submit" name="simpan" value="newbayar"
                             class="btn btn-primary form-control">Simpan</button>
@@ -1170,8 +1126,7 @@
         $('#modal_sp').on('shown.bs.modal', function() {
             $('#caripart').focus();
         });
-        // Panggil fungsi updateGrandTotal saat halaman dimuat
-        updateGrandTotal();
+
     });
     $(document).ready(function() {
         // Event input untuk mencari sparepart
@@ -1432,6 +1387,7 @@
 <script>
     $(document).ready(function() {
         // Fungsi untuk mengambil dan memperbarui data
+
         function updateTotals() {
             const kodePenjualan = $('#kodetrxid').val(); // Ambil ID penjualan dari PHP
             $.ajax({
@@ -1442,6 +1398,7 @@
                     $('#gtotal-result').text('Rp. ' + new Intl.NumberFormat().format(data
                         .total_part_penjualan)); // Update grand total
                     $('#total_penjualan').val(data.total_part_penjualan); // Update input hidden
+
                 }
             });
         }
@@ -1457,7 +1414,40 @@
             updateTotals();
         });
     });
+    console.log('Total Penjualan:', totalPenjualan);
 </script>
-//
+<script>
+    function formatRupiah(angka, prefix) {
+        var number_string = angka.toString().replace(/[^,\d]/g, "");
+        var split = number_string.split(",");
+        var sisa = split[0].length % 3;
+        var rupiah = split[0].substr(0, sisa);
+        var ribuan = split[0].substr(sisa).match(/\d{3}/g);
+
+        if (ribuan) {
+            separator = sisa ? "." : "";
+            rupiah += separator + ribuan.join(".");
+        }
+
+        rupiah = split[1] != undefined ? rupiah + ',' + split[1] : rupiah;
+        return prefix == undefined ? rupiah : (rupiah ? 'Rp. ' + rupiah : '');
+    }
+
+    function getNumericValue(rupiah) {
+        var numericValue = rupiah.replace(/[^0-9]/g, "");
+        return numericValue;
+    }
+
+    var inbayar = document.getElementById("in_bayar");
+    var hiddenTBayar = document.getElementById("bayar");
+
+    inbayar.addEventListener("input", function(e) {
+        var biaya = e.target.value;
+        var rupiah = formatRupiah(biaya);
+        var numericValue = getNumericValue(biaya);
+        e.target.value = rupiah;
+        hiddenTBayar.value = numericValue;
+    });
+</script>
 @endsection
 @endif

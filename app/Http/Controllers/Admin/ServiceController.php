@@ -23,7 +23,6 @@ use PDO;
 
 class ServiceController extends Controller
 {
-    //
     public function getTable($thead = '<th>No</th><th>Aksi</th>', $tbody = '')
     {
         $result = '<div class="table-responsive"><table class="table" id="dataTable">';
@@ -502,7 +501,6 @@ class ServiceController extends Controller
     public function list_all_service(Request $request)
     {
         $page = "Service";
-
         $cari = $request->input('cari');
         $today = date('Y-m-d');
         $year = date('Y');
@@ -575,6 +573,7 @@ class ServiceController extends Controller
         // Validasi data
         $request->validate([
             'id_teknisi' => 'required',
+            'id_kategorilaci' => 'required',
             'service.*.id_service' => 'required',
         ]);
 
@@ -609,25 +608,7 @@ class ServiceController extends Controller
             foreach ($part_luar_toko_service as $partl) {
                 $total_part += $partl->harga_part * $partl->qty_part;
             }
-            // Hitung profit dan komisi
-            // $presentase = PresentaseUser::where('kode_user', $id_teknisi)->first();
-            // if ($presentase) {
-            //     $profit = $service->total_biaya - $total_part;
-            //     $fix_profit =  $profit * $presentase->presentase / 100;
 
-            //     // Simpan data komisi ke tabel profit_presentases
-            //     ProfitPresentase::create([
-            //         'tgl_profit' => date('Y-m-d'),
-            //         'kode_service' => $service_id['id_service'],
-            //         'kode_presentase' => $presentase->id,
-            //         'kode_user' => $id_teknisi,
-            //         'profit' => $fix_profit,
-            //     ]);
-
-            //     // Perbarui saldo user_detail
-            //     $user_detail = UserDetail::where('kode_user',  $id_teknisi)->first();
-            //     $user_detail->saldo += $fix_profit;
-            //     $user_detail->save();
             $presentase = PresentaseUser::where('kode_user', $id_teknisi)->first();
             if ($presentase) {
                 $profit = $service->total_biaya - $total_part;
@@ -649,6 +630,7 @@ class ServiceController extends Controller
                         'kode_user' => $id_teknisi,
                         'profit' => $fix_profit,
                     ]);
+
 
                     // Perbarui saldo user_detail
                     $user_detail = UserDetail::where('kode_user',  $id_teknisi)->first();

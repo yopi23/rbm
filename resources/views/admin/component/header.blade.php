@@ -43,9 +43,9 @@
     <link href="https://cdn.jsdelivr.net/npm/sweetalert2@10">
     <style>
         .container-center {
-            width: 80%;
+            width: 90%;
             /* Atur lebar sesuai keinginan */
-            max-width: 600px;
+            max-width: 800px;
             /* Maksimal lebar */
             margin: 10px auto;
             /* Margin atas dan bawah, tengah otomatis */
