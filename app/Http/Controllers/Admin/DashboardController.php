@@ -32,6 +32,7 @@ class DashboardController extends Controller
     {
         $page = "Dashboard";
         $listLaci = $this->getKategoriLaci();
+        $pengambilanKode = $this->getOrCreatePengambilan();
         if ($this->getThisUser()->jabatan != '0') {
             // Penarikan
 
@@ -61,7 +62,7 @@ class DashboardController extends Controller
             $total_pemasukkan_lain = 0;
             $total_pengeluaran = 0;
             foreach ($service as $item) {
-                if ($item->tgl_service == date('Y-m-d')) {
+                if ($item->updated_at->isToday()) {
                     if ($item->status_services == 'Diambil') {
                         $total_service += $item->total_biaya;
                     } else {
@@ -110,6 +111,7 @@ class DashboardController extends Controller
             $toReceh = $laciData->sum('receh');
             $sumreal = $laciData->sum('real');
             $totalReceh = $toReceh + $total_service + $total_penjualan + $total_pemasukkan_lain - $debit;
+            
             // kode trx
             $kodetrx = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '=', '0']])->get()->first();
             $count = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline]])->get()->count();
@@ -134,6 +136,21 @@ class DashboardController extends Controller
             $detailbarang = DetailBarangPenjualan::join('handphones', 'detail_barang_penjualans.kode_barang', '=', 'handphones.id')->where([['detail_barang_penjualans.kode_penjualan', '=', $kodetrx->id]])->get(['detail_barang_penjualans.id as id_detail', 'detail_barang_penjualans.*', 'handphones.*']);
             $detailsparepart = DetailSparepartPenjualan::join('spareparts', 'detail_sparepart_penjualans.kode_sparepart', '=', 'spareparts.id')->where([['detail_sparepart_penjualans.kode_penjualan', '=', $kodetrx->id]])->get(['detail_sparepart_penjualans.id as id_detail', 'detail_sparepart_penjualans.*', 'spareparts.*']);
             // kode trx
+            //pengambilan
+            // Dapatkan atau buat pengambilan
+
+
+            if ($pengambilanKode) {
+                // Ambil layanan berdasarkan pengambilan ID
+                $pengambilanServices = $this->getServices($pengambilanKode->id);
+
+                // Lakukan sesuatu dengan $services
+                // return response()->json($pengambilanServices);
+            }
+            $done_service = $pengambilanServices['done_service'];
+            // return response()->json(['message' => 'Pengambilan tidak ditemukan.'], 404);
+            //end pengambilan
+
             $isModalRequired = !$hasLaciEntry;
             return view('admin.index', compact([
                 'total_pengeluaran',
@@ -157,7 +174,10 @@ class DashboardController extends Controller
                 'listLaci',
                 'kodetrx',
                 'detailsparepart',
-                'detailbarang'
+                'detailbarang',
+                'pengambilanKode',
+                'pengambilanServices',
+                'done_service'
             ]));
         }
         if ($this->getThisUser()->jabatan == '0') {
@@ -210,8 +230,6 @@ class DashboardController extends Controller
         }
         return redirect()->back()->with('success', 'Delete List Order Gagal, Ada Kendala Teknis');
     }
-
-
     public function create_pemasukkan_lain(Request $request)
     {
         $validate = $request->validate([
@@ -407,5 +425,10 @@ class DashboardController extends Controller
                 'stok_sparepart' => $stok_baru,
             ]);
         }
+    }
+    public function getDetail($id)
+    {
+        $servicesData = $this->getServices($id); // Memanggil fungsi di trait
+        return response()->json($servicesData);
     }
 }

@@ -256,9 +256,9 @@ class PenjualanController extends Controller
         // Menangani form baru
         if ($request->simpan == 'newbayar') {
             $data_update = [
-                'tgl_penjualan' => now(), // Atau ambil dari request jika ada
-                'nama_customer' => $request->customer ?? '-', // Ambil dari form baru
-                'catatan_customer' => $request->ket ?? '-',
+                'tgl_penjualan' => $request->tgl_penjualan, // Atau ambil dari request jika ada
+                'nama_customer' => $request->nama_customer ?? '-', // Ambil dari form baru
+                'catatan_customer' => $request->catatan_customer ?? '-',
                 'user_input' => auth()->user()->id,
                 'status_penjualan' => '1',
                 'total_penjualan' => $request->total_penjualan,

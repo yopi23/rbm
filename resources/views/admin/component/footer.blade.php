@@ -109,6 +109,27 @@
               dphidden.value = numericValue;
           });
       });
+      //penjualan
+      // Mengambil semua elemen dengan class .bayar dan .total_bayar
+      var bayarHidden = document.querySelectorAll(".bayar");
+      var totalBayarHidden = document.querySelectorAll(".total_bayar");
+      document.querySelectorAll('.in_bayar').forEach(function(input) {
+          input.addEventListener("input", function(e) {
+              var inbayar = e.target.value;
+              var rupiah = formatRupiah(inbayar);
+              var numericValue = getNumericValue(inbayar);
+              e.target.value = rupiah;
+
+              // Menyimpan nilai numerik di hidden input yang sesuai
+              bayarHidden.forEach(function(hidden, index) {
+                  hidden.value = numericValue; // Menyimpan di setiap elemen .bayar
+              });
+
+              totalBayarHidden.forEach(function(hidden, index) {
+                  hidden.value = numericValue; // Menyimpan di setiap elemen .total_bayar
+              });
+          });
+      });
   </script>
   <script>
       $(function() {

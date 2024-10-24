@@ -26,6 +26,7 @@ use App\Http\Controllers\PDFController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\LaciController;
 use App\Http\Controllers\SearchController;
+use SebastianBergmann\CodeCoverage\Report\Html\Dashboard;
 
 /*
 |--------------------------------------------------------------------------
@@ -254,6 +255,8 @@ Route::group(['middleware' => ['auth']], function () {
     Route::put('/pengembalian/{id}/update', [PengembalianController::class, 'update'])->name('update_pengembalian');
     Route::put('/pengembalian/{id}/detail_store', [PengembalianController::class, 'store_detail'])->name('store_detail_pengembalian');
     Route::put('/pengembalian/{id}/detail_destroy', [PengembalianController::class, 'destroy_detail'])->name('destroy_detail_pengembalian');
+    Route::get('/services/detail/{id}', [DashboardController::class, 'getDetail']);
+
     //Pengeluaran
     Route::get('/pengeluaran_toko', [PengeluaranController::class, 'view_toko'])->name('pengeluaran_toko');
     Route::get('/pengeluaran_toko/create', [PengeluaranController::class, 'create_pengeluaran_toko'])->name('create_pengeluaran_toko');

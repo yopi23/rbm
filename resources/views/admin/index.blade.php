@@ -151,422 +151,13 @@
                 </table>
             </div>
             {{-- form service --}}
-            <form action="{{ route('create_service_in_dashboard') }}" method="POST">
-                @csrf
-                @method('POST')
-                <div class="formservice d-none">
-
-                    <input type="text" value="{{ $kode_service }}" name="kode_service" id="kode_service"
-                        class="form-control" hidden>
-                    <input type="date" value="{{ date('Y-m-d') }}" name="tgl_service" id="tgl_service"
-                        class="form-control" hidden>
-                    <input type="text" value="{{ auth()->user()->name }}" class="form-control" hidden>
-
-                    <div class="input-group my-2">
-                        <span class="input-group-text">Nama</span>
-                        <input type="text" name="nama_pelanggan" id="nama_pelanggan" class="form-control"
-                            autofocus>
-                    </div>
-                    <div class="input-group my-2">
-                        <span class="input-group-text">No Tlp.</span>
-                        <input type="text" name="no_telp" id="no_telp" class="form-control"
-                            autocomplete="off">
-                    </div>
-                    <div class="input-group my-2" id="typeGrup">
-                        <span class="input-group-text">Type</span>
-                        <input type="text" name="type_unit" id="type_unit" class="form-control">
-                    </div>
-
-                    <div class="input-group my-2" id="keteranganGrup">
-                        <span class="input-group-text">Keterangan</span>
-                        <textarea class="form-control" name="ket" id="ket" aria-label="With textarea"></textarea>
-                    </div>
-                    <div class="table-responsive border border-primary rounded p-3">
-                        <label>saran harga</label>
-                        <select name="kode_part[0]" id="kode_part[0]"
-                            class="form-control select-bootstrap kode_part">
-                            <option value="">-- Pilih Sparepart --
-                            </option>
-                            @forelse ($sparepart as $item)
-                                <option value="{{ $item->id }}" data-stok="{{ $item->stok_sparepart }}"
-                                    data-harga="{{ $item->harga_jual + $item->harga_pasang }}"
-                                    {{ $item->stok_sparepart <= 0 ? 'disabled' : '' }}>
-                                    {{ $item->nama_sparepart . ' ' . '(Rp.' . number_format($item->harga_jual + $item->harga_pasang) . ')' }}
-                                    {{ $item->stok_sparepart <= 0 ? '( Stok Kosong )' : '' }}
-                                </option>
-                            @empty
-                            @endforelse
-                        </select>
-                        <div class="input-group">
-                            <input type="text" name="harga_kode_part[0]" id="harga_kode_part[0]"
-                                class="form-control harga_spart" readonly>
-
-                            <input type="number" value="1" name="qty_kode_part[0]" id="qty_kode_part[0]"
-                                class="form-control qty_spart">
-                        </div>
-
-                    </div>
-                    <div class="input-group my-2">
-                        <span class="input-group-text">Biaya</span>
-                        <input type="text" value="0" class="form-control" name="biaya_servis"
-                            id="biaya_servis" hidden>
-                        <input type="text" class="form-control biaya-input" name="in_biaya_servis"
-                            id="in_biaya_servis">
-
-                        <span class="input-group-text">DP</span>
-                        <input type="text" class="form-control" name="dp" id="dp" value="0"
-                            hidden>
-                        <input type="text" class="form-control dp-input" name="in_dp" id="in_dp">
-                    </div>
-                    <div class="d-flex align-item-center">
-                        <button type="submit" class="btn btn-primary form-control">Simpan</button>
-                    </div>
-                </div>
-            </form>
+            @include('admin.forms.dashboard.service')
             {{-- end form service --}}
             {{-- form penjualan --}}
-            <form action="{{ route('update_penjualan', $kodetrx->id) }}" method="POST">
-                @csrf
-                @method('PUT')
-                <div class="formSales d-none">
-                    <div class="input-group my-2 kategorilaciGrup d-none">
-                        <label class="input-group-text" for="id_kategorilaci">Penyimpanan</label>
-                        <select name="id_kategorilaci" class="form-control" required>
-                            <option value="" disabled selected>--Pilih Kategori Laci--</option>
-                            @foreach ($listLaci as $kategori)
-                                <option value="{{ $kategori->id }}">{{ $kategori->name_laci }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <input type="text" id="kodetrx" class="form-control"
-                        value="{{ $kodetrx->kode_penjualan }}" readonly />
-                    <input type="text" id="kodetrxid" class="form-control" value="{{ $kodetrx->id }}"
-                        hidden />
-                    @php
-                        $total_part_penjualan = 0;
-                        $totalitem = 0;
-                    @endphp
-                    @foreach ($detailsparepart as $detailpart)
-                        @php
-                            $totalitem += $detailpart->qty_sparepart;
-                            $total_part_penjualan += $detailpart->detail_harga_jual * $detailpart->qty_sparepart;
-                        @endphp
-                    @endforeach
-                    <div class="input-group my-2">
-                        <button class="btn btn-success" data-toggle="modal" data-target="#modal_sp"><i
-                                class="fas fa-plus"></i></button>
-                        <button class="input-group-text btn-primary" data-toggle="modal" data-target="#detail_sp"
-                            for="Item">Item</button>
-                        <input type="number" id="item" class="form-control" readonly />
-                    </div>
-                    <div class="view-gtotal"
-                        style="background-color: #e3ff96;border-radius: 5px ;height: 100px;display: flex; align-items: center; justify-content: center;">
-                        <h2><b>
-                                <div id="gtotal-result"></div>
-                                <input hidden name="total_penjualan" id="total_penjualan">
-                            </b>
-                        </h2>
-                    </div>
-                    <div class="input-group my-2">
-                        <label class="input-group-text" for="customer">pembeli</label>
-                        <input type="text" name="customer" id="customer" class="form-control" required />
-                    </div>
-                    <div class="input-group my-2">
-                        <span class="input-group-text">Keterangan</span>
-                        <textarea class="form-control" name="ket" id="ket" aria-label="With textarea"></textarea>
-                    </div>
-                    <div class="input-group my-2">
-                        <label class="input-group-text" for="bayar">Bayar</label>
-                        <input type="number" name="bayar" id="bayar" class="form-control" hidden />
-                        <input type="text" name="in_bayar" id="in_bayar" class="form-control" required />
-                    </div>
-                    <span style="display:none;" id="kembalian-value">Rp.
-                        0,-</span>
-                    <div class="d-flex align-item-center">
-                        <button type="submit" name="simpan" value="newbayar"
-                            class="btn btn-primary form-control">Simpan</button>
-                    </div>
-                </div>
-            </form>
-            {{-- modal pencarian sp --}}
-            <div class="modal fade" id="modal_sp">
-                <div class="modal-dialog modal-xl">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h4 class="modal-title" id="modalTitle">Sparepart</h4>
-
-                            <div class="input-group my-2" style="max-width: 350px">
-                                <label class="input-group-text" for="kat_customer">pelanggan</label>
-                                <select name="kat_customer" class="form-control" id="kat_customer" required>
-                                    <option value="" disabled>--Pilih jenis pelanggan--</option>
-                                    <option value="ecer"selected>Eceran</option>
-                                    <option value="konter">Konter</option>
-                                    <option value="glosir">Glosir (5pcs /type)</option>
-                                    <option value="jumbo">Glosir jumbo(belanja banyak)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                </button>
-                            </div>
-
-                        </div>
-                        <div class="modal-body">
-                            <!-- Formulir untuk menambah/edit data sparepart -->
-                            <form id="formRestockSparepart">
-                                @csrf
-                                <div class="form-group">
-                                    <label>Cari di sini</label>
-                                    <input type="text" name="caripart" id="caripart" class="form-control"
-                                        oninput="cariSparepart()" autocomplete="off">
-
-                                </div>
-                                <div class="card">
-                                    <div class="card-body"style="max-height: 300px; overflow-y: auto;">
-                                        <table class="table table-striped " id="searchResults">
-                                            <thead>
-                                                <tr>
-                                                    <th>#</th>
-                                                    <th>Nama Barang</th>
-                                                    <th>Stok</th>
-                                                    <th>Harga</th>
-                                                    <th>QTY</th>
-                                                    <th>Aksi</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
-                        <div class="modal-footer justify-content-between">
-                            <button type="button" class="btn btn-default" data-dismiss="modal">Tutup</button>
-                        </div>
-                    </div>
-                    <!-- /.modal-content -->
-                </div>
-                <!-- /.modal-dialog -->
-            </div>
-            {{-- modal end pencarian sp --}}
-            {{-- modal detail sp --}}
-            <div class="modal fade" id="detail_sp">
-                <div class="modal-dialog modal-xl">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h4 class="modal-title" id="modalTitle">Detail Sparepart</h4>
-                            <div>
-                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="modal-body">
-                            <!-- Formulir untuk menambah/edit data sparepart -->
-
-                            <div class="card">
-                                <div class="card-body"style="max-height: 300px; overflow-y: auto;">
-                                    <table class="table table-striped" id="TABLES_1">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th>
-                                                <th>Nama Barang</th>
-                                                <th>Harga</th>
-                                                <th>QTY</th>
-                                                <th>Aksi</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="sparepartList">
-
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer justify-content-between">
-                            <button type="button" class="btn btn-default" data-dismiss="modal">Tutup</button>
-                        </div>
-                    </div>
-                    <!-- /.modal-content -->
-                </div>
-                <!-- /.modal-dialog -->
-            </div>
-            {{-- modal end detail sp --}}
+            @include('admin.forms.dashboard.penjualan')
             {{-- end penjualan --}}
             {{-- form pengambilan --}}
-            <form action="" method="POST">
-                @csrf
-                @method('PUT')
-                <div class="formTakeOut d-none">
-                    <div class="input-group my-2 kategorilaciGrup d-none">
-                        <label class="input-group-text" for="id_kategorilaci">Penyimpanan</label>
-                        <select name="id_kategorilaci" class="form-control" required>
-                            <option value="" disabled selected>--Pilih Kategori Laci--</option>
-                            @foreach ($listLaci as $kategori)
-                                <option value="{{ $kategori->id }}">{{ $kategori->name_laci }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <input type="text" id="kodetrx" class="form-control"
-                        value="{{ $kodetrx->kode_penjualan }}" readonly />
-                    <input type="text" id="kodetrxid" class="form-control" value="{{ $kodetrx->id }}"
-                        hidden />
-                    @php
-                        $total_part_penjualan = 0;
-                        $totalitem = 0;
-                    @endphp
-                    @foreach ($detailsparepart as $detailpart)
-                        @php
-                            $totalitem += $detailpart->qty_sparepart;
-                            $total_part_penjualan += $detailpart->detail_harga_jual * $detailpart->qty_sparepart;
-                        @endphp
-                    @endforeach
-                    <div class="input-group my-2">
-                        <button class="btn btn-success" data-toggle="modal" data-target="#modal_sp"><i
-                                class="fas fa-plus"></i></button>
-                        <button class="input-group-text btn-primary" data-toggle="modal" data-target="#detail_sp"
-                            for="Item">Item</button>
-                        <input type="number" id="item" class="form-control" readonly />
-                    </div>
-                    <div class="view-gtotal"
-                        style="background-color: #e3ff96;border-radius: 5px ;height: 100px;display: flex; align-items: center; justify-content: center;">
-                        <h2><b>
-                                <div id="gtotal-result"></div>
-                                <input hidden name="total_penjualan" id="total_penjualan">
-                            </b>
-                        </h2>
-                    </div>
-                    <div class="input-group my-2">
-                        <label class="input-group-text" for="customer">pembeli</label>
-                        <input type="text" name="customer" id="customer" class="form-control" required />
-                    </div>
-                    <div class="input-group my-2">
-                        <span class="input-group-text">Keterangan</span>
-                        <textarea class="form-control" name="ket" id="ket" aria-label="With textarea"></textarea>
-                    </div>
-                    <div class="input-group my-2">
-                        <label class="input-group-text" for="bayar">Bayar</label>
-                        <input type="number" name="bayar" id="bayar" class="form-control" hidden />
-                        <input type="text" name="in_bayar" id="in_bayar" class="form-control" required />
-                    </div>
-                    <span style="display:none;" id="kembalian-value">Rp.
-                        0,-</span>
-                    <div class="d-flex align-item-center">
-                        <button type="submit" name="simpan" value="newbayar"
-                            class="btn btn-primary form-control">Simpan</button>
-                    </div>
-                </div>
-            </form>
-            {{-- modal pencarian device --}}
-            <div class="modal fade" id="modal_pengambilan">
-                <div class="modal-dialog modal-xl">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h4 class="modal-title" id="modalTitle">Sparepart</h4>
-
-                            <div class="input-group my-2" style="max-width: 350px">
-                                <label class="input-group-text" for="kat_customer">pelanggan</label>
-                                <select name="kat_customer" class="form-control" id="kat_customer" required>
-                                    <option value="" disabled>--Pilih jenis pelanggan--</option>
-                                    <option value="ecer"selected>Eceran</option>
-                                    <option value="konter">Konter</option>
-                                    <option value="glosir">Glosir (5pcs /type)</option>
-                                    <option value="jumbo">Glosir jumbo(belanja banyak)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                </button>
-                            </div>
-
-                        </div>
-                        <div class="modal-body">
-                            <!-- Formulir untuk menambah/edit data sparepart -->
-                            <form id="formRestockSparepart">
-                                @csrf
-                                <div class="form-group">
-                                    <label>Cari di sini</label>
-                                    <input type="text" name="caripart" id="caripart" class="form-control"
-                                        oninput="cariSparepart()" autocomplete="off">
-
-                                </div>
-                                <div class="card">
-                                    <div class="card-body"style="max-height: 300px; overflow-y: auto;">
-                                        <table class="table table-striped " id="searchResults">
-                                            <thead>
-                                                <tr>
-                                                    <th>#</th>
-                                                    <th>Nama Barang</th>
-                                                    <th>Stok</th>
-                                                    <th>Harga</th>
-                                                    <th>QTY</th>
-                                                    <th>Aksi</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
-                        <div class="modal-footer justify-content-between">
-                            <button type="button" class="btn btn-default" data-dismiss="modal">Tutup</button>
-                        </div>
-                    </div>
-                    <!-- /.modal-content -->
-                </div>
-                <!-- /.modal-dialog -->
-            </div>
-            {{-- modal end pencarian device --}}
-            {{-- modal detail device --}}
-            <div class="modal fade" id="detail_pengambilan">
-                <div class="modal-dialog modal-xl">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h4 class="modal-title" id="modalTitle">Detail Sparepart</h4>
-                            <div>
-                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="modal-body">
-                            <!-- Formulir untuk menambah/edit data sparepart -->
-
-                            <div class="card">
-                                <div class="card-body"style="max-height: 300px; overflow-y: auto;">
-                                    <table class="table table-striped" id="TABLES_1">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th>
-                                                <th>Nama Barang</th>
-                                                <th>Harga</th>
-                                                <th>QTY</th>
-                                                <th>Aksi</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="sparepartList">
-
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer justify-content-between">
-                            <button type="button" class="btn btn-default" data-dismiss="modal">Tutup</button>
-                        </div>
-                    </div>
-                    <!-- /.modal-content -->
-                </div>
-                <!-- /.modal-dialog -->
-            </div>
-            {{-- modal end detail device --}}
+            @include('admin.forms.dashboard.pengambilan')
             {{-- end pengambilan --}}
         </div>
     </div>
@@ -1278,25 +869,33 @@
         const formSales = document.querySelectorAll('.formSales');
         const id_kategorilaciGrup = document.querySelectorAll('.kategorilaciGrup');
         const listservice = document.querySelectorAll('.listservice');
+        const formTakeOut = document.querySelectorAll('.formTakeOut');
+        // Menyembunyikan semua elemen dengan kelas d-none
+        function hideAll(elements) {
+            elements.forEach(el => el.classList.add('d-none'));
+        }
 
-        // Menampilkan atau menyembunyikan field tambahan berdasarkan jenis transaksi
+        // Menampilkan elemen yang relevan
+        function show(elements) {
+            elements.forEach(el => el.classList.remove('d-none'));
+        }
+        // Mengatur tampilan berdasarkan jenis transaksi
+        const allForms = [...formServices, ...formSales, ...listservice, ...formTakeOut, ...
+            id_kategorilaciGrup
+        ]; // Gabungkan semua elemen
+
         if (this.value === 'service') {
-            formServices.forEach(service => service.classList.remove('d-none'));
-            formSales.forEach(jualpart => jualpart.classList.add('d-none'));
-            listservice.forEach(listservice => listservice.classList.add('d-none'));
-
+            hideAll(allForms);
+            show(formServices);
         } else if (this.value === 'penjualan') {
-            formServices.forEach(service => service.classList.add('d-none'));
-            id_kategorilaciGrup.forEach(laci => laci.classList.remove('d-none'));
-            formSales.forEach(jualpart => jualpart.classList.remove('d-none'));
-            listservice.forEach(listservice => listservice.classList.add('d-none'));
+            hideAll(allForms);
+            show(formSales);
+            show(id_kategorilaciGrup);
         } else if (this.value === 'pengambilan') {
-            formServices.forEach(service => service.classList.add('d-none'));
-            formSales.forEach(jualpart => jualpart.classList.add('d-none'));
-            listservice.forEach(listservice => listservice.classList.add('d-none'));
-            formTakeOut.forEach(pengambilan => pengambilan.classList.remove('d-none'));
+            hideAll(allForms);
+            show(formTakeOut);
         } else {
-            listservice.forEach(listservice => listservice.classList.add('d-none'));
+            hideAll(allForms);
         }
     });
 </script>
@@ -1596,38 +1195,42 @@
     });
     console.log('Total Penjualan:', totalPenjualan);
 </script>
+//
 <script>
-    function formatRupiah(angka, prefix) {
-        var number_string = angka.toString().replace(/[^,\d]/g, "");
-        var split = number_string.split(",");
-        var sisa = split[0].length % 3;
-        var rupiah = split[0].substr(0, sisa);
-        var ribuan = split[0].substr(sisa).match(/\d{3}/g);
+    //     function formatRupiah(angka, prefix) {
+    //         var number_string = angka.toString().replace(/[^,\d]/g, "");
+    //         var split = number_string.split(",");
+    //         var sisa = split[0].length % 3;
+    //         var rupiah = split[0].substr(0, sisa);
+    //         var ribuan = split[0].substr(sisa).match(/\d{3}/g);
 
-        if (ribuan) {
-            separator = sisa ? "." : "";
-            rupiah += separator + ribuan.join(".");
-        }
+    //         if (ribuan) {
+    //             separator = sisa ? "." : "";
+    //             rupiah += separator + ribuan.join(".");
+    //         }
 
-        rupiah = split[1] != undefined ? rupiah + ',' + split[1] : rupiah;
-        return prefix == undefined ? rupiah : (rupiah ? 'Rp. ' + rupiah : '');
-    }
+    //         rupiah = split[1] != undefined ? rupiah + ',' + split[1] : rupiah;
+    //         return prefix == undefined ? rupiah : (rupiah ? 'Rp. ' + rupiah : '');
+    //     }
 
-    function getNumericValue(rupiah) {
-        var numericValue = rupiah.replace(/[^0-9]/g, "");
-        return numericValue;
-    }
+    //     function getNumericValue(rupiah) {
+    //         var numericValue = rupiah.replace(/[^0-9]/g, "");
+    //         return numericValue;
+    //     }
 
-    var inbayar = document.getElementById("in_bayar");
-    var hiddenTBayar = document.getElementById("bayar");
+    //     var inbayars = document.querySelectorAll(".in_bayar");
+    //     var hiddenTBayars = document.querySelectorAll(".bayar");
+    //     var hiddenpengs = document.querySelectorAll(".total_bayar");
 
-    inbayar.addEventListener("input", function(e) {
-        var biaya = e.target.value;
-        var rupiah = formatRupiah(biaya);
-        var numericValue = getNumericValue(biaya);
-        e.target.value = rupiah;
-        hiddenTBayar.value = numericValue;
-    });
+    //     inbayar.addEventListener("input", function(e) {
+    //         var biaya = e.target.value;
+    //         var rupiah = formatRupiah(biaya);
+    //         var numericValue = getNumericValue(biaya);
+    //         e.target.value = rupiah;
+    //         hiddenTBayars[index].value = numericValue;
+    //         hiddenpengs[index].value = numericValue;
+    //     });
+    //
 </script>
 @endsection
 @endif

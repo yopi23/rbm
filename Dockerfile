@@ -1,31 +1,39 @@
-# Gunakan image PHP 8.0
-FROM php:8.0-fpm
+FROM php:8.1-fpm
 
-# Install dependensi
-RUN apt-get update && apt-get install -y libpng-dev libjpeg-dev libfreetype6-dev libzip-dev unzip git && \
-    docker-php-ext-configure gd --with-freetype --with-jpeg && \
-    docker-php-ext-install gd zip pdo pdo_mysql
+COPY composer.* /var/www/rbm/
 
-# Set working directory
-WORKDIR /var/www
+WORKDIR /var/www/rbm
 
-# Copy composer.lock dan composer.json
-COPY composer.lock composer.json ./
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libmcrypt-dev \
+    mariadb-client \
+    libpng-dev \
+    libjpeg62-turbo-dev \
+    libfreetype6-dev \
+    locales \
+    jpegoptim optipng pngquant gifsicle \
+    vim \
+    unzip \
+    git \
+    curl \
+    libzip-dev \
+    zip
 
-# Install composer
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN docker-php-ext-install pdo pdo_mysql gd zip
+
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-# Install PHP dependencies
-RUN composer install
-
-# Copy seluruh file proyek
+RUN groupadd -g 1000 www
+RUN useradd -u 1000 -ms /bin/bash -g www www
 COPY . .
 
-# Set permission
-RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
+COPY --chown=www:www . .
 
-# Expose port
+USER www
+
 EXPOSE 9000
 
-# Jalankan PHP-FPM
-CMD ["php-fpm"]
+CMD [ "php-fpm"]

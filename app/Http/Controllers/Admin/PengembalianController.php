@@ -71,7 +71,17 @@ class PengembalianController extends Controller
         $update->update([
             'kode_pengambilan' => $id
         ]);
-        return redirect()->back();
+        // return redirect()->back();
+        // Ambil data pengambilan terbaru setelah diambil
+        $pengambilanServices = $this->getServices($id); // Misalnya, ambil kembali data setelah proses
+        // Hitung jumlah layanan yang dikembalikan
+        $jumlahData = count($pengambilanServices['pengambilanServices']);
+
+        return response()->json([
+            'message' => 'Service berhasil ditambahkan.',
+            'jumlahData' => $jumlahData,
+            'pengambilanServices' => $pengambilanServices['pengambilanServices'] // Kembalikan data
+        ]);
     }
     public function destroy_detail(Request $request, $id)
     {
