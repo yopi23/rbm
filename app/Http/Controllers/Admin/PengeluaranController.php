@@ -99,12 +99,16 @@ class PengeluaranController extends Controller
             //end laci
 
             if ($create) {
-                return redirect()->route('pengeluaran_toko')
-                    ->with([
-                        'success' => 'Pengeluaran Toko Berhasil Ditambahkan'
-                    ]);
+                return redirect()->back()->with([
+                    'success' => 'Pengeluaran Toko Berhasil Ditambahkan'
+                ]);
+                // return redirect()->route('pengeluaran_toko')
+                //     ->with([
+                //         'success' => 'Pengeluaran Toko Berhasil Ditambahkan'
+                //     ]);
             }
-            return redirect()->route('pengeluaran_toko')->with('error', "Oops, Something Went Wrong");
+            // return redirect()->route('pengeluaran_toko')->with('error', "Oops, Something Went Wrong");
+            return redirect()->route('/');
         }
     }
     public function update_pengeluaran_toko(Request  $request, $id)

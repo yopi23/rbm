@@ -159,6 +159,12 @@
             {{-- form pengambilan --}}
             @include('admin.forms.dashboard.pengambilan')
             {{-- end pengambilan --}}
+            {{-- form pemasukan --}}
+            @include('admin.forms.dashboard.pemasukan')
+            {{-- end pemasukan --}}
+            {{-- form pengeluaran --}}
+            @include('admin.forms.dashboard.pengeluaran')
+            {{-- end pengeluaran --}}
         </div>
     </div>
     {{-- jalan pintas --}}
@@ -870,6 +876,8 @@
         const id_kategorilaciGrup = document.querySelectorAll('.kategorilaciGrup');
         const listservice = document.querySelectorAll('.listservice');
         const formTakeOut = document.querySelectorAll('.formTakeOut');
+        const formPemasukan = document.querySelectorAll('.formpemasukan');
+        const formPengeluaran = document.querySelectorAll('.formpengeluaran');
         // Menyembunyikan semua elemen dengan kelas d-none
         function hideAll(elements) {
             elements.forEach(el => el.classList.add('d-none'));
@@ -881,7 +889,7 @@
         }
         // Mengatur tampilan berdasarkan jenis transaksi
         const allForms = [...formServices, ...formSales, ...listservice, ...formTakeOut, ...
-            id_kategorilaciGrup
+            id_kategorilaciGrup, ...formPemasukan, ...formPengeluaran
         ]; // Gabungkan semua elemen
 
         if (this.value === 'service') {
@@ -894,6 +902,12 @@
         } else if (this.value === 'pengambilan') {
             hideAll(allForms);
             show(formTakeOut);
+        } else if (this.value === 'pemasukan') {
+            hideAll(allForms);
+            show(formPemasukan);
+        } else if (this.value === 'pengeluaran') {
+            hideAll(allForms);
+            show(formPengeluaran);
         } else {
             hideAll(allForms);
         }
@@ -1194,43 +1208,6 @@
         });
     });
     console.log('Total Penjualan:', totalPenjualan);
-</script>
-//
-<script>
-    //     function formatRupiah(angka, prefix) {
-    //         var number_string = angka.toString().replace(/[^,\d]/g, "");
-    //         var split = number_string.split(",");
-    //         var sisa = split[0].length % 3;
-    //         var rupiah = split[0].substr(0, sisa);
-    //         var ribuan = split[0].substr(sisa).match(/\d{3}/g);
-
-    //         if (ribuan) {
-    //             separator = sisa ? "." : "";
-    //             rupiah += separator + ribuan.join(".");
-    //         }
-
-    //         rupiah = split[1] != undefined ? rupiah + ',' + split[1] : rupiah;
-    //         return prefix == undefined ? rupiah : (rupiah ? 'Rp. ' + rupiah : '');
-    //     }
-
-    //     function getNumericValue(rupiah) {
-    //         var numericValue = rupiah.replace(/[^0-9]/g, "");
-    //         return numericValue;
-    //     }
-
-    //     var inbayars = document.querySelectorAll(".in_bayar");
-    //     var hiddenTBayars = document.querySelectorAll(".bayar");
-    //     var hiddenpengs = document.querySelectorAll(".total_bayar");
-
-    //     inbayar.addEventListener("input", function(e) {
-    //         var biaya = e.target.value;
-    //         var rupiah = formatRupiah(biaya);
-    //         var numericValue = getNumericValue(biaya);
-    //         e.target.value = rupiah;
-    //         hiddenTBayars[index].value = numericValue;
-    //         hiddenpengs[index].value = numericValue;
-    //     });
-    //
 </script>
 @endsection
 @endif

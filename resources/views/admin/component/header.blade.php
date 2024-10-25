@@ -58,10 +58,22 @@
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             /* Bayangan */
         }
+
+        /* Untuk browser Chrome, Safari, dan Edge */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        /* Untuk Firefox */
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
     </style>
 </head>
 
-<body class="hold-transition sidebar-mini layout-fixed">
+<body class="hold-transition sidebar-mini layout-fixed sidebar-collapse">
     <div class="wrapper">
 
         <!-- Preloader -->

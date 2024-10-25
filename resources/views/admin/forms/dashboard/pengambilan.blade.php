@@ -30,7 +30,7 @@
                 for="Item" id="detail-button" data-id="{{ $pengambilanKode->id }}">Detail</button>
             <input type="number" id="jmlitem" class="form-control" readonly />
             <input type="date" value="{{ date('Y-m-d') }}" name="tgl_pengambilan" id="tgl_pengambilan"
-                class="form-control">
+                class="form-control" readonly>
         </div>
         <div class="view-gtotal"
             style="background-color: #e3ff96;border-radius: 5px ;height: 100px;display: flex; align-items: center; justify-content: center;">
