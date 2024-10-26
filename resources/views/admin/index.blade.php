@@ -59,14 +59,14 @@
 <!-- Main content -->
 <section class="content">
 <div class="container-fluid">
-    <div class="btn-group" role="group" aria-label="Basic radio toggle button group">
+    {{-- <div class="btn-group" role="group" aria-label="Basic radio toggle button group">
         <input type="radio" class="btn-check" name="btn-shortcut" id="btn-shortcut" autocomplete="off" checked
             hidden>
         <label class="btn btn-outline-primary" for="btn-shortcut">Shortcut</label>
 
         <input type="radio" class="btn-check" name="btn-dashboard" id="btn-dashboard" autocomplete="off" hidden>
         <label class="btn btn-outline-primary" for="btn-dashboard">Dashboard</label>
-    </div>
+    </div> --}}
     @if (session('error'))
         <div class="alert alert-danger">
             {{ session('error') }}
@@ -97,6 +97,41 @@
             <center class="mb-4">
                 <h5>Tambah Data</h5>
             </center>
+            {{-- <div class="input-group mb-3">
+                <input type="text" class="form-control" placeholder=""
+                    aria-label="Example text with two button addons">
+                <button class="btn btn-outline-secondary" type="button">Button</button>
+                <button class="btn btn-outline-secondary" type="button">Button</button>
+                <input type="text" class="form-control" placeholder=""
+                    aria-label="Example text with two button addons">
+            </div> --}}
+            <div class="row">
+                <div class="col-md-6">
+                    <a class="info-box-icon bg-info elevation-1" href="{{ route('laci.form') }}">
+                        <div class="clickable-element bg-success text-white">
+                            <span class="info-box-text">Laci</span>
+                            <span class="info-box-number">Rp.{{ number_format($totalReceh) }},-</span>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-6">
+                    <a class="info-box-icon bg-danger elevation-1" href="#" data-toggle="modal"
+                        data-target="#reallaci">
+                        <div
+                            class="clickable-element @if ($sumreal < $totalReceh) bg-danger text-white @else bg-success text-white @endif">
+                            <span class="info-box-text">Uang sebenarnya
+                                @if ($sumreal < $totalReceh)
+                                    <strong class="bg-danger"
+                                        style="padding: 5px; border-radius: 20px;">Kurang</strong>
+                                @endif
+                            </span>
+                            <span class="info-box-number">
+                                Rp.{{ number_format($sumreal) }},-
+                            </span>
+                        </div>
+                    </a>
+                </div>
+            </div>
             <div class="input-group my-2">
                 <label class="input-group-text" for="id_kategorilaci">Jenis</label>
                 <select name="id_kategorilaci" class="form-control" id="transactionType" required>
@@ -166,6 +201,37 @@
             @include('admin.forms.dashboard.pengeluaran')
             {{-- end pengeluaran --}}
         </div>
+        {{-- uang sebenarnya --}}
+        <div class="modal fade" id="reallaci" tabindex="-1" role="dialog" aria-labelledby="recehModalLabel"
+            aria-hidden="true">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="recehModalLabel">Input uang real</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <form action="{{ route('laci.real') }}" method="POST">
+                        @csrf
+                        <div class="modal-body">
+                            <!-- Form input receh -->
+                            <div class="form-group">
+                                <label for="amount">Jumlah uang</label>
+                                <input type="number" class="form-control" id="real" name="real"
+                                    required>
+                            </div>
+                            <!-- Tambahkan field lainnya jika diperlukan -->
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Tutup</button>
+                            <button type="submit" class="btn btn-primary">Kirim</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {{-- uang sebenarnya --}}
     </div>
     {{-- jalan pintas --}}
 
@@ -695,37 +761,7 @@
             </div>
             <!-- /.modal-dialog -->
         </div>
-        {{-- uang sebenarnya --}}
-        <div class="modal fade" id="reallaci" tabindex="-1" role="dialog" aria-labelledby="recehModalLabel"
-            aria-hidden="true">
-            <div class="modal-dialog" role="document">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="recehModalLabel">Input uang real</h5>
-                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                            <span aria-hidden="true">&times;</span>
-                        </button>
-                    </div>
-                    <form action="{{ route('laci.real') }}" method="POST">
-                        @csrf
-                        <div class="modal-body">
-                            <!-- Form input receh -->
-                            <div class="form-group">
-                                <label for="amount">Jumlah uang</label>
-                                <input type="number" class="form-control" id="real" name="real"
-                                    required>
-                            </div>
-                            <!-- Tambahkan field lainnya jika diperlukan -->
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Tutup</button>
-                            <button type="submit" class="btn btn-primary">Kirim</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-        {{-- uang sebenarnya --}}
+
     </div>
 
 

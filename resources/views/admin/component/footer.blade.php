@@ -1,9 +1,9 @@
   <!-- /.content-wrapper -->
   <footer class="main-footer">
-      <strong>Copyright &copy; 2022- 2023 <a href="#">PE Engine & Yopi (yoyoycell)</a>.</strong>
+      <strong>Copyright &copy; 2022- 2025 <a href="#">Yopi (yoyoycell)</a>.</strong>
       All rights reserved.
       <div class="float-right d-none d-sm-inline-block">
-          <b>Version</b> Beta
+          <b>Version</b> 3
       </div>
   </footer>
   </div>

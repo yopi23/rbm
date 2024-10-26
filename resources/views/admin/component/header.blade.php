@@ -70,6 +70,20 @@
         input[type=number] {
             -moz-appearance: textfield;
         }
+
+        .clickable-element {
+            padding: 10px;
+            /* Jarak dalam elemen */
+            background-color: #f0f0f0;
+            /* Warna latar belakang */
+            border-radius: 15px;
+            /* Tepi rounded */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            /* Bayangan */
+            text-align: center;
+            /* Teks di tengah */
+
+        }
     </style>
 </head>
 

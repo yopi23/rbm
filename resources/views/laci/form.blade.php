@@ -6,7 +6,17 @@
     <!-- Content Header (Page header) -->
     <div class="content-header">
         <div class="container-fluid">
-            <h1>{{ $page }}</h1> <!-- Gunakan variabel di sini -->
+            <div class="row mb-2">
+                <div class="col-sm-6">
+                    <h1 class="m-0">{{ $page }}</h1>
+                </div><!-- /.col -->
+                <div class="col-sm-6">
+                    <ol class="breadcrumb float-sm-right">
+                        <li class="breadcrumb-item"><a href="/dashboard">Home</a></li>
+                        <li class="breadcrumb-item active">{{ $page }}</li>
+                    </ol>
+                </div><!-- /.col -->
+            </div><!-- /.row -->
             <!-- Form untuk filter tanggal -->
             <form action="{{ route('laci.form') }}" method="GET">
                 <div class="row">
