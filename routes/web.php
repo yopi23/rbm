@@ -172,6 +172,12 @@ Route::group(['middleware' => ['auth']], function () {
 
     //Stok Sparepart
     Route::get('/stok_sparepart', [SparePartController::class, 'view_stok'])->name('stok_sparepart');
+    Route::post('/order/store', [SparePartController::class, 'store'])->name('order.store');
+    Route::get('/list/orders', [SparepartController::class, 'view_order'])->name('orders.view');
+    Route::post('/orders/update-status', [SparepartController::class, 'updateStatus'])->name('orders.updateStatus');
+    Route::post('/orders/update-spl', [SparepartController::class, 'updateSpl'])->name('orders.updateSpl');
+
+
 
     //Sparepart Restok
     Route::get('sparepart_restok/create', [SparePartController::class, 'create_sparepart_restok'])->name('create_sparepart_restok');
@@ -208,6 +214,7 @@ Route::group(['middleware' => ['auth']], function () {
     Route::post('sparepart_toko/store', [ServiceController::class, 'store_sparepart_toko'])->name('store_sparepart_toko');
     Route::put('sparepart_toko/{id}/update', [ServiceController::class, 'update_sparepart_toko'])->name('update_sparepart_toko');
     Route::delete('sparepart_toko/{id}/delete', [ServiceController::class, 'delete_sparepart_toko'])->name('delete_sparepart_toko');
+    Route::delete('delete_service/{id}/delete', [ServiceController::class, 'delete_service'])->name('delete_service');
 
     //Sparepart Luar
     Route::post('sparepart_luar/store', [ServiceController::class, 'store_sparepart_luar'])->name('store_sparepart_luar');

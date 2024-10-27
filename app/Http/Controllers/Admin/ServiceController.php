@@ -298,6 +298,15 @@ class ServiceController extends Controller
             return redirect()->back();
         }
     }
+    public function delete_service(Request $request, $id)
+    {
+        $data = modelServices::findOrFail($id);
+        
+        $data->delete();
+        if ($data) {
+            return redirect()->back();
+        }
+    }
     //CRUD Sparepart Luar
     public function store_sparepart_luar(Request $request)
     {

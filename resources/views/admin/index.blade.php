@@ -59,14 +59,7 @@
 <!-- Main content -->
 <section class="content">
 <div class="container-fluid">
-    {{-- <div class="btn-group" role="group" aria-label="Basic radio toggle button group">
-        <input type="radio" class="btn-check" name="btn-shortcut" id="btn-shortcut" autocomplete="off" checked
-            hidden>
-        <label class="btn btn-outline-primary" for="btn-shortcut">Shortcut</label>
 
-        <input type="radio" class="btn-check" name="btn-dashboard" id="btn-dashboard" autocomplete="off" hidden>
-        <label class="btn btn-outline-primary" for="btn-dashboard">Dashboard</label>
-    </div> --}}
     @if (session('error'))
         <div class="alert alert-danger">
             {{ session('error') }}
@@ -86,8 +79,6 @@
                     <br>
                 </span>
             @endforeach
-            {{-- @else
-                    No recent withdrawals available. --}}
         @endif
 
     @endif
@@ -97,14 +88,6 @@
             <center class="mb-4">
                 <h5>Tambah Data</h5>
             </center>
-            {{-- <div class="input-group mb-3">
-                <input type="text" class="form-control" placeholder=""
-                    aria-label="Example text with two button addons">
-                <button class="btn btn-outline-secondary" type="button">Button</button>
-                <button class="btn btn-outline-secondary" type="button">Button</button>
-                <input type="text" class="form-control" placeholder=""
-                    aria-label="Example text with two button addons">
-            </div> --}}
             <div class="row">
                 <div class="col-md-6">
                     <a class="info-box-icon bg-info elevation-1" href="{{ route('laci.form') }}">
@@ -176,6 +159,14 @@
                                                 value="Diproses">
                                             <button type="submit"
                                                 class="btn btn-sm btn-primary mt-2">Proses</button>
+                                        </form>
+                                        <form action="{{ route('delete_service', $item->id) }}"
+                                            onsubmit="return confirm('Apakah Kamu yakin ingin menghapus Service ini ?')"
+                                            method="POST">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-danger mt-2"><i
+                                                    class="fas fa-trash"></i> </button>
                                         </form>
                                     </td>
                                 </tr>

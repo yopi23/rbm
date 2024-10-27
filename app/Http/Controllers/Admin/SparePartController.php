@@ -12,6 +12,8 @@ use App\Models\Sparepart;
 use App\Models\Hutang;
 use App\Models\SparepartRusak;
 use App\Models\Supplier;
+use App\Models\Order;
+use App\Models\DetailOrder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Milon\Barcode\Facades\DNS1DFacade;
@@ -369,14 +371,182 @@ class SparePartController extends Controller
     public function view_stok(Request $request)
     {
         $page = "Data Stok Sparepart";
-        $view_terjual = DetailSparepartPenjualan::join('penjualans', 'detail_sparepart_penjualans.kode_penjualan', '=', 'penjualans.id')->where([['penjualans.status_penjualan', '=', '1']])->get();
-        $view_terpakai = DetailPartServices::join('sevices', 'detail_part_services.kode_services', '=', 'sevices.id')->where([['sevices.status_services', '!=', 'Cancel']])->get();
-        $data_sparepart = Sparepart::latest()->get();
-        $data_sparepart_rusak = SparepartRusak::join('spareparts', 'sparepart_rusaks.kode_barang', '=', 'spareparts.id')->where('sparepart_rusaks.kode_owner', '=', $this->getThisUser()->id_upline)->get(['sparepart_rusaks.id as id_rusak', 'sparepart_rusaks.*', 'spareparts.*']);
-        $data_sparepart_retur = ReturSparepart::join('spareparts', 'retur_spareparts.kode_barang', '=', 'spareparts.id')->join('suppliers', 'retur_spareparts.kode_supplier', '=', 'suppliers.id')->where('retur_spareparts.kode_owner', '=', $this->getThisUser()->id_upline)->get(['retur_spareparts.id as id_retur', 'retur_spareparts.*', 'spareparts.*', 'suppliers.*']);
-        $data_sparepart_restok = RestokSparepart::join('spareparts', 'restok_spareparts.kode_barang', '=', 'spareparts.id')->join('suppliers', 'restok_spareparts.kode_supplier', '=', 'suppliers.id')->where('restok_spareparts.kode_owner', '=', $this->getThisUser()->id_upline)->get(['restok_spareparts.id as id_restok', 'spareparts.*', 'restok_spareparts.*', 'suppliers.*']);
-        $content = view('admin.page.stok_sparepart', compact(['data_sparepart', 'data_sparepart_rusak', 'data_sparepart_retur', 'data_sparepart_restok', 'view_terjual', 'view_terpakai']));
+
+        // Ambil input filter
+        $filter_kategori = $request->input('filter_kategori');
+        $filter_spl = $request->input('filter_spl');
+
+        // Ambil data terjual dan terpakai
+        $view_terjual = DetailSparepartPenjualan::join('penjualans', 'detail_sparepart_penjualans.kode_penjualan', '=', 'penjualans.id')
+            ->where('penjualans.status_penjualan', '=', '1')
+            ->get();
+
+        $view_terpakai = DetailPartServices::join('sevices', 'detail_part_services.kode_services', '=', 'sevices.id')
+            ->where('sevices.status_services', '!=', 'Cancel')
+            ->get();
+
+        // Ambil data sparepart dengan filter
+        $data_sparepart = Sparepart::query();
+
+        // Tambahkan filter kategori dan SPL
+        if ($filter_kategori) {
+            $data_sparepart->where('kode_kategori', $filter_kategori);
+        }
+
+        if ($filter_spl) {
+            $data_sparepart->where('kode_spl', $filter_spl);
+        }
+
+        $data_sparepart = $data_sparepart->latest()->get();
+
+        // Data lain tetap diambil tanpa filter
+        $data_sparepart_rusak = SparepartRusak::join('spareparts', 'sparepart_rusaks.kode_barang', '=', 'spareparts.id')
+            ->where('sparepart_rusaks.kode_owner', '=', $this->getThisUser()->id_upline)
+            ->get(['sparepart_rusaks.id as id_rusak', 'sparepart_rusaks.*', 'spareparts.*']);
+
+        $data_sparepart_retur = ReturSparepart::join('spareparts', 'retur_spareparts.kode_barang', '=', 'spareparts.id')
+            ->join('suppliers', 'retur_spareparts.kode_supplier', '=', 'suppliers.id')
+            ->where('retur_spareparts.kode_owner', '=', $this->getThisUser()->id_upline)
+            ->get(['retur_spareparts.id as id_retur', 'retur_spareparts.*', 'spareparts.*', 'suppliers.*']);
+
+        $data_sparepart_restok = RestokSparepart::join('spareparts', 'restok_spareparts.kode_barang', '=', 'spareparts.id')
+            ->join('suppliers', 'restok_spareparts.kode_supplier', '=', 'suppliers.id')
+            ->where('restok_spareparts.kode_owner', '=', $this->getThisUser()->id_upline)
+            ->get(['restok_spareparts.id as id_restok', 'spareparts.*', 'restok_spareparts.*', 'suppliers.*']);
+
+        // Ambil data kategori dan SPL untuk dropdown
+        $data_kategori = KategoriSparepart::all();
+        $data_spl = Supplier::all();
+
+        $content = view('admin.page.stok_sparepart', compact(['data_sparepart', 'data_sparepart_rusak', 'data_sparepart_retur', 'data_sparepart_restok', 'view_terjual', 'view_terpakai', 'data_kategori', 'data_spl', 'filter_kategori', 'filter_spl']));
+
         return view('admin.layout.blank_page', compact(['page', 'content']));
+    }
+    //list order
+    public function store(Request $request)
+    {
+        $request->validate([
+            'qty' => 'required|integer|min:1',
+            'id_barang' => 'required',
+            'id_kategori' => 'required',
+            'id_spl' => 'required',
+        ]);
+
+        // Cek apakah ada order yang sudah ada dengan SPL yang sama dan status 0
+        $existingOrder = Order::where('spl_kode', $request->id_spl)
+            ->where('status_order', 0)
+            ->first();
+
+        if ($existingOrder) {
+            // Jika ada, gunakan kode order yang sudah ada
+            $orderId = $existingOrder->id;
+        } else {
+            do {
+                $kode_order = 'ORD' . mt_rand(100000, 999999);
+            } while (Order::where('kode_order', $kode_order)->exists());
+
+            // Jika tidak ada, buat order baru
+            $order = new Order();
+            $order->kode_order = $kode_order; // Contoh kode order, sesuaikan dengan logika Anda
+            $order->spl_kode = $request->id_spl;
+            $order->kode_owner = $this->getThisUser()->id_upline; // Ambil kode owner sesuai logika Anda
+            $order->status_order = 0; // Status order 0
+            $order->save();
+
+            $orderId = $order->id;
+        }
+
+
+        // Ambil nama barang dari tabel sparepart
+        $sparepart = Sparepart::find($request->id_barang);
+        $nama_barang = $sparepart->nama_sparepart; // Ambil nama barang
+        $beli_terakhir = $sparepart->harga_beli;
+        $pasang_terakhir = $sparepart->harga_jual;
+        $ecer_terakhir = $sparepart->harga_ecer;
+        $jasa_terakhir = $sparepart->harga_pasang;
+
+        // Menyimpan detail order
+        $detailOrder = new DetailOrder();
+        $detailOrder->id_order = $orderId;
+        $detailOrder->id_barang = $request->id_barang;
+
+        // Misalkan Anda mendapatkan id_pesanan dari request atau logika lain
+        $detailOrder->id_pesanan = $request->id_pesanan ?? null; // Atau sesuaikan dengan logika Anda
+        $detailOrder->id_kategori = $request->id_kategori;
+        $detailOrder->nama_barang = $nama_barang; // Isi nama barang yang diambil dari sparepart
+        $detailOrder->qty = $request->qty;
+        $detailOrder->beli_terakhir = $beli_terakhir ?? null;
+        $detailOrder->pasang_terakhir = $pasang_terakhir ?? null;
+        $detailOrder->ecer_terakhir = $ecer_terakhir ?? null;
+        $detailOrder->jasa_terakhir = $jasa_terakhir ?? null;
+
+        // Set nilai lainnya sesuai kebutuhan
+        $detailOrder->save();
+
+        return redirect()->back()->with('success', 'Order berhasil ditambahkan.');
+    }
+    public function view_order(Request $request)
+    {
+        $page = "List Data Order";
+        // Ambil semua SPL
+        $activeSpls = Supplier::all();
+
+        // Ambil data order berdasarkan SPL yang dipilih atau tampilkan salah satu SPL secara default
+        $selectedSplId = $request->get('filter_spl', $activeSpls->first()->id ?? null); // Ambil SPL pertama jika tidak ada filter
+
+        // Ambil data order berdasarkan SPL yang dipilih
+        $orders = DetailOrder::with('order') // Pastikan Anda mendefinisikan relasi di model
+            ->whereHas('order', function ($query) use ($selectedSplId) {
+                $query->where('spl_kode', $selectedSplId)
+                    ->where('status_order', 0);
+            })
+            ->get();
+
+
+
+        $content = view('admin.page.list_order', compact(['orders', 'activeSpls', 'selectedSplId']));
+        return view('admin.layout.blank_page', compact('page', 'content'));
+    }
+    public function updateStatus(Request $request)
+    {
+        // Validasi
+        $request->validate([
+            'kode_order' => 'required|string',
+        ]);
+
+        // Temukan order berdasarkan kode_order
+        $order = Order::where('kode_order', $request->kode_order)->first();
+
+        if (!$order) {
+            return redirect()->back()->with('error', 'Order tidak ditemukan.');
+        }
+
+        // Update status order menjadi 1
+        $order->status_order = 1;
+        $order->save();
+
+
+        return redirect()->back()->with('success', 'Status order berhasil diperbarui.');
+    }
+    public function updateSpl(Request $request)
+    {
+        $request->validate([
+            'order_id' => 'required|exists:order,kode_order',
+            'spl_id' => 'required|exists:suppliers,id',
+        ]);
+
+        // Temukan order berdasarkan kode_order
+        $order = Order::where('kode_order', $request->order_id)->first();
+
+        // Update SPL pada order
+        if ($order) {
+            $order->spl_kode = $request->spl_id; // Update kode SPL
+            $order->save();
+
+            return redirect()->back()->with('success', 'SPL berhasil diperbarui.');
+        }
+
+        return redirect()->back()->with('error', 'Order tidak ditemukan.');
     }
 
     //Sparepart Rusak
@@ -811,105 +981,4 @@ class SparePartController extends Controller
         // Mengembalikan hasil setelah konversi
         return $hasil_final;
     }
-
-
-
-    // kode lama
-    // public function processData(Request $request)
-    // {
-    //     // Validasi data
-    //     $request->validate([
-    //         'kode_kategori' => 'required',
-    //         'kode_supplier' => 'required',
-    //         'spareparts.*.kode' => 'required',
-    //         'restocks.*.kode_harga' => 'required',
-    //     ]);
-
-    //     // Dapatkan data dari request
-    //     $kodeKategori = $request->input('kode_kategori');
-    //     $kodeSupplier = $request->input('kode_supplier');
-    //     $spareparts = $request->input('spareparts');
-    //     $restocks = $request->input('restocks');
-
-    //     // Cek apakah data spareparts atau restocks
-    //     // if (isset($spareparts)) {
-    //     // Simpan data ke tabel "sparepart"
-    //     foreach ($spareparts as $index => $sparepartData) {
-    //         // Parsing kode untuk mendapatkan informasi harga
-    //         list($hargaBeli, $hargaJual, $hargaEcer, $hargaPasang) = $this->parseKode($sparepartData['kode']);
-    //         // Dump data untuk diperiksa
-    //         dd($sparepartData);
-
-    //         $sparepart = new Sparepart;
-    //         $sparepart->nama_sparepart = $sparepartData['nama'];
-    //         $sparepart->stok_sparepart = $sparepartData['stok'];
-    //         $sparepart->harga_beli = $hargaBeli;
-    //         $sparepart->harga_jual = $hargaJual;
-    //         $sparepart->harga_ecer = $hargaEcer;
-    //         $sparepart->harga_pasang = $hargaPasang;
-    //         $sparepart->kode_kategori = $kodeKategori;
-    //         $sparepart->kode_supplier = $kodeSupplier;
-
-    //         // Generate dynamic spare part code
-    //         $count = Sparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get()->count();
-    //         $dynamicCount = $count + $index + 1; // Add index to ensure uniqueness for each spare part
-    //         $kode_sparepart = 'SP' . date('Ymdhis') . $dynamicCount;
-
-    //         $sparepart->kode_sparepart = $kode_sparepart;
-    //         $sparepart->kode_owner = $this->getThisUser()->id_upline;
-    //         $sparepart->save();
-    //         // }
-    //     }
-
-    //     // Cek apakah data restocks
-    //     // if (isset($restocks)) {
-    //     //     // Simpan data ke tabel "restocks"
-    //     //     foreach ($restocks as $restockData) {
-    //     //         // Lakukan operasi update pada data restocks berdasarkan ID
-    //     //         Restock::where('id', $restockData['id'])
-    //     //             ->update([
-    //     //                 'kode_harga' => $restockData['kode_harga'],
-    //     //                 // ... tambahkan kolom lain yang perlu diupdate
-    //     //             ]);
-    //     //     }
-    //     // }
-
-    //     // Berikan respons yang sesuai
-    //     return response()->json(['message' => 'Data berhasil disimpan'], 200);
-    // }
-
-    // private function parseKode($kode)
-    // {
-    //     $teks = $kode;
-    //     $hasil_parsing = preg_split('/n/', $teks, -1, PREG_SPLIT_NO_EMPTY);
-
-    //     $label = ['hargaBeli', 'hargaJual', 'hargaEcer', 'hargaPasang'];
-    //     $hasil_final = array_combine($label, $hasil_parsing);
-
-    //     // Rumus konversi
-    //     $konversi = [
-    //         'a' => 0,
-    //         'b' => 1,
-    //         'c' => 2,
-    //         'd' => 3,
-    //         'e' => 4,
-    //         'f' => 5,
-    //         'g' => 6,
-    //         'h' => 7,
-    //         'i' => 8,
-    //         'j' => 9,
-    //         'r' => '000',
-    //         's' => '00'
-    //     ];
-
-    //     // Mengonversi nilai
-    //     foreach ($hasil_final as $label => $nilai) {
-    //         $hasil_final[$label] = strtr($nilai, $konversi);
-    //     }
-
-    //     // Mengembalikan hasil setelah konversi
-    //     return $hasil_final;
-    // }
-    // kode lama
-
 }
