@@ -149,16 +149,19 @@
                 <table class="table table-hover" id="dataTable">
                     <thead>
                         <th>No</th>
-                        <th>Kode</th>
+                        <th>Nama</th>
                         <th>Unit</th>
                         <th>Keterangan</th>
                         <th>Aksi</th>
                     </thead>
                     <tbody>
+                        @php
+                            $nomor = 1;
+                        @endphp
                         @forelse ($service as $item)
                             @if ($item->status_services == 'Antri')
                                 <tr>
-                                    <td>{{ $loop->index + 1 }}</td>
+                                    <td>{{ $nomor++ }}</td>
                                     <td><b>{{ $item->nama_pelanggan }}</b><br>{{ $item->kode_service }}<br>{{ $item->no_telp }}
                                     </td>
                                     <td>{{ $item->type_unit }}</td>
