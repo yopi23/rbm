@@ -133,11 +133,11 @@ class ServiceController extends Controller
             $currentUser = Auth::user();
             $userDetail = UserDetail::where('kode_user', $currentUser->id)->first();
 
-            if ($userDetail->jabatan == '1' || $userDetail->jabatan == '2') {
-                return redirect()->route('job');
-            } else {
-                return redirect()->route('todolist')->with('success', 'Update Data Service Berhasil');
-            }
+            // if ($userDetail->jabatan == '1' || $userDetail->jabatan == '2') {
+            //     return redirect()->route('job');
+            // } else {
+            return redirect()->route('todolist')->with('success', 'Update Data Service Berhasil');
+            // }
         }
     }
     public function update_service(Request $request, $id)
@@ -301,7 +301,7 @@ class ServiceController extends Controller
     public function delete_service(Request $request, $id)
     {
         $data = modelServices::findOrFail($id);
-        
+
         $data->delete();
         if ($data) {
             return redirect()->back();
@@ -344,6 +344,17 @@ class ServiceController extends Controller
     }
     public function view_to_do()
     {
+        $user = $this->getThisUser(); // Pastikan metode ini mengambil pengguna yang sedang login
+
+        // Ambil detail pengguna dari tabel userdetail
+        $userDetail = UserDetail::where('kode_user', $user->kode_user)->first();
+
+        // Cek jabatan pengguna
+        if (!$userDetail || !in_array($userDetail->jabatan, [0, 1, 2])) {
+            // Alihkan pengguna ke halaman lain jika jabatan bukan 0, 1, atau 2
+            return redirect()->route('profile')->with('error', 'Anda tidak memiliki akses ke todolist.');
+        }
+        // endpengalihan
         $page = "To Do list";
 
         $antrian = modelServices::where([['status_services', '=', 'Antri'], ['kode_owner', '=', $this->getThisUser()->id_upline]])->get();
@@ -369,7 +380,7 @@ class ServiceController extends Controller
                 'users.id as user_id', // Adjust this line according to your needs
                 'users.name'
             ])
-            ->where([['id_teknisi', '=', auth()->user()->id], ['status_services', '=', 'Diproses']])
+            ->where([['status_services', '=', 'Diproses']])
             ->groupBy(
                 'sevices.id',
                 'sevices.kode_service',
@@ -388,17 +399,29 @@ class ServiceController extends Controller
                 'users.name',
             )
             ->get();
-        $selesai = modelServices::join('users', 'sevices.id_teknisi', '=', 'users.id')->where([['id_teknisi', '=', auth()->user()->id], ['status_services', '=', 'Selesai']])->get(['sevices.id as id_service', 'sevices.*', 'users.*']);
-        $batal = modelServices::join('users', 'sevices.id_teknisi', '=', 'users.id')->where([['id_teknisi', '=', auth()->user()->id], ['status_services', '=', 'Cancel']])->get(['sevices.id as id_service', 'sevices.*', 'users.*']);
-        $content = view('admin.page.todolist', compact(['antrian', 'proses', 'selesai', 'batal']));
+        $selesai = modelServices::join('users', 'sevices.id_teknisi', '=', 'users.id')->where([['status_services', '=', 'Selesai']])->get(['sevices.id as id_service', 'sevices.*', 'users.*']);
+        $batal = modelServices::join('users', 'sevices.id_teknisi', '=', 'users.id')->where([['status_services', '=', 'Cancel']])->get(['sevices.id as id_service', 'sevices.*', 'users.*']);
+
+        $jab = [1, 2];
+        $user = UserDetail::where('id_upline', $this->getThisUser()->id_upline)
+            ->whereNotIn('jabatan', $jab)
+            ->get();
+
+        $content = view('admin.page.todolist', compact(['antrian', 'proses', 'selesai', 'batal', 'user']));
         return view('admin.layout.blank_page', compact(['page', 'content']));
     }
     public function proses_service(Request $request, $id)
     {
         $update = modelServices::findOrFail($id);
+        // Menggunakan ID teknisi dari request hanya jika status yang dikirim adalah 'Diproses'
+        if ($request->status_services == 'Diproses') {
+            $id_teknisi = $request->teknisi; // Mengambil ID teknisi dari request
+        } else {
+            $id_teknisi = $update->id_teknisi; // Gunakan ID teknisi yang sudah ada
+        }
         $update->update([
             'status_services' => $request->status_services,
-            'id_teknisi' => auth()->user()->id
+            'id_teknisi' => $id_teknisi
         ]);
         if ($update) {
             if ($request->status_services == 'Cancel') {
@@ -411,38 +434,38 @@ class ServiceController extends Controller
                     ]);
                 }
             }
-            // if ($request->status_services == 'Selesai') {
-            //     if ($this->getThisUser()->jabatan != '1') {
-            //         $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')->where([['kode_services', '=', $id]])->get(['detail_part_services.id as id_detail_part', 'detail_part_services.*', 'spareparts.*']);
-            //         $part_luar_toko_service = DetailPartLuarService::where([['kode_services', '=', $id]])->get();
-            //         $presentase = PresentaseUser::where([['kode_user', '=', $this->getThisUser()->kode_user]])->get()->first();
-            //         if ($presentase) {
-            //             $total_part = 0;
-            //             foreach ($part_toko_service as $a) {
-            //                 $total_part += $a->harga_jual * $a->qty_part;
-            //             }
-            //             foreach ($part_luar_toko_service as $b) {
-            //                 $total_part += $b->harga_part * $b->qty_part;
-            //             }
-            //             $profit = $update->total_biaya - $total_part;
-            //             $fix_profit =  $profit * $presentase->presentase / 100;
-            //             $komisi = ProfitPresentase::create([
-            //                 'tgl_profit' => date('Y-m-d'),
-            //                 'kode_service' => $id,
-            //                 'kode_presentase' => $presentase->id,
-            //                 'kode_user' => $this->getThisUser()->kode_user,
-            //                 'profit' => $fix_profit,
-            //             ]);
-            //             if ($komisi) {
-            //                 $pegawais = UserDetail::where([['kode_user', '=', $this->getThisUser()->kode_user]])->get()->first();
-            //                 $new_saldo = $pegawais->saldo + $fix_profit;
-            //                 $pegawais->update([
-            //                     'saldo' => $new_saldo
-            //                 ]);
-            //             }
-            //         }
-            //     }
-            // }
+            if ($request->status_services == 'Selesai') {
+                // if ($this->getThisUser()->jabatan != '1') {
+                $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')->where([['kode_services', '=', $id]])->get(['detail_part_services.id as id_detail_part', 'detail_part_services.*', 'spareparts.*']);
+                $part_luar_toko_service = DetailPartLuarService::where([['kode_services', '=', $id]])->get();
+                $presentase = PresentaseUser::where([['kode_user', '=', $id_teknisi]])->get()->first();
+                if ($presentase) {
+                    $total_part = 0;
+                    foreach ($part_toko_service as $a) {
+                        $total_part += $a->harga_jual * $a->qty_part;
+                    }
+                    foreach ($part_luar_toko_service as $b) {
+                        $total_part += $b->harga_part * $b->qty_part;
+                    }
+                    $profit = $update->total_biaya - $total_part;
+                    $fix_profit =  $profit * $presentase->presentase / 100;
+                    $komisi = ProfitPresentase::create([
+                        'tgl_profit' => date('Y-m-d'),
+                        'kode_service' => $id,
+                        'kode_presentase' => $presentase->id,
+                        'kode_user' => $id_teknisi,
+                        'profit' => $fix_profit,
+                    ]);
+                    if ($komisi) {
+                        $pegawais = UserDetail::where([['kode_user', '=', $id_teknisi,]])->get()->first();
+                        $new_saldo = $pegawais->saldo + $fix_profit;
+                        $pegawais->update([
+                            'saldo' => $new_saldo
+                        ]);
+                    }
+                }
+                // }
+            }
             return redirect()->route('todolist');
         }
     }

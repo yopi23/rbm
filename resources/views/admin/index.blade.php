@@ -89,28 +89,30 @@
                 <h5>Tambah Data</h5>
             </center>
             <div class="row">
-                <div class="col-md-6">
-                    <a class="info-box-icon bg-info elevation-1" href="{{ route('laci.form') }}">
-                        <div class="clickable-element bg-success text-white">
-                            <span class="info-box-text">Laci</span>
-                            <span class="info-box-number">Rp.{{ number_format($totalReceh) }},-</span>
-                        </div>
-                    </a>
-                </div>
-                <div class="col-md-6">
+                @if ($this_user->jabatan == '1')
+                    <div class="col-md my-2">
+                        <a class="info-box-icon bg-info elevation-1" href="{{ route('laci.form') }}">
+                            <div class="clickable-element bg-success text-white">
+                                <span class="info-box-text">Laci</span>
+                                <span class="info-box-number">Rp.{{ number_format($totalReceh) }},-</span>
+                            </div>
+                        </a>
+                    </div>
+                @endif
+                <div class="col-md my-2">
                     <a class="info-box-icon bg-danger elevation-1" href="#" data-toggle="modal"
                         data-target="#reallaci">
                         <div
                             class="clickable-element @if ($sumreal < $totalReceh) bg-danger text-white @else bg-success text-white @endif">
                             <span class="info-box-text">Uang sebenarnya
-                                @if ($sumreal < $totalReceh)
-                                    <strong class="bg-danger"
-                                        style="padding: 5px; border-radius: 20px;">Kurang</strong>
-                                @endif
+
                             </span>
                             <span class="info-box-number">
                                 Rp.{{ number_format($sumreal) }},-
                             </span>
+                            @if ($sumreal < $totalReceh)
+                                <strong class="bg-danger" style="padding: 5px; border-radius: 20px;">Kurang</strong>
+                            @endif
                         </div>
                     </a>
                 </div>
@@ -128,6 +130,22 @@
             </div>
 
             <div class="listservice table-responsive">
+                <div class="form-group">
+                    <select name="teknisi" id="teknisi" class="form-control" required autofocus>
+                        <option value="" disabled selected style="color: #a9a9a9;">---
+                            Pilih Teknisi---</option>
+                        @if (isset($user))
+                            @foreach ($user as $users)
+                                <option class="my2" value="{{ $users->kode_user }}">
+                                    {{ $users->fullname }}
+                                </option>
+                            @endforeach
+                        @endif
+                    </select>
+                    <div class="invalid-feedback">
+                        Pilih Teknisi.
+                    </div>
+                </div>
                 <table class="table table-hover" id="dataTable">
                     <thead>
                         <th>No</th>
@@ -157,8 +175,11 @@
                                             @method('PUT')
                                             <input type="hidden" name="status_services" id="status_services"
                                                 value="Diproses">
-                                            <button type="submit"
-                                                class="btn btn-sm btn-primary mt-2">Proses</button>
+                                            <input type="hidden" name="teknisi" id="teknisi-{{ $item->id }}"
+                                                value="">
+                                            <button type="submit" class="btn btn-sm btn-primary mt-2"
+                                                onclick="setTeknisi('{{ $item->id }}')">Proses</button>
+                                        </form>
                                         </form>
                                         <form action="{{ route('delete_service', $item->id) }}"
                                             onsubmit="return confirm('Apakah Kamu yakin ingin menghapus Service ini ?')"
@@ -755,8 +776,6 @@
 
     </div>
 
-
-
 </div><!-- /.container-fluid -->
 </section>
 <!-- /.content -->
@@ -940,6 +959,16 @@
         }
     });
 </script>
+
+{{-- teknisi --}}
+<script>
+    function setTeknisi(itemId) {
+        const teknisiSelect = document.getElementById('teknisi');
+        const hiddenInput = document.getElementById('teknisi-' + itemId);
+        hiddenInput.value = teknisiSelect.value;
+    }
+</script>
+{{-- end teknisi --}}
 {{-- pencarian part --}}
 <script>
     $(document).ready(function() {

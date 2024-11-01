@@ -17,6 +17,7 @@ use App\Models\DetailBarangPenjualan;
 use App\Models\DetailSparepartPenjualan;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Models\UserDetail;
 use App\Models\Penarikan;
 use App\Models\Laci;
 use Carbon\Carbon;
@@ -30,6 +31,17 @@ class DashboardController extends Controller
     //
     public function index(Request $request)
     {
+        $user = $this->getThisUser(); // Pastikan metode ini mengambil pengguna yang sedang login
+
+        // Ambil detail pengguna dari tabel userdetail
+        $userDetail = UserDetail::where('kode_user', $user->kode_user)->first();
+
+        // Cek jabatan pengguna
+        if (!$userDetail || !in_array($userDetail->jabatan, [0, 1, 2])) {
+            // Alihkan pengguna ke halaman lain jika jabatan bukan 0, 1, atau 2
+            return redirect()->route('profile')->with('error', 'Anda tidak memiliki akses ke dashboard.');
+        }
+        // endpengalihan
         $page = "Dashboard";
         $listLaci = $this->getKategoriLaci();
         $pengambilanKode = $this->getOrCreatePengambilan();
@@ -111,7 +123,7 @@ class DashboardController extends Controller
             $toReceh = $laciData->sum('receh');
             $sumreal = $laciData->sum('real');
             $totalReceh = $toReceh + $total_service + $total_penjualan + $total_pemasukkan_lain - $debit;
-            
+
             // kode trx
             $kodetrx = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '=', '0']])->get()->first();
             $count = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline]])->get()->count();
@@ -150,6 +162,10 @@ class DashboardController extends Controller
             $done_service = $pengambilanServices['done_service'];
             // return response()->json(['message' => 'Pengambilan tidak ditemukan.'], 404);
             //end pengambilan
+            $jab = [1, 2];
+            $user = UserDetail::where('id_upline', $this->getThisUser()->id_upline)
+                ->whereNotIn('jabatan', $jab)
+                ->get();
 
             $isModalRequired = !$hasLaciEntry;
             return view('admin.index', compact([
@@ -177,7 +193,8 @@ class DashboardController extends Controller
                 'detailbarang',
                 'pengambilanKode',
                 'pengambilanServices',
-                'done_service'
+                'done_service',
+                'user'
             ]));
         }
         if ($this->getThisUser()->jabatan == '0') {

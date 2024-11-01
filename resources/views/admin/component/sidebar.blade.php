@@ -61,14 +61,16 @@
                  data-accordion="false">
                  <!-- Add icons to the links using the .nav-icon class
                with font-awesome or any other icon font library -->
-                 <li class="nav-item ">
-                     <a href="{{ route('dashboard') }}" class="nav-link  @yield('dashboard')">
-                         <i class="nav-icon fas fa-tachometer-alt"></i>
-                         <p>
-                             Dashboard
-                         </p>
-                     </a>
-                 </li>
+                 @if ($this_user->jabatan != '1' || $this_user->jabatan != '2')
+                     <li class="nav-item ">
+                         <a href="{{ route('dashboard') }}" class="nav-link  @yield('dashboard')">
+                             <i class="nav-icon fas fa-tachometer-alt"></i>
+                             <p>
+                                 Dashboard
+                             </p>
+                         </a>
+                     </li>
+                 @endif
                  @if ($this_user->jabatan == '0')
                      <li class="nav-header">DATA MASTER</li>
                      <li class="nav-item">
@@ -88,7 +90,7 @@
                          </a>
                      </li>
                  @endif
-                 @if ($this_user->jabatan != '0')
+                 @if ($this_user->jabatan != '1' || $this_user->jabatan != '2')
                      <li class="nav-header">DATA MASTER</li>
                      <li class="nav-item ">
                          <a href="#" class="nav-link ">
@@ -160,67 +162,70 @@
                              </li>
                          </ul>
                      </li>
-                     <li class="nav-item">
-                         <a href="{{ route('supplier.index') }}" class="nav-link @yield('supplier.index')">
-                             <i class="nav-icon fas fa-users"></i>
-                             <p>
-                                 Supplier
-                             </p>
-                         </a>
-                     </li>
-                     <li class="nav-header">TRANSAKSI</li>
-                     <li class="nav-item @yield('maintodo')">
-                         <a href="#" class="nav-link @yield('droptodo')">
-                             <i class="nav-icon fas fa-cogs"></i>
-                             <p>
-                                 Repair
-                                 <i class="fas fa-angle-left right"></i>
-                             </p>
-                         </a>
-                         <ul class="nav nav-treeview">
-                             <li class="nav-item">
-                                 <a href="{{ route('all_service') }}" class="nav-link">
-                                     <i class="far fa-circle nav-icon"></i>
-                                     <p>Semua Service</p>
-                                 </a>
-                             </li>
-                             <li class="nav-item">
-                                 <a href="{{ route('todolist') }}" class="nav-link @yield('todolist')">
-                                     <i class="far fa-circle nav-icon"></i>
-                                     <p>Todo List</p>
-                                 </a>
-                             </li>
-                         </ul>
-                     </li>
-                     <li class="nav-item @yield('main')">
-                         <a href="#" class="nav-link @yield('drop')">
-                             <i class="nav-icon fas fas fa-cash-register"></i>
-                             <p>
-                                 Transaksi
-                                 <i class="fas fa-angle-left right"></i>
-                             </p>
-                         </a>
-                         <ul class="nav nav-treeview">
-                             <li class="nav-item">
-                                 <a href="{{ route('penjualan') }}" class="nav-link @yield('penjualan')">
-                                     <i class="far fa-circle nav-icon"></i>
-                                     <p>Penjualan</p>
-                                 </a>
-                             </li>
-                             <li class="nav-item">
-                                 <a href="{{ route('pesanan') }}" class="nav-link ">
-                                     <i class="far fa-circle nav-icon"></i>
-                                     <p>Pesanan</p>
-                                 </a>
-                             </li>
-                             <li class="nav-item">
-                                 <a href="{{ route('pengembalian') }}" class="nav-link @yield('pengambilan')">
-                                     <i class="far fa-circle nav-icon"></i>
-                                     <p>Pengembalian</p>
-                                 </a>
-                             </li>
-                         </ul>
-                     </li>
+                     @if ($this_user->jabatan == '1')
+                         <li class="nav-item">
+                             <a href="{{ route('supplier.index') }}" class="nav-link @yield('supplier.index')">
+                                 <i class="nav-icon fas fa-users"></i>
+                                 <p>
+                                     Supplier
+                                 </p>
+                             </a>
+                         </li>
+
+                         <li class="nav-header">TRANSAKSI</li>
+                         <li class="nav-item @yield('maintodo')">
+                             <a href="#" class="nav-link @yield('droptodo')">
+                                 <i class="nav-icon fas fa-cogs"></i>
+                                 <p>
+                                     Repair
+                                     <i class="fas fa-angle-left right"></i>
+                                 </p>
+                             </a>
+                             <ul class="nav nav-treeview">
+                                 <li class="nav-item">
+                                     <a href="{{ route('all_service') }}" class="nav-link">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Semua Service</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('todolist') }}" class="nav-link @yield('todolist')">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Todo List</p>
+                                     </a>
+                                 </li>
+                             </ul>
+                         </li>
+                         <li class="nav-item @yield('main')">
+                             <a href="#" class="nav-link @yield('drop')">
+                                 <i class="nav-icon fas fas fa-cash-register"></i>
+                                 <p>
+                                     Transaksi
+                                     <i class="fas fa-angle-left right"></i>
+                                 </p>
+                             </a>
+                             <ul class="nav nav-treeview">
+                                 <li class="nav-item">
+                                     <a href="{{ route('penjualan') }}" class="nav-link @yield('penjualan')">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Penjualan</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('pesanan') }}" class="nav-link ">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Pesanan</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('pengembalian') }}" class="nav-link @yield('pengambilan')">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Pengembalian</p>
+                                     </a>
+                                 </li>
+                             </ul>
+                         </li>
+                     @endif
                      <li class="nav-item">
                          <a href="#" class="nav-link">
                              <i class="nav-icon fas fa-cart-arrow-down"></i>
