@@ -126,7 +126,7 @@
                                                     <input type="hidden" name="status_services" id="status_services"
                                                         value="Selesai">
                                                     <button type="button"
-                                                        onclick="return confirmSelesai({{ $loop->index }},'{{ $item->nama_pelanggan }}')"
+                                                        onclick="return confirmSelesai({{ $loop->index }},'{{ $item->nama_pelanggan }}', '{{ $item->name }}')"
                                                         class="btn btn-sm btn-success mt-2">Selesai</button>
                                                     {{-- <button type="submit"
                                                         class="btn btn-sm btn-success mt-2">Selesai</button> --}}
@@ -241,13 +241,12 @@
 
 
 <script>
-    function confirmSelesai(index, pelanggan) {
-        const username = "{{ strtoupper($item->name) }}";
+    function confirmSelesai(index, pelanggan, teknisi) {
         Swal.fire({
             title: 'Apakah kamu yakin?',
             html: "Anda ingin menyelesaikan pekerjaan untuk perangkat <strong style='font-size: 16pt'>" +
                 pelanggan + "</strong> dengan Akun <strong style='font-size: 18pt'>" +
-                username + "</strong>?",
+                teknisi + "</strong>?",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#3085d6',
