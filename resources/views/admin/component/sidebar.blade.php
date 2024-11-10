@@ -173,29 +173,31 @@
                          </li>
 
                          <li class="nav-header">TRANSAKSI</li>
-                         <li class="nav-item @yield('maintodo')">
-                             <a href="#" class="nav-link @yield('droptodo')">
-                                 <i class="nav-icon fas fa-cogs"></i>
-                                 <p>
-                                     Repair
-                                     <i class="fas fa-angle-left right"></i>
-                                 </p>
-                             </a>
-                             <ul class="nav nav-treeview">
-                                 <li class="nav-item">
-                                     <a href="{{ route('all_service') }}" class="nav-link">
-                                         <i class="far fa-circle nav-icon"></i>
-                                         <p>Semua Service</p>
-                                     </a>
-                                 </li>
-                                 <li class="nav-item">
-                                     <a href="{{ route('todolist') }}" class="nav-link @yield('todolist')">
-                                         <i class="far fa-circle nav-icon"></i>
-                                         <p>Todo List</p>
-                                     </a>
-                                 </li>
-                             </ul>
-                         </li>
+                     @endif
+                     <li class="nav-item @yield('maintodo')">
+                         <a href="#" class="nav-link @yield('droptodo')">
+                             <i class="nav-icon fas fa-cogs"></i>
+                             <p>
+                                 Repair
+                                 <i class="fas fa-angle-left right"></i>
+                             </p>
+                         </a>
+                         <ul class="nav nav-treeview">
+                             <li class="nav-item">
+                                 <a href="{{ route('all_service') }}" class="nav-link">
+                                     <i class="far fa-circle nav-icon"></i>
+                                     <p>Semua Service</p>
+                                 </a>
+                             </li>
+                             <li class="nav-item">
+                                 <a href="{{ route('todolist') }}" class="nav-link @yield('todolist')">
+                                     <i class="far fa-circle nav-icon"></i>
+                                     <p>Todo List</p>
+                                 </a>
+                             </li>
+                         </ul>
+                     </li>
+                     @if ($this_user->jabatan == '1')
                          <li class="nav-item @yield('main')">
                              <a href="#" class="nav-link @yield('drop')">
                                  <i class="nav-icon fas fas fa-cash-register"></i>

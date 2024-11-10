@@ -379,10 +379,14 @@ class SparePartController extends Controller
         // Ambil data terjual dan terpakai
         $view_terjual = DetailSparepartPenjualan::join('penjualans', 'detail_sparepart_penjualans.kode_penjualan', '=', 'penjualans.id')
             ->where('penjualans.status_penjualan', '=', '1')
+            ->groupBy('detail_sparepart_penjualans.kode_sparepart')
+            ->selectRaw('kode_sparepart, sum(qty_sparepart) as total_terjual')
             ->get();
 
         $view_terpakai = DetailPartServices::join('sevices', 'detail_part_services.kode_services', '=', 'sevices.id')
             ->where('sevices.status_services', '!=', 'Cancel')
+            ->groupBy('detail_part_services.kode_sparepart')
+            ->selectRaw('kode_sparepart, sum(qty_part) as total_terpakai')
             ->get();
 
         // Ambil data sparepart dengan filter
@@ -397,11 +401,18 @@ class SparePartController extends Controller
             $data_sparepart->where('kode_spl', $filter_spl);
         }
 
-        $data_sparepart = $data_sparepart->latest()->get();
+        $data_sparepart = $data_sparepart->latest()->paginate(20);
 
         // Data lain tetap diambil tanpa filter
+        // $data_sparepart_rusak = SparepartRusak::join('spareparts', 'sparepart_rusaks.kode_barang', '=', 'spareparts.id')
+        //     ->where('sparepart_rusaks.kode_owner', '=', $this->getThisUser()->id_upline)
+        //     ->get(['sparepart_rusaks.id as id_rusak', 'sparepart_rusaks.*', 'spareparts.*']);
+
         $data_sparepart_rusak = SparepartRusak::join('spareparts', 'sparepart_rusaks.kode_barang', '=', 'spareparts.id')
             ->where('sparepart_rusaks.kode_owner', '=', $this->getThisUser()->id_upline)
+            ->when($filter_kategori, function ($query) use ($filter_kategori) {
+                return $query->where('spareparts.kode_kategori', $filter_kategori);
+            })
             ->get(['sparepart_rusaks.id as id_rusak', 'sparepart_rusaks.*', 'spareparts.*']);
 
         $data_sparepart_retur = ReturSparepart::join('spareparts', 'retur_spareparts.kode_barang', '=', 'spareparts.id')

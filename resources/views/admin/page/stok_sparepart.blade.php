@@ -52,97 +52,54 @@
                                 <th class="col-md-2">Opsi</th>
                             </thead>
                             <tbody>
-                                @php
-                                    $spareparts = [];
-                                    $threshold = 2;
-
-                                    // Menghitung total terpakai dan terjual untuk semua sparepart
-                                    foreach ($data_sparepart as $item) {
-                                        $total_terpakai = 0;
-                                        $total_terjual = 0;
-
-                                        foreach ($view_terpakai as $b) {
-                                            if ($b->kode_sparepart == $item->id) {
-                                                $total_terpakai += $b->qty_part;
-                                            }
-                                        }
-
-                                        foreach ($view_terjual as $b) {
-                                            if ($b->kode_sparepart == $item->id) {
-                                                $total_terjual += $b->qty_sparepart;
-                                            }
-                                        }
-
-                                        // Tambahkan sparepart jika memenuhi kriteria
-                                        if (
-                                            $item->stok_sparepart == 0 ||
-                                            $total_terpakai + $total_terjual > $threshold
-                                        ) {
-                                            // Filter berdasarkan kategori dan SPL
-                                            $filter_kategori = request('filter_kategori');
-                                            $filter_spl = request('filter_spl');
-
-                                            // Menggunakan kode_kategori dan kode_spl untuk filtering
-                                            if (
-                                                (!$filter_kategori || $item->kode_kategori == $filter_kategori) &&
-                                                (!$filter_spl || $item->kode_spl == $filter_spl)
-                                            ) {
-                                                $spareparts[] = [
-                                                    'item' => $item,
-                                                    'total_terpakai' => $total_terpakai,
-                                                    'total_terjual' => $total_terjual,
-                                                ];
-                                            }
-                                        }
-                                    }
-
-                                    // Mengurutkan berdasarkan total terpakai + total terjual
-                                    usort($spareparts, function ($a, $b) {
-                                        return $b['total_terpakai'] +
-                                            $b['total_terjual'] -
-                                            ($a['total_terpakai'] + $a['total_terjual']);
-                                    });
-                                @endphp
-
-                                @if (count($spareparts) > 0)
-                                    @foreach ($spareparts as $index => $sparepart)
-                                        <tr>
-                                            <td>{{ $index + 1 }}</td>
-                                            <td>{{ $sparepart['item']->kode_sparepart }}</td>
-                                            <td>{{ $sparepart['item']->nama_sparepart }}</td>
-                                            <td>{{ $sparepart['item']->stok_sparepart }}</td>
-                                            <td>{{ $sparepart['total_terjual'] }}</td>
-                                            <td>{{ $sparepart['total_terpakai'] }}</td>
-                                            <td>
-                                                <form id="orderForm" method="POST"
-                                                    action="{{ route('order.store') }}">
-                                                    @csrf
-                                                    <div class="input-group">
-                                                        <input type="number" name="qty" class="form-control"
-                                                            id="qty_order" required>
-                                                        <input type="hidden" name="id_barang"
-                                                            value="{{ $sparepart['item']->id }}">
-                                                        <input type="hidden" name="id_kategori"
-                                                            value="{{ request('filter_kategori') }}">
-                                                        <input type="hidden" name="id_spl"
-                                                            value="{{ request('filter_spl') }}">
-                                                        <button type="submit" class="btn btn-success"><i
-                                                                class="fa fa-plus"></i></button>
-                                                    </div>
-                                                </form>
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                @else
+                                @foreach ($data_sparepart as $index => $sparepart)
                                     <tr>
-                                        <td colspan="7" class="text-center">Tidak ada data yang sesuai dengan filter
-                                            yang dipilih.</td>
+                                        <td>{{ $index + 1 }}</td>
+                                        <td>{{ $sparepart->kode_sparepart }}</td>
+                                        <td>{{ $sparepart->nama_sparepart }}</td>
+                                        <td>{{ $sparepart->stok_sparepart }}</td>
+                                        <td>
+                                            @php
+                                                $terjual = $view_terjual->firstWhere('kode_sparepart', $sparepart->id);
+                                                $total_terjual = $terjual ? $terjual->total_terjual : 0;
+                                            @endphp
+                                            {{ $total_terjual }}
+                                        </td>
+                                        <td>
+                                            @php
+                                                $terpakai = $view_terpakai->firstWhere(
+                                                    'kode_sparepart',
+                                                    $sparepart->id,
+                                                );
+                                                $total_terpakai = $terpakai ? $terpakai->total_terpakai : 0;
+                                            @endphp
+                                            {{ $total_terpakai }}
+                                        </td>
+                                        <td>
+                                            <form id="orderForm" method="POST" action="{{ route('order.store') }}">
+                                                @csrf
+                                                <div class="input-group">
+                                                    <input type="number" name="qty" class="form-control"
+                                                        id="qty_order" required>
+                                                    <input type="hidden" name="id_barang"
+                                                        value="{{ $sparepart->id }}">
+                                                    <button type="submit" class="btn btn-success"><i
+                                                            class="fa fa-plus"></i></button>
+                                                </div>
+                                            </form>
+                                        </td>
                                     </tr>
-                                @endif
+                                @endforeach
                             </tbody>
                         </table>
+
+                        <!-- Pagination -->
+                        <div class="d-flex justify-content-center">
+                            {{ $data_sparepart->links() }}
+                        </div>
                     </div>
                 </div>
+
             </div>
             <div class="tab-pane " id="restok">
                 <div class="row">
