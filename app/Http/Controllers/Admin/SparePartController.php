@@ -401,7 +401,7 @@ class SparePartController extends Controller
             $data_sparepart->where('kode_spl', $filter_spl);
         }
 
-        $data_sparepart = $data_sparepart->latest()->paginate(20);
+        $data_sparepart = $data_sparepart->latest()->get();
 
         // Data lain tetap diambil tanpa filter
         // $data_sparepart_rusak = SparepartRusak::join('spareparts', 'sparepart_rusaks.kode_barang', '=', 'spareparts.id')

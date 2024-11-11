@@ -92,11 +92,6 @@
                                 @endforeach
                             </tbody>
                         </table>
-
-                        <!-- Pagination -->
-                        <div class="d-flex justify-content-center">
-                            {{ $data_sparepart->links() }}
-                        </div>
                     </div>
                 </div>
 
