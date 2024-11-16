@@ -176,6 +176,7 @@ Route::group(['middleware' => ['auth']], function () {
     Route::get('/list/orders', [SparepartController::class, 'view_order'])->name('orders.view');
     Route::post('/orders/update-status', [SparepartController::class, 'updateStatus'])->name('orders.updateStatus');
     Route::post('/orders/update-spl', [SparepartController::class, 'updateSpl'])->name('orders.updateSpl');
+    Route::post('/detail-order/update/{id}', [SparepartController::class, 'updateOrderToStock']);
 
 
 

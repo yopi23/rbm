@@ -513,9 +513,17 @@ class SparePartController extends Controller
             })
             ->get();
 
+        // Mengambil semua DetailOrder yang terkait dengan order yang memiliki status = 1
+        // serta informasi Supplier yang terkait dengan order
+        $detailOrders = DetailOrder::whereHas('order', function ($query) {
+            $query->where('status_order', 1)
+                ->where('update', 0); // Pastikan kolom status sesuai dengan yang ada di tabel 'order'
+        })
+            ->with(['order.supplier'])  // Eager load supplier melalui order
+            ->get();
 
 
-        $content = view('admin.page.list_order', compact(['orders', 'activeSpls', 'selectedSplId']));
+        $content = view('admin.page.list_order', compact(['orders', 'activeSpls', 'selectedSplId', 'detailOrders']));
         return view('admin.layout.blank_page', compact('page', 'content'));
     }
     public function updateStatus(Request $request)
@@ -559,7 +567,43 @@ class SparePartController extends Controller
 
         return redirect()->back()->with('error', 'Order tidak ditemukan.');
     }
+    public function updateOrderToStock(Request $request, $id)
+    {
 
+        // Validasi data yang dikirimkan
+        $request->validate([
+            'data.nama_barang' => 'required|string|max:255',
+            'data.qty' => 'required|numeric',  // Pastikan qty juga angka
+            'data.beli_terakhir' => 'required|numeric',
+            'data.pasang_terakhir' => 'required|numeric',
+            'data.ecer_terakhir' => 'required|numeric',
+            'data.jasa_terakhir' => 'required|numeric',
+        ]);
+
+        // Ambil data yang dikirimkan melalui request
+        $restockData = $request->data;
+        // Cari sparepart berdasarkan ID
+        $sparepart = Sparepart::find($id);
+
+        if ($sparepart) {
+            $sparepart->update([
+                'nama_sparepart' => $restockData['nama_barang'],
+                'stok_sparepart' => isset($restockData['qty']) ? $sparepart->stok_sparepart + $restockData['qty'] : $sparepart->stok_sparepart,
+                'harga_beli' => $restockData['beli_terakhir'],
+                'harga_jual' => $restockData['pasang_terakhir'],
+                'harga_ecer' => $restockData['ecer_terakhir'],
+                'harga_pasang' => $restockData['jasa_terakhir'],
+                'kode_kategori' => $restockData['kode_kategori'] ?? $sparepart->kode_kategori,
+                'kode_spl' => $restockData['kode_spl'] ?? $sparepart->kode_spl,
+            ]);
+
+            // Kirim respons sukses jika data berhasil disimpan
+            return response()->json(['success' => true, 'message' => 'Data berhasil diperbarui!']);
+        }
+
+        return response()->json(['success' => false, 'message' => 'Sparepart tidak ditemukan!'], 404);
+    }
+    // end list order
     //Sparepart Rusak
     public function create_sparepart_rusak(Request $request)
     {

@@ -83,6 +83,10 @@
                                                         id="qty_order" required>
                                                     <input type="hidden" name="id_barang"
                                                         value="{{ $sparepart->id }}">
+                                                    <input type="hidden" name="id_kategori"
+                                                        value="{{ request('filter_kategori') }}">
+                                                    <input type="hidden" name="id_spl"
+                                                        value="{{ request('filter_spl') }}">
                                                     <button type="submit" class="btn btn-success"><i
                                                             class="fa fa-plus"></i></button>
                                                 </div>
@@ -161,7 +165,8 @@
                 <div class="row">
                     <div class="col-md-12">
                         <a href="{{ route('create_sparepart_retur') }}" class="btn btn-success"><i
-                                class="fas fa-plus"></i> Tambah Retur</a>
+                                class="fas fa-plus"></i>
+                            Tambah Retur</a>
                         <hr>
 
                         <table class="table" id="TABLES_2">
@@ -255,6 +260,7 @@
         </div>
     </div>
 </div>
+
 <script>
     // Event listener untuk mengupdate tabel berdasarkan filter
     document.getElementById('filter-kategori').addEventListener('change', function() {

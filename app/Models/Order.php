@@ -20,4 +20,9 @@ class Order extends Model
     {
         return $this->hasMany(DetailOrder::class, 'id_order', 'id');
     }
+    // Relasi dengan Supplier melalui splkode
+    public function supplier()
+    {
+        return $this->belongsTo(Supplier::class, 'spl_kode', 'id'); // splkode adalah foreign key, id adalah primary key di tabel suppliers
+    }
 }
