@@ -446,6 +446,11 @@
 <script>
     $(document).ready(function() {
         $('#modal_sp').on('shown.bs.modal', function() {
+            // Reset semua tombol Plus
+            $('#searchResults tbody button').each(function() {
+                $(this).removeClass('btn-secondary disabled').addClass('btn-success');
+                $(this).prop('disabled', false);
+            });
             $('#caripart').focus();
         });
 
@@ -547,6 +552,8 @@
 
             $("#searchResults tbody").append(newRow);
         });
+
+
     };
 
     // Fungsi untuk validasi input jumlah
@@ -578,7 +585,10 @@
 <script>
     function jualSparepart(event, button) {
         event.preventDefault(); // Mencegah perilaku default tombol
-
+        // Cegah tombol diklik dua kali
+        if ($(button).hasClass('disabled')) {
+            return; // Jika sudah disabled, hentikan eksekusi
+        }
         // Ambil data dari tombol
         const id = $(button).data('id');
         const nama = $(button).data('nama');
@@ -629,6 +639,10 @@
 
             }
         });
+
+        // Ubah tombol jadi tidak bisa diklik
+        $(button).removeClass('btn-success').addClass('btn-secondary disabled');
+        $(button).prop('disabled', true);
     }
 
     // detail data

@@ -210,6 +210,31 @@
             }
         });
     });
+
+    $(document).ready(function() {
+        // Saat modal pengambilan dibuka ulang, reset tombol Ambil
+        $('#modal_pengambilan').on('shown.bs.modal', function() {
+            // Aktifkan semua tombol Ambil
+            $('.ambil-form button[type="submit"]').each(function() {
+                $(this).removeClass('disabled').prop('disabled', false);
+            });
+        });
+
+        // Tangani event submit untuk mencegah pengiriman ganda
+        $('.ambil-form').on('submit', function(event) {
+            const form = $(this);
+            const button = form.find('button[type="submit"]');
+
+            // Cek jika tombol sudah disabled
+            if (button.prop('disabled')) {
+                event.preventDefault(); // Cegah pengiriman ulang
+                return;
+            }
+
+            // Disable tombol setelah klik pertama
+            button.addClass('disabled').prop('disabled', true);
+        });
+    });
 </script>
 <script>
     $(document).on('click', '#detail-button', function() {
