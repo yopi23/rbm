@@ -146,6 +146,12 @@
                                          <p>Kategori</p>
                                      </a>
                                  </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('orders.view') }}" class="nav-link">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>List Order</p>
+                                     </a>
+                                 </li>
                              @endif
 
                              <li class="nav-item">
