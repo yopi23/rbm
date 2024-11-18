@@ -596,7 +596,7 @@ class SparePartController extends Controller
                 'kode_kategori' => $restockData['kode_kategori'] ?? $sparepart->kode_kategori,
                 'kode_spl' => $restockData['kode_spl'] ?? $sparepart->kode_spl,
             ]);
-
+            DetailOrder::where('id_barang', $id)->update(['update' => 1]);
             // Kirim respons sukses jika data berhasil disimpan
             return response()->json(['success' => true, 'message' => 'Data berhasil diperbarui!']);
         }
