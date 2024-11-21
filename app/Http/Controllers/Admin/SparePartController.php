@@ -50,7 +50,7 @@ class SparePartController extends Controller
                     <th>Harga Pasang</th>
                     <th>Stok</th>
                     <th>Aksi</th>';
-        $sparepart = Sparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
+        $sparepart = Sparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest('updated_at')->get();
         $tbody = '';
         $no = 1;
         foreach ($sparepart as $item) {

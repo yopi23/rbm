@@ -13,6 +13,8 @@
         </div>
         {{-- <input type="text" id="jmldevices" class="form-control" value="122" readonly /> --}}
         <input type="text" value="" name="totalharga" class="form-control totalharga" hidden>
+        <input type="hidden" id="pengambilan-id" value="{{ $pengambilanKode->id }}">
+
         @php
             $total_part_penjualan = 0;
             $totalitem = 0;
@@ -124,7 +126,7 @@
 </div>
 {{-- modal end pencarian device --}}
 {{-- modal detail device --}}
-<div class="modal fade" id="detail_pengambilan">
+<div class="modal fade" id="detail_pengambilan" data-idp="">{{-- data idnya dari js --}}
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
@@ -171,8 +173,8 @@
     $(document).on('submit', '.ambil-form', function(e) {
         e.preventDefault(); // Mencegah form dari reload halaman
 
-        var form = $(this);
-        var url = form.attr('action'); // Mengambil URL dari form
+        const form = $(this);
+        const url = form.attr('action'); // Mengambil URL dari form
 
         $.ajax({
             url: url,
@@ -240,6 +242,9 @@
     $(document).on('click', '#detail-button', function() {
         var pengambilanId = $(this).data('id'); // Mengambil ID dari data attribute
 
+        $('#detail_pengambilan').data('idp', pengambilanId); // Menyisipkan ID ke modal
+
+
         $.ajax({
             url: '/services/detail/' + pengambilanId, // URL yang sesuai
             type: 'GET',
@@ -257,24 +262,86 @@
                         ',-</td>';
                     newRows += '<td>';
                     newRows +=
-                        '<form action="{{ route('destroy_detail_pengembalian', $pengambilanKode->id) }}" onsubmit="return confirm(\'Apakah Kamu Yakin ?\')" method="POST">';
-                    newRows += '<input type="hidden" name="_method" value="PUT">';
-                    newRows +=
-                        '<input type="hidden" name="_token" value="{{ csrf_token() }}">'; // Token CSRF
-                    newRows += '<input type="hidden" name="id_service" value="' + item.id +
-                        '">';
-                    newRows +=
-                        '<button type="submit" class="btn btn-danger btn-sm delete-form"><i class="fas fa-trash"></i></button>';
-                    newRows += '</form>';
+                        '<button class="btn btn-danger btn-sm delete-btn" data-id="' + item
+                        .id + '">';
+                    newRows += '<i class="fas fa-trash"></i>';
+                    newRows += '</button>';
                     newRows += '</td>';
                     newRows += '</tr>';
                 });
 
                 // Menghapus isi sebelumnya dan menambahkan yang baru
+
                 $('#services-tbody').empty().append(newRows);
             },
             error: function(xhr) {
                 alert('Terjadi kesalahan saat mengambil detail.');
+            }
+        });
+    });
+
+    // Event Listener untuk tombol hapus
+    $(document).on('click', '.delete-btn', function() {
+        var serviceId = $(this).data('id'); // Ambil ID dari tombol
+        const pengambilanId = $('#pengambilan-id').val();
+        Swal.fire({
+            title: 'Apakah Kamu Yakin?',
+            text: `Menghapus data ini?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Ya, hapus!',
+            cancelButtonText: 'Tidak, batalkan'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: '/pengembalian/' +
+                        serviceId + '/detail_destroy', // Endpoint API untuk penghapusan
+                    type: 'DELETE',
+                    data: {
+                        _token: '{{ csrf_token() }}', // Token CSRF untuk keamanan
+                        id_service: serviceId
+                    },
+                    success: function(response) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Berhasil!',
+                            text: 'Data berhasil dihapus!',
+                        });
+                        // Hapus baris dari tabel tanpa reload halaman
+                        $('button[data-id="' + serviceId + '"]').closest('tr').remove();
+                        $.ajax({
+                            url: '/pengembalian/' + pengambilanId +
+                                '/pengambilan_detail', // Sesuaikan dengan rute backend
+                            type: 'GET',
+                            success: function(response) {
+                                $('#jmlitem').val(response
+                                    .jumlahData); // Perbarui jumlah item
+
+                                let totalPengambilan = 0;
+                                $.each(response.pengambilanServices, function(
+                                    index, item) {
+                                    const totalItem = item.total_biaya -
+                                        item.dp;
+                                    totalPengambilan += totalItem;
+                                });
+
+                                $('#gtotal-ambil').text('Rp. ' + new Intl
+                                    .NumberFormat()
+                                    .format(totalPengambilan));
+                                $('.totalharga').val(
+                                    totalPengambilan); // Perbarui total harga
+                            },
+                            error: function(xhr) {
+                                alert(
+                                    'Terjadi kesalahan saat memperbarui data.'
+                                );
+                            }
+                        });
+                    },
+                    error: function(xhr) {
+                        alert('Terjadi kesalahan saat menghapus data.');
+                    }
+                });
             }
         });
     });

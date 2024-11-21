@@ -262,7 +262,8 @@ Route::group(['middleware' => ['auth']], function () {
     Route::get('/pengembalian', [PengembalianController::class, 'index'])->name('pengembalian');
     Route::put('/pengembalian/{id}/update', [PengembalianController::class, 'update'])->name('update_pengembalian');
     Route::put('/pengembalian/{id}/detail_store', [PengembalianController::class, 'store_detail'])->name('store_detail_pengembalian');
-    Route::put('/pengembalian/{id}/detail_destroy', [PengembalianController::class, 'destroy_detail'])->name('destroy_detail_pengembalian');
+    Route::get('/pengembalian/{id}/pengambilan_detail', [PengembalianController::class, 'pengambilan_detail'])->name('detail_pengembalian');
+    Route::delete('/pengembalian/{id}/detail_destroy', [PengembalianController::class, 'destroy_detail'])->name('destroy_detail_pengembalian');
     Route::get('/services/detail/{id}', [DashboardController::class, 'getDetail']);
 
     //Pengeluaran

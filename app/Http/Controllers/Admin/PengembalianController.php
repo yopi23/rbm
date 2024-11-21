@@ -85,10 +85,32 @@ class PengembalianController extends Controller
     }
     public function destroy_detail(Request $request, $id)
     {
-        $update = modelServices::findOrFail($request->id_service);
-        $update->update([
+        $service = modelServices::findOrFail($request->id_service);
+
+        // Update field kode_pengambilan
+        $service->update([
             'kode_pengambilan' => ''
         ]);
-        return redirect()->back();
+
+        // Kembalikan respons JSON untuk AJAX
+        return response()->json([
+            'success' => true,
+            'message' => 'Data berhasil dihapus!'
+        ]);
+    }
+    public function pengambilan_detail($id)
+    {
+        $pengambilanServices = modelServices::where('kode_pengambilan', $id)->get();
+
+        $jumlahData = $pengambilanServices->count();
+        $totalBiaya = $pengambilanServices->sum(function ($item) {
+            return $item->total_biaya - $item->dp;
+        });
+
+        return response()->json([
+            'jumlahData' => $jumlahData,
+            'pengambilanServices' => $pengambilanServices,
+            'totalBiaya' => $totalBiaya,
+        ]);
     }
 }

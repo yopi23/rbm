@@ -421,6 +421,30 @@
         } else if (this.value === 'pengambilan') {
             hideAll(allForms);
             show(formTakeOut);
+            const pengambilanId = $('#pengambilan-id').val();
+            $.ajax({
+                url: '/pengembalian/' + pengambilanId +
+                    '/pengambilan_detail', // Sesuaikan dengan rute backend
+                type: 'GET',
+                success: function(response) {
+                    $('#jmlitem').val(response
+                        .jumlahData); // Perbarui jumlah item
+
+                    let totalPengambilan = 0;
+                    $.each(response.pengambilanServices, function(index, item) {
+                        const totalItem = item.total_biaya - item.dp;
+                        totalPengambilan += totalItem;
+                    });
+
+                    $('#gtotal-ambil').text('Rp. ' + new Intl.NumberFormat()
+                        .format(totalPengambilan));
+                    $('.totalharga').val(
+                        totalPengambilan); // Perbarui total harga
+                },
+                error: function(xhr) {
+                    alert('Terjadi kesalahan saat memperbarui data.');
+                }
+            });
         } else if (this.value === 'pemasukan') {
             hideAll(allForms);
             show(formPemasukan);
@@ -480,7 +504,6 @@
         const hasilPencarian = sparepartData.filter(sparepart => {
             return sparepart.nama_sparepart.toLowerCase().includes(cariPart);
         });
-        console.info(hasilPencarian);
         tampilkanDataTabelSP(hasilPencarian);
     }
 
@@ -645,25 +668,18 @@
         $(button).prop('disabled', true);
     }
 
-    // detail data
-    $(document).ready(function() {
-        // Panggil fungsi untuk mengisi data saat modal dibuka
-        $('#detail_sp').on('shown.bs.modal', function() {
-            updateDetails()
-        });
+    function updateDetails() {
+        // Fungsi untuk memuat data dari localStorage
+        const kodePenjualan = $('#kodetrxid').val(); // Ambil kode penjualan dari PHP
+        const sparepartList = $('#sparepartList');
+        sparepartList.empty(); // Kosongkan tabel sebelum mengisi
 
-        function updateDetails() {
-            // Fungsi untuk memuat data dari localStorage
-            const kodePenjualan = $('#kodetrxid').val(); // Ambil kode penjualan dari PHP
-            const sparepartList = $('#sparepartList');
-            sparepartList.empty(); // Kosongkan tabel sebelum mengisi
-
-            $.ajax({
-                url: `/penjualan/detail/${kodePenjualan}`, // Sesuaikan dengan endpoint di server
-                method: 'GET',
-                success: function(data) {
-                    data.detailsparepart.forEach((item, index) => {
-                        const newRow = `<tr>
+        $.ajax({
+            url: `/penjualan/detail/${kodePenjualan}`, // Sesuaikan dengan endpoint di server
+            method: 'GET',
+            success: function(data) {
+                data.detailsparepart.forEach((item, index) => {
+                    const newRow = `<tr>
                     <td>${index + 1}</td>
                     <td>${sanitizeOutput(item.nama_sparepart)}</td>
                     <td>${formatCurrency(item.detail_harga_jual)}</td>
@@ -672,12 +688,20 @@
                         <button class="btn btn-danger" data-nama="${item.nama_sparepart}" data-qty="${item.qty_sparepart}" onclick="removeItem(this,${item.id_detail})">Hapus</button>
                     </td>
                 </tr>`;
-                        sparepartList.append(newRow);
-                    });
-                },
+                    sparepartList.append(newRow);
+                });
+            },
 
-            });
-        }
+        });
+    }
+    // detail data
+    $(document).ready(function() {
+        // Panggil fungsi untuk mengisi data saat modal dibuka
+        $('#detail_sp').on('shown.bs.modal', function() {
+            updateDetails()
+        });
+
+
     });
 
     // Fungsi untuk menghapus item dari
@@ -705,6 +729,7 @@
                             title: 'Berhasil!',
                             text: 'Detail sparepart berhasil dihapus!',
                         });
+                        updateDetails();
                     },
                     error: function(xhr) {
                         Swal.fire({
@@ -721,24 +746,22 @@
 </script>
 {{-- untuk update otomatis --}}
 <script>
+    // Fungsi untuk mengambil dan memperbarui data
+    function updateTotals() {
+        const kodePenjualan = $('#kodetrxid').val(); // Ambil ID penjualan dari PHP
+        $.ajax({
+            url: `/penjualan/detail/${kodePenjualan}`,
+            method: 'GET',
+            success: function(data) {
+                $('#item').val(data.totalitem); // Update jumlah item
+                $('#gtotal-result').text('Rp. ' + new Intl.NumberFormat().format(data
+                    .total_part_penjualan)); // Update grand total
+                $('#total_penjualan').val(data.total_part_penjualan); // Update input hidden
+
+            }
+        });
+    }
     $(document).ready(function() {
-        // Fungsi untuk mengambil dan memperbarui data
-
-        function updateTotals() {
-            const kodePenjualan = $('#kodetrxid').val(); // Ambil ID penjualan dari PHP
-            $.ajax({
-                url: `/penjualan/detail/${kodePenjualan}`,
-                method: 'GET',
-                success: function(data) {
-                    $('#item').val(data.totalitem); // Update jumlah item
-                    $('#gtotal-result').text('Rp. ' + new Intl.NumberFormat().format(data
-                        .total_part_penjualan)); // Update grand total
-                    $('#total_penjualan').val(data.total_part_penjualan); // Update input hidden
-
-                }
-            });
-        }
-
         // Panggil fungsi updateTotals saat halaman dimuat
         updateTotals();
 
@@ -750,7 +773,6 @@
             updateTotals();
         });
     });
-    console.log('Total Penjualan:', totalPenjualan);
 </script>
 @endsection
 @endif
