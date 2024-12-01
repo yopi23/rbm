@@ -330,9 +330,9 @@
                         </div>
                         <div class="form-group">
                             <label>Jumlah Penarikan</label>
-                            <input type="text" value="0" max={{ $this_user->saldo }} name="jumlah_penarikan"
+                            <input type="number" value="0" max={{ $this_user->saldo }} name="jumlah_penarikan"
                                 id="jumlah_penarikan" class="form-control" required hidden>
-                            <input type="text" max={{ $this_user->saldo }} name="inbon" id="inbon"
+                            <input type="number" max={{ $this_user->saldo }} name="inbon" id="inbon"
                                 class="form-control" required>
                         </div>
                         <div class="form-group">
