@@ -37,7 +37,7 @@ class DashboardController extends Controller
         $userDetail = UserDetail::where('kode_user', $user->kode_user)->first();
 
         // Cek jabatan pengguna
-        if (!$userDetail || !in_array($userDetail->jabatan, [0, 1, 2])) {
+        if (!$userDetail || !in_array($userDetail->jabatan, [1, 2])) {
             // Alihkan pengguna ke halaman lain jika jabatan bukan 0, 1, atau 2
             return redirect()->route('profile')->with('error', 'Anda tidak memiliki akses ke dashboard.');
         }

@@ -392,11 +392,12 @@
                                 <th>Tanggal</th>
                                 <th>Invoice</th>
                                 <th>Nama</th>
-                                <th>No Telp</th>
                                 <th>Tipe Device</th>
                                 <th>Total</th>
                                 <th>Sparepart</th>
                                 <th>Profit</th>
+                                <th>Teknisi</th>
+                                <th>Komisi</th>
                             </thead>
                             <tbody>
                                 @php
@@ -424,11 +425,12 @@
                                         <td>{{ $item->created_at }}</td>
                                         <td>{{ $item->kode_service }}</td>
                                         <td>{{ $item->nama_pelanggan }}</td>
-                                        <td>{{ $item->no_telp }}</td>
                                         <td>{{ $item->type_unit }}</td>
                                         <td>Rp.{{ number_format($item->total_biaya) }},-</td>
                                         <td>Rp.{{ number_format($totalPart) }},-</td>
                                         <td>Rp.{{ number_format($profit) }},-</td>
+                                        <td>{{ $item->name }}</td>
+                                        <td>Rp.{{ number_format($item->profit) }},-</td>
                                     </tr>
                                 @endforeach
                             </tbody>

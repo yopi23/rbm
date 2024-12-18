@@ -439,16 +439,26 @@ class ServiceController extends Controller
                 $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')->where([['kode_services', '=', $id]])->get(['detail_part_services.id as id_detail_part', 'detail_part_services.*', 'spareparts.*']);
                 $part_luar_toko_service = DetailPartLuarService::where([['kode_services', '=', $id]])->get();
                 $presentase = PresentaseUser::where([['kode_user', '=', $id_teknisi]])->get()->first();
+
+                $total_part = 0;
+                foreach ($part_toko_service as $a) {
+                    $total_part += $a->harga_jual * $a->qty_part;
+                }
+                foreach ($part_luar_toko_service as $b) {
+                    $total_part += $b->harga_part * $b->qty_part;
+                }
+                // **Menambahkan total part ke kolom `part` di tabel `sevices`**
+                $update->update([
+                    'harga_sp' => $total_part  // Menambahkan total_part ke kolom 'part'
+                ]);
+
                 if ($presentase) {
-                    $total_part = 0;
-                    foreach ($part_toko_service as $a) {
-                        $total_part += $a->harga_jual * $a->qty_part;
-                    }
-                    foreach ($part_luar_toko_service as $b) {
-                        $total_part += $b->harga_part * $b->qty_part;
-                    }
+
                     $profit = $update->total_biaya - $total_part;
                     $fix_profit =  $profit * $presentase->presentase / 100;
+
+
+
                     $komisi = ProfitPresentase::create([
                         'tgl_profit' => date('Y-m-d'),
                         'kode_service' => $id,
@@ -644,6 +654,10 @@ class ServiceController extends Controller
             if ($presentase) {
                 $profit = $service->total_biaya - $total_part;
                 $fix_profit =  $profit * $presentase->presentase / 100;
+
+                $service->update([
+                    'harga_sp' => $total_part  // Menambahkan total_part ke kolom 'part'
+                ]);
 
                 // Periksa apakah data komisi sudah ada
                 $existingProfit = ProfitPresentase::where('tgl_profit', date('Y-m-d'))

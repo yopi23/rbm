@@ -18,6 +18,7 @@ use App\Models\Pesanan;
 use App\Models\Sevices;
 use App\Models\Hutang;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class LaporanController extends Controller
 {
@@ -40,7 +41,21 @@ class LaporanController extends Controller
 
             //Service
             $serviceDp = Sevices::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
-            $service = Sevices::where([['sevices.kode_owner', '=', $this->getThisUser()->id_upline], ['sevices.status_services', '=', 'Diambil'], ['sevices.updated_at', '>=', $request->tgl_awal . ' 00:00:00'], ['sevices.updated_at', '<=', $request->tgl_akhir . ' 23:59:59']])->latest()->get();
+            // $service = Sevices::where([['sevices.kode_owner', '=', $this->getThisUser()->id_upline], ['sevices.status_services', '=', 'Diambil'], ['sevices.updated_at', '>=', $request->tgl_awal . ' 00:00:00'], ['sevices.updated_at', '<=', $request->tgl_akhir . ' 23:59:59']])->latest()->get();
+
+            $service = DB::table('sevices')
+                ->join('profit_presentases', 'sevices.id', '=', 'profit_presentases.kode_service') // Menghubungkan id dan kode_service
+                ->join('users', 'sevices.id_teknisi', '=', 'users.id') // Menghubungkan id dan is
+                ->where([
+                    ['sevices.kode_owner', '=', $this->getThisUser()->id_upline],
+                    ['sevices.status_services', '=', 'Diambil'],
+                    ['sevices.updated_at', '>=', $request->tgl_awal . ' 00:00:00'],
+                    ['sevices.updated_at', '<=', $request->tgl_akhir . ' 23:59:59']
+                ])
+                ->select('sevices.*', 'profit_presentases.profit', 'users.name') // Memilih kolom yang dibutuhkan
+                ->latest()
+                ->get();
+
             $part_toko_service = DetailPartServices::join('sevices', 'detail_part_services.kode_services', '=', 'sevices.id')->join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')->where([['sevices.kode_owner', '=', $this->getThisUser()->id_upline], ['sevices.status_services', '=', 'Diambil'], ['detail_part_services.created_at', '>=', $request->tgl_awal . ' 00:00:00'], ['detail_part_services.created_at', '<=', $request->tgl_akhir . ' 23:59:59']])->get(['detail_part_services.id as id_detail_part', 'detail_part_services.created_at as tgl_keluar', 'detail_part_services.*', 'spareparts.*', 'sevices.*', 'sevices.updated_at']);
             $part_toko = DetailPartServices::join('sevices', 'detail_part_services.kode_services', '=', 'sevices.id')->join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')->where([['sevices.kode_owner', '=', $this->getThisUser()->id_upline], ['sevices.status_services', '=', 'Diambil'], ['sevices.updated_at', '>=', $request->tgl_awal . ' 00:00:00'], ['sevices.updated_at', '<=', $request->tgl_akhir . ' 23:59:59']])->get(['detail_part_services.id as id_detail_part', 'detail_part_services.created_at as tgl_keluar', 'detail_part_services.*', 'spareparts.*', 'sevices.*', 'sevices.updated_at']);
             $part_luar_toko_service = DetailPartLuarService::join('sevices', 'detail_part_luar_services.kode_services', '=', 'sevices.id')

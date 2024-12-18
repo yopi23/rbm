@@ -66,6 +66,35 @@ class LaciController extends Controller
                     'kategori_lacis.name_laci'
                 )
                 ->get();
+
+            $komisi = DB::table('profit_presentases')
+                ->join('sevices', 'sevices.id', '=', 'profit_presentases.kode_service') // Menggabungkan tabel sevices dan profit_presentases
+                ->join('users', 'sevices.id_teknisi', '=', 'users.id')
+                ->select(
+                    'profit_presentases.profit', // Kolom profit dari profit_presentases
+                    'sevices.*', // Semua kolom dari sevices
+                    'users.name'
+                )
+                ->where([
+                    ['sevices.kode_owner', '=', $this->getThisUser()->id_upline],
+                    ['profit_presentases.updated_at', '>=', $request->tgl_awal . ' 00:00:00'],
+                    ['profit_presentases.updated_at', '<=', $request->tgl_akhir . ' 23:59:59']
+                ])
+                ->get();
+            $penarikan = DB::table('penarikans')
+                ->join('users', 'users.id', '=', 'penarikans.kode_user')
+                ->join('user_details', 'user_details.kode_user', '=', 'penarikans.kode_user')
+                ->select(
+                    'penarikans.*',
+                    'users.name',
+                    'user_details.saldo'
+                )
+                ->where([
+                    ['penarikans.kode_owner', '=', $this->getThisUser()->id_upline],
+                    ['penarikans.updated_at', '>=', $request->tgl_awal . ' 00:00:00'],
+                    ['penarikans.updated_at', '<=', $request->tgl_akhir . ' 23:59:59']
+                ])
+                ->get();
         } else {
             $listLaci = HistoryLaci::join('kategori_lacis', 'history_laci.id_kategori', '=', 'kategori_lacis.id')
                 ->select(
@@ -104,6 +133,34 @@ class LaciController extends Controller
                     'kategori_lacis.name_laci'
                 )
                 ->get();
+            $komisi = DB::table('profit_presentases')
+                ->join('sevices', 'sevices.id', '=', 'profit_presentases.kode_service') // Menggabungkan tabel sevices dan profit_presentases
+                ->join('users', 'sevices.id_teknisi', '=', 'users.id')
+                ->select(
+                    'profit_presentases.profit', // Kolom profit dari profit_presentases
+                    'sevices.*', // Semua kolom dari sevices
+                    'users.name'
+                )
+                ->where([
+                    ['sevices.kode_owner', '=', $this->getThisUser()->id_upline],
+                    ['profit_presentases.updated_at', '>=', $today . ' 00:00:00'],
+                    ['profit_presentases.updated_at', '<=', $today . ' 23:59:59']
+                ])
+                ->get();
+            $penarikan = DB::table('penarikans')
+                ->join('users', 'users.id', '=', 'penarikans.kode_user')
+                ->join('user_details', 'user_details.kode_user', '=', 'penarikans.kode_user')
+                ->select(
+                    'penarikans.*',
+                    'users.name',
+                    'user_details.saldo'
+                )
+                ->where([
+                    ['penarikans.kode_owner', '=', $this->getThisUser()->id_upline],
+                    ['penarikans.updated_at', '>=', $today . ' 00:00:00'],
+                    ['penarikans.updated_at', '<=', $today . ' 23:59:59']
+                ])
+                ->get();
         }
 
         // Ambil semua kategori laci untuk memastikan semua ditampilkan
@@ -124,7 +181,7 @@ class LaciController extends Controller
             $listLaci = $listLaci->toArray();
         }
 
-        return view('laci.form', compact('page', 'listLaci', 'allLaci', 'riwayat'));
+        return view('laci.form', compact('page', 'listLaci', 'allLaci', 'riwayat', 'komisi', 'penarikan'));
     }
 
 

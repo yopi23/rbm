@@ -17,6 +17,7 @@ class Sevices extends Model
         'keterangan',
         'total_biaya',
         'dp',
+        'harga_sp',
         'id_teknisi',
         'kode_pengambilan',
         'status_services',

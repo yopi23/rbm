@@ -33,14 +33,15 @@
                                     @csrf
                                     <div class="form-group text-start">
                                         <label>Email</label>
-                                        <input type="email" name="email" id="email" class="form-control" autofocus
-                                            autocomplete="off">
+                                        <input type="email" name="email" id="email"
+                                            class="form-control @error('email') is-invalid @enderror"
+                                            value="{{ old('email') }}" autofocus autocomplete="off">
                                     </div>
                                     <br>
                                     <div class="form-group text-start">
                                         <label>Password</label>
-                                        <input type="password" name="password" id="password" class="form-control"
-                                            autocomplete="off">
+                                        <input type="password" name="password" id="password"
+                                            class="form-control @error('password') is-invalid @enderror" autocomplete="off">
                                     </div>
                                     <br>
                                     <div class="form-group">

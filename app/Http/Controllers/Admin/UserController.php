@@ -112,8 +112,16 @@ class UserController extends Controller
     public function store_penarikan(Request $request)
     {
         $user = $this->getThisUser();
-        // Validasi saldo cukup untuk penarikan
-        if ($request->jumlah_penarikan <= 0 || $user->saldo < $request->jumlah_penarikan) {
+        // Menghapus karakter non-angka (kecuali tanda desimal jika dibutuhkan)
+        $jumlahPenarikan = preg_replace('/[^0-9.]/', '', $request->jumlah_penarikan);
+
+        // Jika nilai hasil preg_replace masih kosong atau bukan angka, kembalikan error
+        if (!is_numeric($jumlahPenarikan) || $jumlahPenarikan <= 0) {
+            return redirect()->back()->with([
+                'error' => 'Jumlah penarikan tidak valid'
+            ]);
+        }
+        if ($user->saldo < $jumlahPenarikan) {
             return redirect()->back()->with([
                 'error' => 'Oops, saldo anda tidak mencukupi'
             ]);
@@ -126,16 +134,16 @@ class UserController extends Controller
             'kode_penarikan' => $kode,
             'kode_user' => $this->getThisUser()->kode_user,
             'kode_owner' => $this->getThisUser()->id_upline,
-            'jumlah_penarikan' => $request->jumlah_penarikan,
+            'jumlah_penarikan' => $jumlahPenarikan,
             'catatan_penarikan' => $request->catatan_penarikan != null ? $request->catatan_penarikan : '-',
             'status_penarikan' => '1',
-            'dari_saldo' => '1',
+            'dari_saldo' => $user->saldo,
         ]);
         if ($create) {
             $data = Penarikan::where([['kode_penarikan', '=', $kode]])->get()->first();
             $pegawais = UserDetail::where([['kode_user', '=', $data->kode_user]])->get()->first();
-            $jumlahPenarikan = $request->jumlah_penarikan;
-            if ($jumlahPenarikan <= 0 || $pegawais->saldo < $request->jumlah_penarikan) {
+
+            if ($jumlahPenarikan <= 0 || $pegawais->saldo < $jumlahPenarikan) {
                 return redirect()->back()->with([
                     'error' => 'Oops, saldo anda tidak cukup'
                 ]);

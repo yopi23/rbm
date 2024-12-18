@@ -83,7 +83,7 @@
 
             </div>
             {{-- @endif --}}
-            <div class="card">
+            <div class="card card-outline card-success">
                 @if ($this_user->jabatan == '1')
                     <div class="card-header">
                         <div class="row">
@@ -131,6 +131,10 @@
                                 </tr>
                             </div>
                             <div class="tbody">
+                                @php
+                                    $totalmasuk = 0;
+                                    $totalkeluar = 0;
+                                @endphp
                                 @foreach ($riwayat as $index => $rincian)
                                     <tr>
                                         <td>{{ $index + 1 }}</td>
@@ -155,12 +159,147 @@
                                         <td>{{ $rincian->keterangan }}</td>
                                         <td>{{ $rincian->updated_at }}</td>
                                     </tr>
+                                    @php
+                                        $totalmasuk += $rincian->masuk;
+                                        $totalkeluar += $rincian->keluar;
+                                    @endphp
                                 @endforeach
                             </div>
+                            <tr class="table-success  font-weight-bold">
+                                <td colspan="2"><strong>Total</strong></td>
+                                <td>Rp.{{ number_format($totalmasuk) }},-</td>
+                                <td>
+                                    Rp.{{ number_format($totalkeluar) }},-
+                                </td>
+                                <td>Rp.{{ number_format($totalmasuk - $totalkeluar) }},-</td>
+                                <td colspan="3"></td>
+                            </tr>
                         </table>
                     </div>
                 </div>
             </div>
+
+            {{-- komisi  --}}
+            <div class="card card-outline card-primary">
+                <div class="card-header">
+                    <h4>Komisi</h4>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover ">
+                            <div class="thead">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Teknisi</th>
+                                    <th>Komisi</th>
+                                    <th>Sparepart</th>
+                                    <th>Unit</th>
+                                    <th>Pelanggan</th>
+                                    <th>Keterangan</th>
+                                    <th>Tanggal</th>
+                                </tr>
+                            </div>
+                            <div class="tbody">
+                                @php
+                                    $totalkomisi = 0;
+                                    $totalsp = 0;
+                                @endphp
+                                @foreach ($komisi as $index => $rincian)
+                                    <tr>
+                                        <td>{{ $index + 1 }}</td>
+                                        <td>{{ $rincian->name }}</td>
+                                        <td>
+                                            <span style="color: rgb(133, 143, 0)">+
+                                                {{ number_format($rincian->profit) }}</span>
+                                        </td>
+                                        <td>
+                                            {{ number_format($rincian->harga_sp) }}
+                                        </td>
+                                        <td>
+                                            {{ $rincian->type_unit }}
+                                        </td>
+
+                                        <td>
+                                            {{ $rincian->nama_pelanggan }}
+                                        </td>
+
+                                        <td>{{ $rincian->keterangan }}</td>
+                                        <td>{{ $rincian->updated_at }}</td>
+                                    </tr>
+                                    @php
+                                        $totalkomisi += $rincian->profit;
+                                        $totalsp += $rincian->harga_sp;
+                                    @endphp
+                                @endforeach
+                                <tr class="table-primary font-weight-bold">
+                                    <td colspan="2"><strong>Total</strong></td>
+                                    <td>Rp.{{ number_format($totalkomisi) }},-</td>
+                                    <!-- Column 3 total -->
+                                    <td>Rp.{{ number_format($totalsp) }},-</td> <!-- Column 4 total -->
+                                    <td colspan="4"></td> <!-- Empty cells for other columns -->
+                                </tr>
+                            </div>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+            {{-- end komisi  --}}
+            {{--  penarikan --}}
+            <div class="card card-outline card-danger">
+                <div class="card-header">
+                    <h4>Penarikan</h4>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover ">
+                            <div class="thead">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Teknisi</th>
+                                    <th>Jumlah</th>
+                                    <th>Saldo</th>
+                                    <th>Keterangan</th>
+                                    <th>Tanggal</th>
+                                </tr>
+                            </div>
+                            <div class="tbody">
+                                @php
+                                    $totalbon = 0;
+
+                                @endphp
+                                @foreach ($penarikan as $index => $rincian)
+                                    <tr>
+                                        <td>{{ $index + 1 }}</td>
+                                        <td>{{ $rincian->name }}</td>
+                                        <td>
+                                            <span style="color: rgb(133, 143, 0)">+
+                                                {{ number_format($rincian->jumlah_penarikan) }}</span>
+                                        </td>
+                                        <td>
+                                            {{ number_format($rincian->dari_saldo - $rincian->jumlah_penarikan) }}
+                                        </td>
+
+                                        <td>{{ $rincian->catatan_penarikan }}</td>
+                                        <td>{{ $rincian->updated_at }}</td>
+                                    </tr>
+                                    @php
+                                        $totalbon += $rincian->jumlah_penarikan;
+
+                                    @endphp
+                                @endforeach
+                                <tr class="table-danger font-weight-bold">
+                                    <td colspan="2"><strong>Total</strong></td>
+                                    <td>Rp.{{ number_format($totalbon) }},-</td>
+                                    <td colspan="5"></td> <!-- Empty cells for other columns -->
+                                </tr>
+                            </div>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+            {{-- end penarikan --}}
         </div>
         {{-- modal kategori --}}
         <div class="modal fade" id="mdkategori" tabindex="-1" role="dialog" aria-labelledby="recehModalLabel"
