@@ -1,5 +1,5 @@
-# FROM php:8.1-fpm
-FROM shinsenter/frankenphp:latest
+FROM php:8.1-fpm
+# FROM shinsenter/frankenphp:latest
 
 COPY composer.* /var/www/rbm/
 
@@ -37,5 +37,5 @@ USER www
 
 EXPOSE 9000
 
-# CMD [ "php-fpm"]
-CMD ["frankenphp", "start"]
+CMD [ "php-fpm"]
+# CMD ["frankenphp", "start"]
