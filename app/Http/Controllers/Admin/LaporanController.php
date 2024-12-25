@@ -67,10 +67,22 @@ class LaporanController extends Controller
 
 
             //Penjualan
-            $penjualan = Penjualan::where([['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '=', '1'], ['penjualans.created_at', '>=', $request->tgl_awal . ' 00:00:00'], ['penjualans.created_at', '<=', $request->tgl_akhir . ' 23:59:59']])->latest()->get();
+            // $penjualan = Penjualan::where([['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '=', '1'],  ['penjualans.created_at', '>=', $request->tgl_awal . ' 00:00:00'], ['penjualans.created_at', '<=', $request->tgl_akhir . ' 23:59:59']])->latest()->get();
+            $penjualan = Penjualan::join('detail_sparepart_penjualans', 'penjualans.id', '=', 'detail_sparepart_penjualans.kode_penjualan')
+                ->where([
+                    ['penjualans.kode_owner', '=', $this->getThisUser()->id_upline],
+                    ['penjualans.status_penjualan', '=', '1'],
+                    ['penjualans.created_at', '>=', $request->tgl_awal . ' 00:00:00'],
+                    ['penjualans.created_at', '<=', $request->tgl_akhir . ' 23:59:59'],
+                ])
+                ->where('detail_sparepart_penjualans.status_rf', '=', 0)  // Kondisi untuk memilih detail dengan status_rf = 0
+                ->select('penjualans.*', 'detail_sparepart_penjualans.status_rf') // Pilih kolom yang diinginkan
+                ->latest()
+                ->get();
+
             $penjualan_sparepart = DetailSparepartPenjualan::join('penjualans', 'detail_sparepart_penjualans.kode_penjualan', '=', 'penjualans.id')
                 ->join('spareparts', 'detail_sparepart_penjualans.kode_sparepart', '=', 'spareparts.id')
-                ->where([['penjualans.kode_owner', '=', $this->getThisUser()->id_upline], ['penjualans.status_penjualan', '=', '1'], ['penjualans.created_at', '>=', $request->tgl_awal . ' 00:00:00'], ['penjualans.created_at', '<=', $request->tgl_akhir . ' 23:59:59']])
+                ->where([['penjualans.kode_owner', '=', $this->getThisUser()->id_upline], ['penjualans.status_penjualan', '=', '1'], ['detail_sparepart_penjualans.status_rf', '=', '0'], ['penjualans.created_at', '>=', $request->tgl_awal . ' 00:00:00'], ['penjualans.created_at', '<=', $request->tgl_akhir . ' 23:59:59']])
                 ->get(['detail_sparepart_penjualans.created_at as tgl_keluar', 'detail_sparepart_penjualans.id as id_detail', 'detail_sparepart_penjualans.*', 'spareparts.*', 'penjualans.*']);
             $penjualan_barang = DetailBarangPenjualan::join('penjualans', 'detail_barang_penjualans.kode_penjualan', '=', 'penjualans.id')
                 ->join('handphones', 'detail_barang_penjualans.kode_barang', '=', 'handphones.id')

@@ -15,5 +15,6 @@ class DetailSparepartPenjualan extends Model
         'detail_harga_modal',
         'detail_harga_jual',
         'user_input',
+        'status_rf',
     ];
 }

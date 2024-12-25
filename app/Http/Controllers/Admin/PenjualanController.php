@@ -22,6 +22,7 @@ class PenjualanController extends Controller
     //
     public function view_penjualan(Request $request)
     {
+
         $page = "Penjualan";
         $listLaci = $this->getKategoriLaci();
         $data = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '=', '0']])->get()->first();
@@ -64,6 +65,54 @@ class PenjualanController extends Controller
         $all_sparepart = Sparepart::where([['kode_owner', '=', $this->getThisUser()->id_upline]])->latest()->get();
         $all_barang = Handphone::where([['kode_owner', '=', $this->getThisUser()->id_upline]])->latest()->get();
         $content = view('admin.page.penjualan', compact(['data', 'barang', 'sparepart', 'all_sparepart', 'all_barang', 'view_penjualan', 'view_barang', 'view_sparepart', 'view_garansi', 'garansi', 'listLaci']));
+
+        return view('admin.layout.blank_page', compact(['page', 'content', 'listLaci']));
+    }
+
+    public function view_riwayat_penjualan(Request $request)
+    {
+        $page = "Riwayat penjualan";
+        $listLaci = $this->getKategoriLaci();
+        $data = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '=', '0']])->get()->first();
+        $count = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline]])->get()->count();
+        if (!$data) {
+            $kode = 'TRX' . date('Ymd') . auth()->user()->id . $count;
+            $create = Penjualan::create([
+                'kode_penjualan' => $kode,
+                'kode_owner' => $this->getThisUser()->id_upline,
+                'nama_customer' => '-',
+                'catatan_customer' => '',
+                'total_bayar' => '0',
+                'total_penjualan' => '0',
+                'user_input' => auth()->user()->id,
+                'status_penjualan' => '0',
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
+            ]);
+            if ($create) {
+                $data = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '=', '0']])->get()->first();
+            }
+        }
+        // Mengambil data 5 hari terakhir
+        $fiveDaysAgo = Carbon::now()->subDays(5)->startOfDay();
+
+        $view_penjualan = Penjualan::where([
+            ['kode_owner', '=', $this->getThisUser()->id_upline],
+            ['status_penjualan', '!=', '0']
+        ])
+            ->where('created_at', '>=', $fiveDaysAgo)
+            ->latest()
+            ->get();
+        $view_barang = DetailBarangPenjualan::join('handphones', 'detail_barang_penjualans.kode_barang', '=', 'handphones.id')->get(['detail_barang_penjualans.id as id_detail', 'detail_barang_penjualans.*', 'handphones.*']);
+        $view_sparepart = DetailSparepartPenjualan::join('spareparts', 'detail_sparepart_penjualans.kode_sparepart', '=', 'spareparts.id')->get(['detail_sparepart_penjualans.id as id_detail', 'detail_sparepart_penjualans.*', 'spareparts.*']);
+        $view_garansi = Garansi::where([['type_garansi', '=', 'penjualan']])->get();
+        $garansi = Garansi::where([['type_garansi', '=', 'penjualan'], ['kode_garansi', '=', $data->kode_penjualan]])->get();
+        $barang = DetailBarangPenjualan::join('handphones', 'detail_barang_penjualans.kode_barang', '=', 'handphones.id')->where([['detail_barang_penjualans.kode_penjualan', '=', $data->id]])->get(['detail_barang_penjualans.id as id_detail', 'detail_barang_penjualans.*', 'handphones.*']);
+        $sparepart = DetailSparepartPenjualan::join('spareparts', 'detail_sparepart_penjualans.kode_sparepart', '=', 'spareparts.id')->where([['detail_sparepart_penjualans.kode_penjualan', '=', $data->id]])->get(['detail_sparepart_penjualans.id as id_detail', 'detail_sparepart_penjualans.*', 'spareparts.*']);
+        $all_sparepart = Sparepart::where([['kode_owner', '=', $this->getThisUser()->id_upline]])->latest()->get();
+        $all_barang = Handphone::where([['kode_owner', '=', $this->getThisUser()->id_upline]])->latest()->get();
+
+        $content = view('admin.page.riwayat_penjualan', compact(['data', 'barang', 'sparepart', 'all_sparepart', 'all_barang', 'view_penjualan', 'view_barang', 'view_sparepart', 'view_garansi', 'garansi', 'listLaci']));
         return view('admin.layout.blank_page', compact(['page', 'content', 'listLaci']));
     }
     //Sparepart

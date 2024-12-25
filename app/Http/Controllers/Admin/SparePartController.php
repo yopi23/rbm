@@ -17,6 +17,7 @@ use App\Models\DetailOrder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Milon\Barcode\Facades\DNS1DFacade;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class SparePartController extends Controller
 {
@@ -813,12 +814,13 @@ class SparePartController extends Controller
                     'error' => 'Jumlah Sparepart Yang Diretur Tidak Boleh Melebihi Stok Barang'
                 ]);
         }
+
         $create = ReturSparepart::create([
-            'tgl_retur_barang' => $request->tgl_retur_barang,
+            'tgl_retur_barang' => $request->tgl_retur_barang  ?: today('Y-m-d'),
             'kode_barang' => $request->kode_barang,
             'kode_supplier' => $request->kode_supplier,
             'jumlah_retur' => $request->jumlah_retur,
-            'catatan_retur' => $request->catatan_retur != null ? $request->catatan_retur : '-',
+            'catatan_retur' => $request->catatan_retur ?: '-',
             'user_input' => auth()->user()->id,
             'kode_owner' => $request->kode_owner,
         ]);
@@ -835,6 +837,69 @@ class SparePartController extends Controller
         }
         return redirect()->route('stok_sparepart')->with('error', "Oops, Something Went Wrong");
     }
+    // baru ditambahkan untuk retur
+    public function store_sparepart_retur_toko(Request $request)
+    {
+        $data_sparepart = Sparepart::findOrFail($request->kode_barang);
+        try {
+            $detail_penjualan = DetailSparepartPenjualan::where('kode_penjualan', $request->penjualan_id)
+                ->where('kode_sparepart', $request->kode_barang)
+                ->firstOrFail();
+        } catch (ModelNotFoundException $e) {
+            return back()->with('error', 'Barang tidak ditemukan untuk penjualan ini.');
+        }
+        if ($detail_penjualan->qty_sparepart < $request->jumlah_retur) {
+            return redirect()->back()
+                ->with([
+                    'error' => 'Jumlah Sparepart Yang Diretur Tidak Boleh Melebihi Stok Barang'
+                ]);
+        }
+        if ($request->jenis_retur == 'supplier') {
+            $create = ReturSparepart::create([
+                'tgl_retur_barang' => $request->tgl_retur_barang  ?: now()->toDateString(),
+                'kode_barang' => $request->kode_barang,
+                'kode_supplier' => $request->kode_supplier,
+                'jumlah_retur' => $request->jumlah_retur,
+                'catatan_retur' => $request->catatan_retur ?: '-',
+                'user_input' => auth()->user()->id,
+                'kode_owner' => $this->getThisUser()->id_upline,
+
+            ]);
+            if ($create) {
+                $qty_awal = $detail_penjualan->qty_sparepart;
+                $qty_baru = $qty_awal - $request->jumlah_retur;
+                $detail_penjualan->update([
+                    'status_rf' => 1,
+                    'qty_sparepart' => $qty_baru,
+                ]);
+                return redirect()->back()
+                    ->with([
+                        'success' => 'Retur Berhasil DiTambah'
+                    ]);
+            }
+        } else {
+            $qty_awal = $detail_penjualan->qty_sparepart;
+            $qty_baru = $qty_awal - $request->jumlah_retur;
+            $detail_penjualan->update([
+                'status_rf' => 1,
+                'qty_sparepart' => $qty_baru,
+            ]);
+            $stock_awal = $data_sparepart->stok_sparepart;
+            $stok_baru = $stock_awal + $request->jumlah_retur;
+            $data_sparepart->update([
+                'stok_sparepart' => $stok_baru,
+            ]);
+            return redirect()->back()
+                ->with([
+                    'success' => 'Retur Berhasil DiTambah'
+                ]);
+        }
+
+
+        return redirect()->back()->with('error', "Oops, Something Went Wrong");
+    }
+    // end baru
+
     public function ubah_status_retur(Request $request, $id)
     {
         $update = ReturSparepart::findOrFail($id);

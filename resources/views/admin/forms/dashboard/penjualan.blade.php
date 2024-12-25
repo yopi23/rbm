@@ -16,6 +16,7 @@
             <input type="text" id="kodetrxid" class="form-control" value="{{ $kodetrx->id }}" hidden />
             <input type="date" name="tgl_penjualan" id="tgl_penjualan" value="{{ date('Y-m-d') }}"
                 class="form-control" readonly>
+            <a class="btn btn-secondary" href="{{ route('transaksi') }}"><i class="fa fa-folder-open"></i></a>
         </div>
         @php
             $total_part_penjualan = 0;

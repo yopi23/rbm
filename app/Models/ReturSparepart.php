@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class ReturSparepart extends Model
 {
     use HasFactory;
-    protected $fillable =[
+    protected $fillable = [
         'tgl_retur_barang',
         'kode_supplier',
         'kode_barang',
@@ -17,5 +17,6 @@ class ReturSparepart extends Model
         'catatan_retur',
         'user_input',
         'kode_owner',
+
     ];
 }

@@ -189,6 +189,7 @@ Route::group(['middleware' => ['auth']], function () {
 
     //Sparepart Retur
     Route::get('sparepart_retur/create', [SparePartController::class, 'create_sparepart_retur'])->name('create_sparepart_retur');
+    Route::post('refund/store', [SparePartController::class, 'store_sparepart_retur_toko'])->name('refund.store');
     Route::post('sparepart_retur/store', [SparePartController::class, 'store_sparepart_retur'])->name('store_sparepart_retur');
     Route::put('sparepart_retur/{id}/ubah_status', [SparePartController::class, 'ubah_status_retur'])->name('ubah_status_retur');
 
@@ -239,6 +240,7 @@ Route::group(['middleware' => ['auth']], function () {
     //Transaksi
     //Penjualan
     Route::get('/penjualan', [PenjualanController::class, 'view_penjualan'])->name('penjualan');
+    Route::get('/list/transaksi', [PenjualanController::class, 'view_riwayat_penjualan'])->name('transaksi');
     Route::get('penjualan/{id}/edit', [PenjualanController::class, 'edit'])->name('edit_penjualan');
     Route::put('penjualan/{id}/update', [PenjualanController::class, 'update'])->name('update_penjualan');
     Route::get('/penjualan/detail/{id}', [PenjualanController::class, 'getDetailSparepart']);
