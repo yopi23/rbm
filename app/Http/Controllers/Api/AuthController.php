@@ -13,35 +13,32 @@ class AuthController extends Controller
 {
     public function login(Request $request)
     {
-        // Validasi input
-        $validator = Validator::make($request->all(), [
-            'email' => 'required|email',
-            'password' => 'required'
-        ]);
+        try {
+            $request->validate([
+                'email' => 'required|email',
+                'password' => 'required',
+            ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => $validator->errors()
-            ], 400);
-        }
+            if (!Auth::attempt($request->only('email', 'password'))) {
+                return response()->json([
+                    'message' => 'Invalid credentials',
+                ], 401);
+            }
 
-        // Cek kredensial
-        if (Auth::attempt(['email' => $request->email, 'password' => $request->password])) {
-            $user = Auth::user();
-            $token = $user->createToken('API Token')->plainTextToken;
+            $user = User::where('email', $request->email)->first();
+            $token = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json([
-                'success' => true,
                 'message' => 'Login successful',
-                'token' => $token,
-                'user' => $user
-            ], 200);
+                'access_token' => $token,
+                'token_type' => 'Bearer',
+                'user' => $user,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server error',
+                'error' => $e->getMessage(),
+            ], 500);
         }
-
-        return response()->json([
-            'success' => false,
-            'message' => 'Unauthorized'
-        ], 401);
     }
 }

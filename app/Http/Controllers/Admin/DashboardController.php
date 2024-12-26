@@ -448,4 +448,28 @@ class DashboardController extends Controller
         $servicesData = $this->getServices($id); // Memanggil fungsi di trait
         return response()->json($servicesData);
     }
+    // API
+    public function get_pending_services(Request $request)
+    {
+        // Ambil data service dengan status 'Antri'
+        $services = modelServices::where([
+            ['kode_owner', '=', $this->getThisUser()->id_upline],
+            ['status_services', '=', 'Antri'],
+        ])->latest()->get();
+
+        // Cek apakah ada data
+        if ($services->isEmpty()) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Tidak ada data service yang antri.',
+                'data' => [],
+            ], 200);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Data service yang antri berhasil diambil.',
+            'data' => $services,
+        ], 200);
+    }
 }

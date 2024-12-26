@@ -16,10 +16,13 @@ use App\Http\Controllers\Admin\DashboardController;
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/create-service', [DashboardController::class, 'create_service_api']);
+    Route::post('/pending-services', [DashboardController::class, 'get_pending_services']);
+
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
 });
 
 Route::post('login', [AuthController::class, 'login']);
-
-Route::post('/create-service', [DashboardController::class, 'create_service_api']);
