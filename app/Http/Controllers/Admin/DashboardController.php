@@ -348,7 +348,7 @@ class DashboardController extends Controller
             'nama_pelanggan' => ['nullable', 'string'],
             'no_telp' => ['nullable', 'string'],
             'type_unit' => ['nullable', 'string'],
-            'ket' => ['nullable', 'string'],
+            'keterangan' => ['nullable', 'string'],
             'biaya_servis' => ['nullable', 'numeric'],
             'dp' => ['nullable', 'numeric'],
             'kode_sparepart' => ['nullable', 'array'],
