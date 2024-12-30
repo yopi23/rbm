@@ -344,7 +344,7 @@ class DashboardController extends Controller
     {
         // Validasi input tanpa 'kode_service'
         $validate = $request->validate([
-            'tgl_service' => ['nullable', 'required'],
+            'tgl_service' => ['nullable'],
             'nama_pelanggan' => ['nullable', 'string'],
             'no_telp' => ['nullable', 'string'],
             'type_unit' => ['nullable', 'string'],
