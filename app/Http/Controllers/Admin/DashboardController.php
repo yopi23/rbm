@@ -362,7 +362,7 @@ class DashboardController extends Controller
             // Simpan data service dengan kode_service yang dihasilkan
             $create = modelServices::create([
                 'kode_service' => $kode_service,
-                'tgl_service' => $request->tgl_service ?: today('Y-m-d'),
+                'tgl_service' => $request->tgl_service ?: Carbon::now()->format('Y-m-d'),
                 'nama_pelanggan' => $request->nama_pelanggan,
                 'no_telp' => $request->no_telp,
                 'type_unit' => $request->type_unit,
