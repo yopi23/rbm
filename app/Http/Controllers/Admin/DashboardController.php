@@ -23,7 +23,7 @@ use App\Models\Laci;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use App\Traits\KategoriLaciTrait;
-
+use Symfony\Component\Translation\Dumper\YamlFileDumper;
 
 class DashboardController extends Controller
 {
@@ -344,7 +344,7 @@ class DashboardController extends Controller
     {
         // Validasi input tanpa 'kode_service'
         $validate = $request->validate([
-            'tgl_service' => ['required'],
+            'tgl_service' => ['nullable', 'required'],
             'nama_pelanggan' => ['nullable', 'string'],
             'no_telp' => ['nullable', 'string'],
             'type_unit' => ['nullable', 'string'],
@@ -362,7 +362,7 @@ class DashboardController extends Controller
             // Simpan data service dengan kode_service yang dihasilkan
             $create = modelServices::create([
                 'kode_service' => $kode_service,
-                'tgl_service' => $request->tgl_service,
+                'tgl_service' => $request->tgl_service ?: today('Y-m-d'),
                 'nama_pelanggan' => $request->nama_pelanggan,
                 'no_telp' => $request->no_telp,
                 'type_unit' => $request->type_unit,
