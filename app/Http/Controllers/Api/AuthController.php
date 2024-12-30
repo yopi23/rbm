@@ -41,4 +41,29 @@ class AuthController extends Controller
             ], 500);
         }
     }
+    public function validateToken(Request $request)
+    {
+        try {
+            $user = $request->user(); // Mendapatkan user dari token
+
+            if ($user) {
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Token is valid.',
+                    'user' => $user,
+                ], 200);
+            } else {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Invalid token.',
+                ], 401);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Something went wrong.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
