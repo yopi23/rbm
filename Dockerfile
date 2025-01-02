@@ -1,41 +1,35 @@
-FROM php:8.1-fpm
-# FROM shinsenter/frankenphp:latest
+# Menggunakan FrankenPHP sebagai base image
+FROM shinsenter/frankenphp:latest
 
-COPY composer.* /var/www/rbm/
-
+# Set working directory
 WORKDIR /var/www/rbm
 
+# Copy file composer ke container untuk optimasi cache
+COPY composer.* /var/www/rbm/
+
+# Install dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    libmcrypt-dev \
     mariadb-client \
-    libpng-dev \
-    libjpeg62-turbo-dev \
-    libfreetype6-dev \
-    locales \
-    jpegoptim optipng pngquant gifsicle \
-    vim \
+    libzip-dev \
     unzip \
     git \
     curl \
-    libzip-dev \
-    zip
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install PHP extensions yang diperlukan
+RUN docker-php-ext-install pdo pdo_mysql zip
 
-RUN docker-php-ext-install pdo pdo_mysql gd zip
-
+# Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-RUN groupadd -g 1000 www
-RUN useradd -u 1000 -ms /bin/bash -g www www
+# Set permission untuk project directory
+RUN chown -R www-data:www-data /var/www/rbm
+
+# Copy semua project files ke container
 COPY . .
 
-COPY --chown=www:www . .
+# Expose port FrankenPHP
+EXPOSE 8000
 
-USER www
-
-EXPOSE 9000
-
-CMD [ "php-fpm"]
-# CMD ["frankenphp", "start"]
+# Start FrankenPHP dengan konfigurasi
+CMD ["frankenphp", "--config=/var/www/rbm/frankenphp.yaml"]
