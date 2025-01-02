@@ -1,0 +1,59 @@
+version: "3"
+services:
+    # FrankenPHP Service
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        image: rbmdockerfrphp
+        container_name: apprbmdockerfrphp
+        restart: unless-stopped
+        tty: true
+        ports:
+            - "8000:8000" # FrankenPHP default port
+        environment:
+            SERVICE_NAME: app
+            SERVICE_TAGS: dev
+        working_dir: /var/www/rbm
+        volumes:
+            - .:/var/www/rbm # Mount project directory
+        networks:
+            - rbmnet
+
+    # MySQL Service
+    db:
+        image: mariadb:10.6
+        container_name: rbm_db
+        restart: unless-stopped
+        tty: true
+        environment:
+            MYSQL_DATABASE: rbm
+            MYSQL_USER: Yop1
+            MYSQL_PASSWORD: dockerrbm
+            MYSQL_ROOT_PASSWORD: dockerrbm
+        volumes:
+            - lbdata:/var/lib/mysql
+        networks:
+            - rbmnet
+
+    # PhpMyAdmin
+    phpmyadmin:
+        image: phpmyadmin
+        container_name: pma_rbm
+        environment:
+            PMA_HOST: db
+            PMA_USER: Yop1
+            PMA_PASSWORD: dockerrbm
+        restart: unless-stopped
+        ports:
+            - "7500:80"
+        networks:
+            - rbmnet
+
+networks:
+    rbmnet:
+        driver: bridge
+
+volumes:
+    lbdata:
+        driver: local
