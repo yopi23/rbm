@@ -116,20 +116,20 @@
                                         <td>
                                             <form id="formSelesai{{ $loop->index }}"
                                                 action="{{ route('proses_service', $item->id_service) }}"
-                                                onsubmit="return confirm('Apakah Kamu yakin ingin Menyelesaikan Service ini ?')"
+                                                onsubmit="return validasiSelesai(event, {{ $loop->index }}, '{{ $item->nama_pelanggan }}', '{{ $item->name }}', '{{ $item->id_teknisi }}')"
                                                 method="POST">
                                                 @csrf
                                                 @method('PUT')
                                                 <a href="{{ route('detail_service', $item->id_service) }}"
                                                     class="btn btn-info btn-sm mt-2">Detail</a>
+
                                                 @if ($this_user->jabatan == '1' || $this_user->jabatan == '2')
                                                     <input type="hidden" name="status_services" id="status_services"
                                                         value="Selesai">
+
                                                     <button type="button"
-                                                        onclick="return confirmSelesai({{ $loop->index }},'{{ $item->nama_pelanggan }}', '{{ $item->name }}')"
+                                                        onclick="return confirmSelesai({{ $loop->index }}, '{{ $item->nama_pelanggan }}', '{{ $item->name }}', '{{ $item->id_teknisi }}')"
                                                         class="btn btn-sm btn-success mt-2">Selesai</button>
-                                                    {{-- <button type="submit"
-                                                        class="btn btn-sm btn-success mt-2">Selesai</button> --}}
                                                 @endif
                                             </form>
 
@@ -241,7 +241,20 @@
 
 
 <script>
-    function confirmSelesai(index, pelanggan, teknisi) {
+    function confirmSelesai(index, pelanggan, teknisi, idTeknisi) {
+        // Memeriksa apakah id_teknisi kosong
+        if (!idTeknisi) {
+            // Jika id_teknisi kosong, tampilkan peringatan SweetAlert
+            Swal.fire({
+                icon: 'error',
+                title: 'Peringatan',
+                text: 'Harap pilih teknisi terlebih dahulu untuk pelanggan ' + pelanggan,
+            });
+            // Menghentikan pengiriman form
+            return false;
+        }
+
+        // Jika id_teknisi sudah ada, tampilkan konfirmasi untuk menyelesaikan service
         Swal.fire({
             title: 'Apakah kamu yakin?',
             html: "Anda ingin menyelesaikan pekerjaan untuk perangkat <strong style='font-size: 16pt'>" +
@@ -258,6 +271,7 @@
                 document.getElementById('formSelesai' + index).submit();
             }
         });
+
         // Mencegah pengiriman form secara langsung
         return false;
     }

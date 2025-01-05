@@ -132,8 +132,8 @@
             <div class="listservice table-responsive">
                 <div class="form-group">
                     <select name="teknisi" id="teknisi" class="form-control" required autofocus>
-                        <option value="" disabled selected style="color: #a9a9a9;">---
-                            Pilih Teknisi---</option>
+                        <option value="" disabled selected style="color: #a9a9a9;">--- Pilih Teknisi ---
+                        </option>
                         @if (isset($user))
                             @foreach ($user as $users)
                                 <option class="my2" value="{{ $users->kode_user }}">
@@ -172,7 +172,7 @@
                                         <a href="{{ route('nota_tempel', $item->id) }}" target="_blank"
                                             class="btn btn-sm btn-warning mt-2"><i class="fas fa-print"></i></a>
                                         <form action="{{ route('proses_service', $item->id) }}"
-                                            onsubmit="return confirm('Apakah Kamu yakin ingin memproses Service ini ?')"
+                                            onsubmit="return konfirmasiDanValidasi(event, '{{ $item->id }}')"
                                             method="POST">
                                             @csrf
                                             @method('PUT')
@@ -180,8 +180,9 @@
                                                 value="Diproses">
                                             <input type="hidden" name="teknisi" id="teknisi-{{ $item->id }}"
                                                 value="">
-                                            <button type="submit" class="btn btn-sm btn-primary mt-2"
-                                                onclick="setTeknisi('{{ $item->id }}')">Proses</button>
+
+                                            <button type="submit"
+                                                class="btn btn-sm btn-primary mt-2">Proses</button>
                                         </form>
                                         </form>
                                         <form action="{{ route('delete_service', $item->id) }}"
@@ -459,10 +460,43 @@
 
 {{-- teknisi --}}
 <script>
+    function konfirmasiDanValidasi(event, itemId) {
+        // Menanyakan konfirmasi pengguna sebelum melanjutkan aksi
+        const konfirmasi = confirm('Apakah Kamu yakin ingin memproses Service ini?');
+
+        // Jika pengguna membatalkan, menghentikan pengiriman form
+        if (!konfirmasi) {
+            event.preventDefault();
+            return false;
+        }
+
+        // Memeriksa apakah pilihan teknisi kosong
+        const teknisiSelect = document.getElementById('teknisi');
+        if (!teknisiSelect.value) {
+            // Menggunakan SweetAlert untuk menampilkan notifikasi
+            Swal.fire({
+                icon: 'error',
+                title: 'Oops...',
+                text: 'Harap pilih teknisi terlebih dahulu!',
+            });
+            event.preventDefault(); // Menghentikan pengiriman form
+            return false;
+        }
+
+        // Jika teknisi dipilih, set nilai teknisi ke input tersembunyi untuk item terkait
+        setTeknisi(itemId);
+
+        return true; // Melanjutkan pengiriman form
+    }
+
     function setTeknisi(itemId) {
         const teknisiSelect = document.getElementById('teknisi');
         const hiddenInput = document.getElementById('teknisi-' + itemId);
-        hiddenInput.value = teknisiSelect.value;
+
+        // Memastikan input tersembunyi ada
+        if (hiddenInput && teknisiSelect) {
+            hiddenInput.value = teknisiSelect.value;
+        }
     }
 </script>
 {{-- end teknisi --}}
