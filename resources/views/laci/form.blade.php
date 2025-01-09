@@ -192,10 +192,12 @@
                                     <th>#</th>
                                     <th>Teknisi</th>
                                     <th>Komisi</th>
+                                    <th>Saldo</th>
                                     <th>Sparepart</th>
                                     <th>Unit</th>
                                     <th>Pelanggan</th>
                                     <th>Keterangan</th>
+                                    <th>Status</th>
                                     <th>Tanggal</th>
                                 </tr>
                             </div>
@@ -207,11 +209,16 @@
                                 @foreach ($komisi as $index => $rincian)
                                     <tr>
                                         <td>{{ $index + 1 }}</td>
-                                        <td>{{ $rincian->name }}</td>
+                                        <td>{{ $rincian->fullname }}</td>
                                         <td>
                                             <span style="color: rgb(133, 143, 0)">+
                                                 {{ number_format($rincian->profit) }}</span>
                                         </td>
+                                        <td>
+                                            <span style="color: rgb(0, 143, 72)">+
+                                                {{ number_format($rincian->saldo + $rincian->profit) }}</span>
+                                        </td>
+
                                         <td>
                                             {{ number_format($rincian->harga_sp) }}
                                         </td>
@@ -224,6 +231,19 @@
                                         </td>
 
                                         <td>{{ $rincian->keterangan }}</td>
+                                        <td>
+                                            @switch($rincian->status_services)
+                                                @case('Diambil')
+                                                    <span class="badge badge-success">Dibayar</span>
+                                                @break
+
+                                                @case('Selesai')
+                                                    <span class="badge badge-info">Disimpan</span>
+                                                @break
+
+                                                @default
+                                            @endswitch
+                                        </td>
                                         <td>{{ $rincian->updated_at }}</td>
                                     </tr>
                                     @php
@@ -233,10 +253,10 @@
                                 @endforeach
                                 <tr class="table-primary font-weight-bold">
                                     <td colspan="2"><strong>Total</strong></td>
-                                    <td>Rp.{{ number_format($totalkomisi) }},-</td>
+                                    <td colspan="2">Rp.{{ number_format($totalkomisi) }},-</td>
                                     <!-- Column 3 total -->
                                     <td>Rp.{{ number_format($totalsp) }},-</td> <!-- Column 4 total -->
-                                    <td colspan="4"></td> <!-- Empty cells for other columns -->
+                                    <td colspan="5"></td> <!-- Empty cells for other columns -->
                                 </tr>
                             </div>
                         </table>

@@ -14,5 +14,6 @@ class ProfitPresentase extends Model
         'kode_presentase',
         'kode_user',
         'profit',
+        'saldo',
     ];
 }

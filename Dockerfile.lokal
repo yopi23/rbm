@@ -1,10 +1,9 @@
-#FROM php:8.1-fpm
-FROM --platform=linux/amd64 php:8.1-fpm
+FROM php:8.1-fpm
 # FROM shinsenter/frankenphp:latest
 
-COPY composer.* /www/wwwroot/rbm/
+COPY composer.* /var/www/rbm/
 
-WORKDIR /www/wwwroot/rbm
+WORKDIR /var/www/rbm
 
 RUN apt-get update && apt-get install -y \
     build-essential \

@@ -457,6 +457,8 @@ class ServiceController extends Controller
                     $profit = $update->total_biaya - $total_part;
                     $fix_profit =  $profit * $presentase->presentase / 100;
 
+                    //
+                    $pegawais = UserDetail::where([['kode_user', '=', $id_teknisi,]])->get()->first();
 
 
                     $komisi = ProfitPresentase::create([
@@ -465,9 +467,9 @@ class ServiceController extends Controller
                         'kode_presentase' => $presentase->id,
                         'kode_user' => $id_teknisi,
                         'profit' => $fix_profit,
+                        'saldo' => $pegawais->saldo,
                     ]);
                     if ($komisi) {
-                        $pegawais = UserDetail::where([['kode_user', '=', $id_teknisi,]])->get()->first();
                         $new_saldo = $pegawais->saldo + $fix_profit;
                         $pegawais->update([
                             'saldo' => $new_saldo
@@ -667,6 +669,8 @@ class ServiceController extends Controller
                     ->first();
 
                 if (!$existingProfit) {
+                    $user_detail = UserDetail::where('kode_user',  $id_teknisi)->first();
+
                     // Simpan data komisi ke tabel profit_presentases
                     ProfitPresentase::create([
                         'tgl_profit' => date('Y-m-d'),
@@ -674,11 +678,12 @@ class ServiceController extends Controller
                         'kode_presentase' => $presentase->id,
                         'kode_user' => $id_teknisi,
                         'profit' => $fix_profit,
+                        'saldo' => $user_detail->saldo,
                     ]);
 
 
                     // Perbarui saldo user_detail
-                    $user_detail = UserDetail::where('kode_user',  $id_teknisi)->first();
+
                     $user_detail->saldo += $fix_profit;
                     $user_detail->save();
                 } else {
