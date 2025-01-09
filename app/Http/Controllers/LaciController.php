@@ -69,11 +69,12 @@ class LaciController extends Controller
 
             $komisi = DB::table('profit_presentases')
                 ->join('sevices', 'sevices.id', '=', 'profit_presentases.kode_service') // Menggabungkan tabel sevices dan profit_presentases
-                ->join('users', 'sevices.id_teknisi', '=', 'users.id')
+                ->join('user_details', 'sevices.id_teknisi', '=', 'user_details.kode_user')
                 ->select(
                     'profit_presentases.profit', // Kolom profit dari profit_presentases
                     'sevices.*', // Semua kolom dari sevices
-                    'users.name'
+                    'user_details.fullname',
+                    'profit_presentases.saldo'
                 )
                 ->where([
                     ['sevices.kode_owner', '=', $this->getThisUser()->id_upline],
