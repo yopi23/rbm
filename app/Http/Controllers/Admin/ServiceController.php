@@ -614,8 +614,7 @@ class ServiceController extends Controller
     public function getCompletedToday(Request $request)
     {
         try {
-            $today = Carbon::today(); // Mendapatkan tanggal hari ini
-            // $user = $request->user(); // Mendapatkan user dari token, jika menggunakan auth
+            $today = date('Y-m-d');
 
             // Query untuk mengambil data
             $completedServices = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
