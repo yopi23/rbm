@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\ServiceController;
 use FontLib\Table\Type\name;
 
 /*
@@ -20,6 +21,7 @@ use FontLib\Table\Type\name;
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/create-service', [DashboardController::class, 'create_service_api']);
     Route::post('/pending-services', [DashboardController::class, 'get_pending_services']);
+    Route::get('/services/completed-today', [ServiceController::class, 'getCompletedToday']);
     Route::get('/validate-token', [AuthController::class, 'validateToken']);
     Route::get('/user', function (Request $request) {
         return $request->user();

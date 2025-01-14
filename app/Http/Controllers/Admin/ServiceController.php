@@ -610,7 +610,34 @@ class ServiceController extends Controller
         $content = view('admin.page.job');
         return view('admin.page.job', compact(['data_service', 'user', 'today', 'data_selesai_hari_ini']));
     }
+    // API
+    public function getCompletedToday(Request $request)
+    {
+        try {
+            $today = Carbon::today(); // Mendapatkan tanggal hari ini
+            $user = $request->user(); // Mendapatkan user dari token, jika menggunakan auth
 
+            // Query untuk mengambil data
+            $completedServices = modelServices::where('kode_owner', $user->id_upline)
+                ->where('status_services', 'Selesai')
+                ->whereDate('updated_at', $today)
+                ->get();
+
+            // Return response JSON
+            return response()->json([
+                'success' => true,
+                'message' => 'Data layanan yang selesai hari ini berhasil diambil.',
+                'data' => $completedServices,
+            ], 200);
+        } catch (\Exception $e) {
+            // Return error response jika ada masalah
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+    // End API
     // selesaikan
     public function selesaikan(Request $request)
     {
