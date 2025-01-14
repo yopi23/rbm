@@ -619,7 +619,9 @@ class ServiceController extends Controller
             // Query untuk mengambil data
             $completedServices = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
                 ->where('status_services', 'Selesai')
-                ->whereDate('updated_at', $today)
+                ->whereDate('sevices.updated_at', $today)
+                ->join('users', 'sevices.id_teknisi', '=', 'users.id')  // Melakukan join dengan tabel users
+                ->select('sevices.*', 'users.name as teknisi')
                 ->get();
 
             // Return response JSON
