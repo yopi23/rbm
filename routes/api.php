@@ -28,7 +28,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // // cari sparepart
     // Route::get('/sparepart-toko/search', [SparepartApiController::class, 'searchSparepartToko']);
     // Route::get('/service/{id}', [SparepartApiController::class, 'detail_service']);
-    // Route::post('/service/search-sparepart', [SparepartApiController::class, 'search_sparepart']);
+    Route::post('/service/search-sparepart', [SparepartApiController::class, 'search_sparepart']);
     // // crud sparepart toko
     // Route::post('/sparepart-toko', [SparepartApiController::class, 'storeSparepartToko']);
     // Route::delete('/sparepart-toko/{id}', [SparepartApiController::class, 'deleteSparepartToko']);
@@ -49,7 +49,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/services/getServiceDetails/{id}', [SparepartApiController::class, 'getServiceDetails']);
         Route::get('/sparepart-toko/search', [SparepartApiController::class, 'searchSparepartToko']);
         Route::get('/service/{id}', [SparepartApiController::class, 'detail_service']);
-        Route::post('/service/search-sparepart', [SparepartApiController::class, 'search_sparepart']);
+        // Route::post('/service/search-sparepart', [SparepartApiController::class, 'search_sparepart']);
         Route::post('/sparepart-toko', [SparepartApiController::class, 'storeSparepartToko']);
         Route::delete('/sparepart-toko/{id}', [SparepartApiController::class, 'deleteSparepartToko']);
         Route::post('/sparepart-luar', [SparepartApiController::class, 'storeSparepartLuar']);
