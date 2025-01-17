@@ -19,24 +19,6 @@ use Illuminate\Support\Facades\Validator;
 
 class SparepartApiController extends Controller
 {
-    // cari sparepart
-    // public function searchSparepartToko(Request $request)
-    // {
-    //     $request->validate([
-    //         'query' => 'required|string|min:1',
-    //     ]);
-
-    //     $query = $request->query('query');
-    //     $spareparts = Sparepart::where('nama_sparepart', 'LIKE', "%$query%")
-    //         ->orWhere('kode_sparepart', 'LIKE', "%$query%")
-    //         ->get();
-
-    //     if ($spareparts->isEmpty()) {
-    //         return response()->json(['message' => 'No spareparts found.'], 404);
-    //     }
-
-    //     return response()->json($spareparts, 200);
-    // }
 
     public function detail_service($id)
     {
@@ -239,6 +221,7 @@ class SparepartApiController extends Controller
                     'id' => $service->id,
                     'kode_service' => $service->kode_service,
                     'customer_name' => $service->nama_pelanggan,
+                    'type_unit' => $service->type_unit,
                     'status_services' => $service->status_services,
                     'total_biaya' => $service->total_biaya,
                     'harga_sp' => $service->harga_sp,
@@ -258,6 +241,45 @@ class SparepartApiController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve service details.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+    public function updateService(Request $request, $id)
+    {
+        try {
+            // Validasi input (jika ada)
+            $validatedData = $request->validate([
+                'nama_pelanggan' => 'nullable|string|max:255',
+                'type_unit' => 'nullable|string|max:255',
+                'keterangan' => 'nullable|string',
+                'no_telp' => 'nullable|numeric',
+                'total_biaya' => 'nullable|numeric|min:0',
+                'dp' => 'nullable|numeric|min:0',
+            ]);
+
+            // Cari service berdasarkan ID
+            $service = ModelServices::findOrFail($id);
+
+            // Update hanya data yang diberikan dalam request
+            $service->update($validatedData);
+
+            return response()->json([
+                'message' => 'Service updated successfully',
+                'service' => $service,
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'message' => 'Service not found',
+            ], 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Server error',
                 'error' => $e->getMessage(),
             ], 500);
         }
@@ -435,7 +457,6 @@ class SparepartApiController extends Controller
             ], 500);
         }
     }
-
 
     // Update Sparepart Luar
     public function updateSparepartLuar(Request $request, $id)

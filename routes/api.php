@@ -22,40 +22,27 @@ use FontLib\Table\Type\name;
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/create-service', [DashboardController::class, 'create_service_api']);
     Route::post('/pending-services', [DashboardController::class, 'get_pending_services']);
-    // Route::get('/services/completed-today', [ServiceController::class, 'getCompletedToday']);
-    // // detail service
-    // Route::get('/services/getServiceDetails/{id}', [SparepartApiController::class, 'getServiceDetails']);
-    // // cari sparepart
-    // Route::get('/sparepart-toko/search', [SparepartApiController::class, 'searchSparepartToko']);
-    // Route::get('/service/{id}', [SparepartApiController::class, 'detail_service']);
+    Route::get('/services/completed-today', [ServiceController::class, 'getCompletedToday']);
+    // detail service
+    Route::get('/services/getServiceDetails/{id}', [SparepartApiController::class, 'getServiceDetails']);
+    // update service
+    Route::put('/services/{id}', [SparepartApiController::class, 'updateService']);
+    // cari sparepart
+    Route::get('/sparepart-toko/search', [SparepartApiController::class, 'searchSparepartToko']);
     Route::post('/service/search-sparepart', [SparepartApiController::class, 'search_sparepart']);
-    // // crud sparepart toko
-    // Route::post('/sparepart-toko', [SparepartApiController::class, 'storeSparepartToko']);
-    // Route::delete('/sparepart-toko/{id}', [SparepartApiController::class, 'deleteSparepartToko']);
-    // // crud sparepart luar
-    // Route::post('/sparepart-luar', [SparepartApiController::class, 'storeSparepartLuar']);
-    // Route::put('/sparepart-luar/{id}', [SparepartApiController::class, 'updateSparepartLuar']);
-    // Route::delete('/sparepart-luar/{id}', [SparepartApiController::class, 'deleteSparepartLuar']);
+    // crud sparepart toko
+    Route::post('/sparepart-toko', [SparepartApiController::class, 'storeSparepartToko']);
+    Route::delete('/sparepart-toko/{id}', [SparepartApiController::class, 'deleteSparepartToko']);
+    // crud sparepart luar
+    Route::post('/sparepart-luar', [SparepartApiController::class, 'storeSparepartLuar']);
+    Route::put('/sparepart-luar/{id}', [SparepartApiController::class, 'updateSparepartLuar']);
+    Route::delete('/sparepart-luar/{id}', [SparepartApiController::class, 'deleteSparepartLuar']);
 
-    // Route::put('/service/updateServiceStatus/{id}', [SparepartApiController::class, 'updateServiceStatus']);
+    Route::put('/service/updateServiceStatus/{id}', [SparepartApiController::class, 'updateServiceStatus']);
 
     Route::get('/validate-token', [AuthController::class, 'validateToken']);
     Route::get('/user', function (Request $request) {
         return $request->user();
-    });
-    Route::group(['middleware' => 'checkRole:1,2'], function () {
-        // Route::post('/pending-services', [DashboardController::class, 'get_pending_services']);
-        Route::get('/services/completed-today', [ServiceController::class, 'getCompletedToday']);
-        Route::get('/services/getServiceDetails/{id}', [SparepartApiController::class, 'getServiceDetails']);
-        Route::get('/sparepart-toko/search', [SparepartApiController::class, 'searchSparepartToko']);
-        Route::get('/service/{id}', [SparepartApiController::class, 'detail_service']);
-        // Route::post('/service/search-sparepart', [SparepartApiController::class, 'search_sparepart']);
-        Route::post('/sparepart-toko', [SparepartApiController::class, 'storeSparepartToko']);
-        Route::delete('/sparepart-toko/{id}', [SparepartApiController::class, 'deleteSparepartToko']);
-        Route::post('/sparepart-luar', [SparepartApiController::class, 'storeSparepartLuar']);
-        Route::put('/sparepart-luar/{id}', [SparepartApiController::class, 'updateSparepartLuar']);
-        Route::delete('/sparepart-luar/{id}', [SparepartApiController::class, 'deleteSparepartLuar']);
-        Route::put('/service/updateServiceStatus/{id}', [SparepartApiController::class, 'updateServiceStatus']);
     });
 });
 

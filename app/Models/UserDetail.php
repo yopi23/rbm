@@ -30,4 +30,5 @@ class UserDetail extends Model
         'link_instagram',
         'link_linkedin',
     ];
+
 }
