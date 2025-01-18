@@ -24,6 +24,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/create-service', [DashboardController::class, 'create_service_api']);
     Route::post('/pending-services', [DashboardController::class, 'get_pending_services']);
     Route::get('/services/completed-today', [ServiceController::class, 'getCompletedToday']);
+    Route::get('/services/completedAll', [ServiceController::class, 'getCompletedservice']);
     // detail service
     Route::get('/services/getServiceDetails/{id}', [SparepartApiController::class, 'getServiceDetails']);
     // update service

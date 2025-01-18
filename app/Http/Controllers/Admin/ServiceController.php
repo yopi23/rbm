@@ -638,6 +638,32 @@ class ServiceController extends Controller
             ], 500);
         }
     }
+
+    public function getCompletedservice(Request $request)
+    {
+        try {
+
+            // Query untuk mengambil data
+            $completedServices = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+                ->where('status_services', 'Selesai')
+                ->join('users', 'sevices.id_teknisi', '=', 'users.id')  // Melakukan join dengan tabel users
+                ->select('sevices.*', 'users.name as teknisi')
+                ->get();
+
+            // Return response JSON
+            return response()->json([
+                'success' => true,
+                'message' => 'Data layanan yang selesai hari ini berhasil diambil.',
+                'data' => $completedServices,
+            ], 200);
+        } catch (\Exception $e) {
+            // Return error response jika ada masalah
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
     // End API
     // selesaikan
     public function selesaikan(Request $request)
