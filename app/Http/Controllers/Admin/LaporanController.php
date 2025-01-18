@@ -115,7 +115,7 @@ class LaporanController extends Controller
                 if ($tglService >= $request->tgl_awal && $tglService <= $request->tgl_akhir) {
                     if ($item->status_services == 'Diambil') {
                         // Kurangi DP dari total_biaya sebelum menambahkan ke totalPendapatanService
-                        $pendapatanServiceSetelahDP = $item->total_biaya;
+                        $pendapatanServiceSetelahDP = $item->total_biaya - $item->dp;
                         $totalPendapatanService += $pendapatanServiceSetelahDP;
                     }
                 }

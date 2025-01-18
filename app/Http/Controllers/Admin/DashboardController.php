@@ -76,7 +76,13 @@ class DashboardController extends Controller
             foreach ($service as $item) {
                 if ($item->updated_at->isToday()) {
                     if ($item->status_services == 'Diambil') {
-                        $total_service += $item->total_biaya;
+                        if ($item->created_at != $item->updated_at) {
+                            // Jika berbeda, tambahkan dp ke total_service
+                            $total_service += $item->total_biaya - $item->dp;
+                        } else {
+                            // Jika sama, tambahkan total_biaya
+                            $total_service += $item->total_biaya;
+                        }
                     } else {
                         $total_service += $item->dp;
                     }

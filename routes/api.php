@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Api\SparepartApiController;
+use App\Http\Controllers\Api\PengambilanController;
 use FontLib\Table\Type\name;
 
 /*
@@ -39,6 +40,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/sparepart-luar/{id}', [SparepartApiController::class, 'deleteSparepartLuar']);
 
     Route::put('/service/updateServiceStatus/{id}', [SparepartApiController::class, 'updateServiceStatus']);
+
+    Route::post('/pengambilan', [PengambilanController::class, 'store']);
+    Route::get('/services/available', [PengambilanController::class, 'getAvailableServices']);
+    Route::get('/kategori-laci', [PengambilanController::class, 'getKategoriLaciList']);
 
     Route::get('/validate-token', [AuthController::class, 'validateToken']);
     Route::get('/user', function (Request $request) {
