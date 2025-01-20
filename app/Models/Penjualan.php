@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\DetailBarangPenjualan;
+use App\Models\DetailSparepartPenjualan;
 
 class Penjualan extends Model
 {
@@ -20,4 +22,13 @@ class Penjualan extends Model
         'status_penjualan',
         'created_at'
     ];
+    public function detailBarang()
+    {
+        return $this->hasMany(DetailBarangPenjualan::class, 'kode_penjualan', 'id');
+    }
+
+    public function detailSparepart()
+    {
+        return $this->hasMany(DetailSparepartPenjualan::class, 'kode_penjualan', 'id');
+    }
 }

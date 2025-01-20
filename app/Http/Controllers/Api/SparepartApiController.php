@@ -224,6 +224,7 @@ class SparepartApiController extends Controller
                     'type_unit' => $service->type_unit,
                     'status_services' => $service->status_services,
                     'total_biaya' => $service->total_biaya,
+                    'dp' => $service->dp,
                     'harga_sp' => $service->harga_sp,
                     'created_at' => $service->created_at,
                     'updated_at' => $service->updated_at,
@@ -402,6 +403,18 @@ class SparepartApiController extends Controller
         }
     }
 
+    // Delete service
+    public function delete_service($id)
+    {
+        $data = modelServices::findOrFail($id);
+
+        $data->delete();
+        if ($data) {
+            return response()->json(['message' => 'Sparepart deleted successfully.'], 200);
+        }
+        return response()->json(['message' => 'Data not found.'], 404);
+    }
+    // Delete service
     // Delete Sparepart Toko
     public function deleteSparepartToko($id)
     {
