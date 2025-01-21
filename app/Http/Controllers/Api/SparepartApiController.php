@@ -81,39 +81,43 @@ class SparepartApiController extends Controller
                 ]);
             }
 
-            $parts = explode(',', $command);
-            $keyword = trim($parts[0]);
+            // Cek apakah input dimulai dengan "part"
+            if (str_starts_with($command, 'part')) {
+                // Tangkap kata kunci setelah "part"
+                $pattern = '/^part[\s,:-]*(.+)$/';
+                if (preg_match($pattern, $command, $matches)) {
+                    $searchQuery = trim($matches[1]);
 
-            if ($keyword === 'part') {
-                if (count($parts) < 2 || empty(trim($parts[1]))) {
+                    // Format ulang kata kunci untuk pencarian fleksibel
+                    $formattedQuery = preg_replace('/(\d+)([a-z]+)/i', '$1 $2', $searchQuery);
+                    $formattedQuery = preg_replace('/([a-z]+)(\d+)/i', '$1 $2', $formattedQuery);
+                    $keywords = explode(' ', $formattedQuery);
+
+                    // Buat query pencarian
+                    $spareparts = Sparepart::query();
+
+                    // Pastikan setiap kata kunci harus ada di "nama_sparepart"
+                    foreach ($keywords as $word) {
+                        $spareparts->where('nama_sparepart', 'LIKE', "%{$word}%");
+                    }
+
+                    // Eksekusi query
+                    $results = $spareparts->get();
+
                     return response()->json([
                         'success' => true,
-                        'message' => "Apa yang Anda cari?\n\n" .
-                            "Untuk mencari sparepart, ketik:\n" .
-                            "part,nama sparepart toko\n\n" .
-                            "Untuk menyelesaikan, ketik:\n" .
-                            "selesaikan",
-                        'commands' => [
-                            'part,(nama barang)',
-                            'cancel',
-                            'selesaikan'
-                        ]
+                        'type' => 'sparepart_list',
+                        'data' => $results
+                    ]);
+                } else {
+                    return response()->json([
+                        'success' => true,
+                        'message' => "Format pencarian tidak valid. Gunakan format: 'part (nama barang)'"
                     ]);
                 }
-
-                $searchQuery = trim($parts[1]);
-                $spareparts = Sparepart::where('nama_sparepart', 'LIKE', "%{$searchQuery}%")
-                    ->orWhere('kode_sparepart', 'LIKE', "%{$searchQuery}%")
-                    ->get();
-
-                return response()->json([
-                    'success' => true,
-                    'type' => 'sparepart_list',
-                    'data' => $spareparts
-                ]);
             }
 
-            if ($keyword === 'selesaikan') {
+            if ($command === 'selesaikan') {
                 $jab = [1, 2]; // Jabatan yang harus dikecualikan
                 $user = UserDetail::where('id_upline', $this->getThisUser()->id_upline)
                     ->whereNotIn('jabatan', $jab)
@@ -127,18 +131,16 @@ class SparepartApiController extends Controller
                 ]);
             }
 
-            if ($keyword === 'rincian') {
+            if ($command === 'rincian' || 'rinci') {
                 // Ambil service_id dari request
                 $serviceId = $request->input('service_id');
 
-                // Panggil fungsi getServiceDetails untuk mendapatkan rincian
-                $serviceDetails = $this->getServiceDetails($serviceId);
 
-                if ($serviceDetails) {
+                if ($serviceId) {
                     return response()->json([
                         'success' => true,
                         'type' => 'rincian',
-                        'data' => $serviceDetails
+                        'data' => $serviceId
                     ]);
                 } else {
                     return response()->json([
