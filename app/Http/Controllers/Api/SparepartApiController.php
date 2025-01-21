@@ -88,19 +88,16 @@ class SparepartApiController extends Controller
                 if (preg_match($pattern, $command, $matches)) {
                     $searchQuery = trim($matches[1]);
 
-                    // Format ulang kata kunci untuk pencarian fleksibel
-                    $formattedQuery = preg_replace('/(\d+)([a-z]+)/i', '$1 $2', $searchQuery);
-                    $formattedQuery = preg_replace('/([a-z]+)(\d+)/i', '$1 $2', $formattedQuery);
-                    $keywords = explode(' ', $formattedQuery);
+                    // Pisahkan input menjadi kata-kata berdasarkan spasi
+                    $keywords = explode(' ', $searchQuery);
 
                     // Buat query pencarian
                     $spareparts = Sparepart::query();
 
-                    // Pastikan setiap kata kunci harus ada di "nama_sparepart"
+                    // Pastikan setiap kata kunci ada di nama_sparepart
                     foreach ($keywords as $word) {
                         $spareparts->where('nama_sparepart', 'LIKE', "%{$word}%");
                     }
-
                     // Eksekusi query
                     $results = $spareparts->get();
 
