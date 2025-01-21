@@ -76,7 +76,8 @@ class SparepartApiController extends Controller
                     'commands' => [
                         'part,(nama barang)',
                         'cancel',
-                        'selesaikan'
+                        'selesaikan',
+                        'rincian atau rinci'
                     ]
                 ]);
             }
@@ -128,7 +129,7 @@ class SparepartApiController extends Controller
                 ]);
             }
 
-            if ($command === 'rincian' || 'rinci') {
+            if ($command === 'rincian' || $command === 'rinci') {
                 // Ambil service_id dari request
                 $serviceId = $request->input('service_id');
 
@@ -158,7 +159,8 @@ class SparepartApiController extends Controller
                 'commands' => [
                     'part,(nama barang)',
                     'cancel',
-                    'selesaikan'
+                    'selesaikan',
+                    'rincian atau rinci'
                 ]
             ]);
         } catch (\Exception $e) {
