@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Penjualan;
-
+use App\Models\Sparepart;
+use App\Models\DetailSparepartPenjualan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use App\Traits\KategoriLaciTrait;
 use Illuminate\Support\Facades\DB;
+
 
 class SalesApiController extends Controller
 {
@@ -67,32 +69,194 @@ class SalesApiController extends Controller
     }
 
     // Create new sale
+    // public function createSale(Request $request)
+    // {
+    //     // Hitung total penjualan dan pembayaran
+    //     $totalPenjualan = 0;
+    //     $totalBayar = 0;
+
+    //     // Buat data penjualan terlebih dahulu
+    //     $sale = Penjualan::create([
+    //         'kode_penjualan' => 'TRX' . date('Ymd') . auth()->user()->id . (Penjualan::count() + 1),
+    //         'tgl_penjualan' => date('Y-m-d'),
+    //         'kode_owner' => $this->getThisUser()->id_upline,
+    //         'nama_customer' => $request->nama_customer ?? '-',
+    //         'catatan_customer' => $request->catatan_customer ?? '',
+    //         'total_penjualan' => 0, // Akan diperbarui nanti
+    //         'total_bayar' => 0, // Akan diperbarui nanti
+    //         'user_input' => auth()->user()->id,
+    //         'status_penjualan' => '1',
+    //         'created_at' => now(),
+    //         'updated_at' => now(),
+    //     ]);
+
+    //     foreach ($request->items as $item) {
+    //         $qtySparepart = $item['qty'];
+    //         $sparepartId = $item['sparepart_id'];
+
+    //         // Ambil data sparepart dari database
+    //         $sparepart = Sparepart::findOrFail($sparepartId);
+
+    //         // Periksa apakah stok mencukupi
+    //         if ($sparepart->stok_sparepart < $qtySparepart) {
+    //             return response()->json([
+    //                 'status' => 'error',
+    //                 'message' => 'Stok tidak mencukupi untuk sparepart ID: ' . $sparepartId,
+    //             ], 400);
+    //         }
+
+    //         // Gunakan harga jual dari database
+    //         $hargaJual = $sparepart->harga_ecer;
+
+    //         // Kurangi stok sparepart
+    //         $sparepart->update([
+    //             'stok_sparepart' => $sparepart->stok_sparepart - $qtySparepart,
+    //         ]);
+
+    //         // Hitung total penjualan dan pembayaran
+    //         $totalPenjualan += $hargaJual * $qtySparepart;
+    //         $totalBayar += $hargaJual * $qtySparepart;
+
+    //         // Catat detail penjualan
+    //         DetailSparepartPenjualan::create([
+    //             'kode_penjualan' => $sale->id, // Gunakan kode_penjualan yang baru dibuat
+    //             'kode_sparepart' => $sparepartId,
+    //             'detail_harga_modal' => $sparepart->harga_beli,
+    //             'detail_harga_jual' => $hargaJual,
+    //             'qty_sparepart' => $qtySparepart,
+    //             'user_input' => auth()->user()->id,
+    //             'created_at' => now(),
+    //             'updated_at' => now(),
+    //         ]);
+    //     }
+
+    //     // Update total penjualan dan pembayaran setelah selesai
+    //     $sale->update([
+    //         'total_penjualan' => $totalPenjualan,
+    //         'total_bayar' => $totalBayar,
+    //     ]);
+
+    //     // Catat histori laci
+    //     $this->recordLaciHistory(
+    //         $request->kategori_laci_id,
+    //         $totalBayar, // Uang masuk
+    //         null, // Tidak ada uang keluar
+    //         'Penjualan: ' . $sale->kode_penjualan
+    //     );
+
+    //     return response()->json([
+    //         'status' => 'success',
+    //         'data' => $sale,
+    //     ]);
+    // }
     public function createSale(Request $request)
     {
-        $count = Penjualan::where([
-            ['user_input', '=', auth()->user()->id],
-            ['kode_owner', '=', $this->getThisUser()->id_upline]
-        ])->count();
+        $totalPenjualan = 0;
+        $totalBayar = 0;
 
-        $kode = 'TRX' . date('Ymd') . auth()->user()->id . $count;
+        // Ambil tipe customer dari request
+        $selectedCustomerType = $request->customer_type; // Misalnya: 'ecer', 'glosir', 'jumbo'
 
+        // Buat data penjualan terlebih dahulu
         $sale = Penjualan::create([
-            'kode_penjualan' => $kode,
+            'kode_penjualan' => 'TRX' . date('Ymd') . auth()->user()->id . (Penjualan::count() + 1),
+            'tgl_penjualan' => date('Y-m-d'),
             'kode_owner' => $this->getThisUser()->id_upline,
             'nama_customer' => $request->nama_customer ?? '-',
             'catatan_customer' => $request->catatan_customer ?? '',
-            'total_bayar' => '0',
-            'total_penjualan' => '0',
+            'total_penjualan' => 0,
+            'total_bayar' => 0,
             'user_input' => auth()->user()->id,
-            'status_penjualan' => '0',
-            'created_at' => Carbon::now(),
-            'updated_at' => Carbon::now(),
+            'status_penjualan' => '1',
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
+
+        foreach ($request->items as $item) {
+            $qtySparepart = $item['qty'];
+            $sparepartId = $item['sparepart_id'];
+
+            // Ambil data sparepart dari database
+            $sparepart = Sparepart::findOrFail($sparepartId);
+
+            // Sesuaikan harga jual berdasarkan tipe customer yang didapatkan dari request
+            $hargaJual = $this->adjustPriceBasedOnCustomerType($sparepart, $selectedCustomerType);
+
+            // Periksa apakah stok mencukupi
+            if ($sparepart->stok_sparepart < $qtySparepart) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Stok tidak mencukupi untuk sparepart ID: ' . $sparepartId,
+                ], 400);
+            }
+
+            // Kurangi stok sparepart
+            $sparepart->update([
+                'stok_sparepart' => $sparepart->stok_sparepart - $qtySparepart,
+            ]);
+
+            // Hitung total penjualan dan pembayaran
+            $totalPenjualan += $hargaJual * $qtySparepart;
+            $totalBayar += $hargaJual * $qtySparepart;
+
+            // Catat detail penjualan
+            DetailSparepartPenjualan::create([
+                'kode_penjualan' => $sale->id,
+                'kode_sparepart' => $sparepartId,
+                'detail_harga_modal' => $sparepart->harga_beli,
+                'detail_harga_jual' => $hargaJual,
+                'qty_sparepart' => $qtySparepart,
+                'user_input' => auth()->user()->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        // Update total penjualan dan pembayaran setelah selesai
+        $sale->update([
+            'total_penjualan' => $totalPenjualan,
+            'total_bayar' => $totalBayar,
+        ]);
+        $this->recordLaciHistory(
+            $request->kategori_laci_id,
+            $totalBayar, // Uang masuk
+            null, // Tidak ada uang keluar
+            'Penjualan: ' . $sale->kode_penjualan . '- customer: ' . ($request->nama_customer ?? '-')
+        );
 
         return response()->json([
             'status' => 'success',
-            'data' => $sale
+            'data' => $sale,
         ]);
+    }
+
+    private function adjustPriceBasedOnCustomerType($sparepart, $selectedCustomerType)
+    {
+        $finalPrice = $sparepart->harga_ecer;
+
+        if ($selectedCustomerType == 'ecer') {
+            if ($finalPrice < 15000) {
+                $finalPrice += $finalPrice * 0.1;
+            } elseif ($finalPrice >= 15000 && $finalPrice <= 200000) {
+                $finalPrice += 10000;
+            } else {
+                $finalPrice += 20000;
+            }
+        } elseif ($selectedCustomerType == 'glosir') {
+            if ($finalPrice >= 5000 && $finalPrice < 15000) {
+                $finalPrice -= 1000;
+            } elseif ($finalPrice >= 50000 && $finalPrice < 200000) {
+                $finalPrice -= 5000;
+            }
+        } elseif ($selectedCustomerType == 'jumbo') {
+            if ($finalPrice >= 5000 && $finalPrice < 15000) {
+                $finalPrice -= 2000;
+            } elseif ($finalPrice >= 50000 && $finalPrice < 200000) {
+                $finalPrice -= 10000;
+            }
+        }
+
+        return $finalPrice;
     }
 
     // Get sale detail
