@@ -60,10 +60,15 @@ class SalesApiController extends Controller
     // Get sales history
     public function getSalesHistory()
     {
+        // Mendapatkan tanggal awal dan akhir bulan saat ini
+        $startOfMonth = now()->startOfMonth()->toDateString();
+        $endOfMonth = now()->endOfMonth()->toDateString();
+
         $sales = Penjualan::where([
             ['kode_owner', '=', $this->getThisUser()->id_upline],
             ['status_penjualan', '!=', '0']
         ])
+            ->whereBetween('tanggal_penjualan', [$startOfMonth, $endOfMonth]) // Filter satu bulan
             ->latest()
             ->with(['detailBarang', 'detailSparepart'])
             ->get();
@@ -73,6 +78,7 @@ class SalesApiController extends Controller
             'data' => $sales
         ]);
     }
+
 
     // Create new sale
     public function createSale(Request $request)
