@@ -9,6 +9,7 @@ use App\Models\DetailSparepartPenjualan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use App\Traits\KategoriLaciTrait;
+use App\Models\PemasukkanLain;
 use Illuminate\Support\Facades\DB;
 
 
@@ -18,24 +19,51 @@ class SalesApiController extends Controller
     public function search(Request $request)
     {
         try {
-            $searchQuery = $request->search;
+            // $searchQuery = $request->search;
 
-            $data = DB::table('spareparts')
-                ->where([
-                    ['nama_sparepart', 'LIKE', '%' . $searchQuery . '%'],
-                    ['kode_owner', '=', $this->getThisUser()->id_upline]
-                ])
-                ->select([
-                    'id',
-                    'kode_sparepart',
-                    'nama_sparepart',
-                    'harga_beli',
-                    'harga_ecer',
-                    'stok_sparepart',
-                    'created_at',
-                    'updated_at'
-                ])
-                ->get();
+            // $data = DB::table('spareparts')
+            // Validasi input
+            $request->validate([
+                'search' => 'required|string|max:255'
+            ]);
+
+            // Ambil input pencarian dan pisahkan menjadi kata-kata
+            $searchQuery = trim($request->input('search'));
+            $keywords = explode(' ', $searchQuery);
+
+            // Buat query
+            $query = DB::table('spareparts')
+                ->where('kode_owner', '=', $this->getThisUser()->id_upline);
+            // ->where([
+            //     ['nama_sparepart', 'LIKE', '%' . $searchQuery . '%'],
+            //     ['kode_owner', '=', $this->getThisUser()->id_upline]
+            // ])
+            // Tambahkan kondisi untuk setiap kata kunci
+            foreach ($keywords as $keyword) {
+                $query->where('nama_sparepart', 'LIKE', '%' . $keyword . '%');
+            }
+            // Eksekusi query
+            $data = $query->select([
+                'id',
+                'kode_sparepart',
+                'nama_sparepart',
+                'harga_beli',
+                'harga_ecer',
+                'stok_sparepart',
+                'created_at',
+                'updated_at'
+            ])->get();
+            // ->select([
+            //     'id',
+            //     'kode_sparepart',
+            //     'nama_sparepart',
+            //     'harga_beli',
+            //     'harga_ecer',
+            //     'stok_sparepart',
+            //     'created_at',
+            //     'updated_at'
+            // ])
+            // ->get();
 
             return response()->json([
                 'status' => 'success',
@@ -69,86 +97,6 @@ class SalesApiController extends Controller
     }
 
     // Create new sale
-    // public function createSale(Request $request)
-    // {
-    //     // Hitung total penjualan dan pembayaran
-    //     $totalPenjualan = 0;
-    //     $totalBayar = 0;
-
-    //     // Buat data penjualan terlebih dahulu
-    //     $sale = Penjualan::create([
-    //         'kode_penjualan' => 'TRX' . date('Ymd') . auth()->user()->id . (Penjualan::count() + 1),
-    //         'tgl_penjualan' => date('Y-m-d'),
-    //         'kode_owner' => $this->getThisUser()->id_upline,
-    //         'nama_customer' => $request->nama_customer ?? '-',
-    //         'catatan_customer' => $request->catatan_customer ?? '',
-    //         'total_penjualan' => 0, // Akan diperbarui nanti
-    //         'total_bayar' => 0, // Akan diperbarui nanti
-    //         'user_input' => auth()->user()->id,
-    //         'status_penjualan' => '1',
-    //         'created_at' => now(),
-    //         'updated_at' => now(),
-    //     ]);
-
-    //     foreach ($request->items as $item) {
-    //         $qtySparepart = $item['qty'];
-    //         $sparepartId = $item['sparepart_id'];
-
-    //         // Ambil data sparepart dari database
-    //         $sparepart = Sparepart::findOrFail($sparepartId);
-
-    //         // Periksa apakah stok mencukupi
-    //         if ($sparepart->stok_sparepart < $qtySparepart) {
-    //             return response()->json([
-    //                 'status' => 'error',
-    //                 'message' => 'Stok tidak mencukupi untuk sparepart ID: ' . $sparepartId,
-    //             ], 400);
-    //         }
-
-    //         // Gunakan harga jual dari database
-    //         $hargaJual = $sparepart->harga_ecer;
-
-    //         // Kurangi stok sparepart
-    //         $sparepart->update([
-    //             'stok_sparepart' => $sparepart->stok_sparepart - $qtySparepart,
-    //         ]);
-
-    //         // Hitung total penjualan dan pembayaran
-    //         $totalPenjualan += $hargaJual * $qtySparepart;
-    //         $totalBayar += $hargaJual * $qtySparepart;
-
-    //         // Catat detail penjualan
-    //         DetailSparepartPenjualan::create([
-    //             'kode_penjualan' => $sale->id, // Gunakan kode_penjualan yang baru dibuat
-    //             'kode_sparepart' => $sparepartId,
-    //             'detail_harga_modal' => $sparepart->harga_beli,
-    //             'detail_harga_jual' => $hargaJual,
-    //             'qty_sparepart' => $qtySparepart,
-    //             'user_input' => auth()->user()->id,
-    //             'created_at' => now(),
-    //             'updated_at' => now(),
-    //         ]);
-    //     }
-
-    //     // Update total penjualan dan pembayaran setelah selesai
-    //     $sale->update([
-    //         'total_penjualan' => $totalPenjualan,
-    //         'total_bayar' => $totalBayar,
-    //     ]);
-
-    //     // Catat histori laci
-    //     $this->recordLaciHistory(
-    //         $request->kategori_laci_id,
-    //         $totalBayar, // Uang masuk
-    //         null, // Tidak ada uang keluar
-    //         'Penjualan: ' . $sale->kode_penjualan
-    //     );
-
-    //     return response()->json([
-    //         'status' => 'success',
-    //         'data' => $sale,
-    //     ]);
-    // }
     public function createSale(Request $request)
     {
         $totalPenjualan = 0;
@@ -257,6 +205,52 @@ class SalesApiController extends Controller
         }
 
         return $finalPrice;
+    }
+    public function createPemasukkanLainApi(Request $request)
+    {
+        // Validasi input request
+        $request->validate([
+            'jumlah_pemasukan' => ['required', 'numeric'],
+        ]);
+        try {
+            // Buat record pemasukan baru
+            $create = PemasukkanLain::create([
+                'tgl_pemasukkan' => date('Y-m-d'),
+                'judul_pemasukan' => $request->judul_pemasukan,
+                'catatan_pemasukkan' => $request->catatan_pemasukan,
+                'jumlah_pemasukkan' => $request->jumlah_pemasukan,
+                'kode_owner' => $this->getThisUser()->id_upline,
+            ]);
+
+            // Jika pemasukan berhasil dibuat, catat histori laci
+            if ($create) {
+                $kategoriId = $request->id_kategorilaci;
+                $uangMasuk = $request->input('jumlah_pemasukan');
+                $keterangan = $request->input('judul_pemasukan') . "-" . $request->input('catatan_pemasukan');
+
+                $this->recordLaciHistory($kategoriId, $uangMasuk, null, $keterangan);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Pemasukkan berhasil ditambahkan',
+                    'data' => $create,
+                ], 201);
+            }
+
+            // Jika gagal, kirim response gagal
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menambahkan pemasukkan, ada kendala teknis',
+            ], 500);
+        } catch (\Exception $e) {
+            // Handle exception dan kirim response error
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan saat menambahkan pemasukkan',
+                'error' => $e->getMessage(),
+                'data' => $request->all(),
+            ], 500);
+        }
     }
 
     // Get sale detail
