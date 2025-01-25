@@ -68,7 +68,7 @@ class SalesApiController extends Controller
             ['kode_owner', '=', $this->getThisUser()->id_upline],
             ['status_penjualan', '!=', '0']
         ])
-            ->whereBetween('tanggal_penjualan', [$startOfMonth, $endOfMonth]) // Filter satu bulan
+            ->whereBetween('tgl_penjualan', [$startOfMonth, $endOfMonth]) // Filter satu bulan
             ->latest()
             ->with(['detailBarang', 'detailSparepart'])
             ->get();
