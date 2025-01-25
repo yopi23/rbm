@@ -19,30 +19,19 @@ class SalesApiController extends Controller
     public function search(Request $request)
     {
         try {
-            // Validasi input
-            $request->validate([
-                'search' => 'required|string|max:255'
-            ]);
+            $request->validate(['search' => 'required|string|max:255']);
+            $keywords = array_filter(explode(' ', strtolower(trim($request->input('search')))));
 
-            // Ambil input pencarian
-            $searchQuery = trim($request->input('search'));
-
-            // Pisahkan input pencarian menjadi array kata
-            $keywords = explode(' ', $searchQuery);
-
-            // Buat query dasar
             $query = DB::table('spareparts')
                 ->where('kode_owner', '=', $this->getThisUser()->id_upline);
 
-            // Pencarian untuk frasa lengkap (cocokkan seluruh input pencarian sekaligus)
-            $query->where('nama_sparepart', 'LIKE', '%' . $searchQuery . '%');
-
-            // Tambahkan kondisi pencocokan berbasis kata-kata
+            // Gunakan subquery untuk each keyword
             foreach ($keywords as $keyword) {
-                $query->where('nama_sparepart', 'LIKE', '%' . $keyword . '%');
+                $query->where(function ($q) use ($keyword) {
+                    $q->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', '%' . $keyword . '%');
+                });
             }
 
-            // Eksekusi query
             $data = $query->select([
                 'id',
                 'kode_sparepart',
@@ -54,26 +43,13 @@ class SalesApiController extends Controller
                 'updated_at'
             ])->get();
 
-            // Filter hasil untuk memastikan hanya yang benar-benar spesifik
-            $filteredData = $data->filter(function ($item) use ($keywords) {
-                foreach ($keywords as $keyword) {
-                    // Pastikan setiap kata kunci ada di nama sparepart
-                    if (stripos($item->nama_sparepart, $keyword) === false) {
-                        return false;
-                    }
-                }
-                return true;
-            });
-
-            // Kembalikan hasil dalam format JSON
             return response()->json([
                 'status' => 'success',
                 'message' => 'Data retrieved successfully',
-                'total_items' => $filteredData->count(),
-                'data' => $filteredData->values()
+                'total_items' => $data->count(),
+                'data' => $data
             ], 200);
         } catch (\Exception $e) {
-            // Jika terjadi error, kembalikan respons error
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve data',
