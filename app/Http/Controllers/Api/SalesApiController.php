@@ -19,29 +19,29 @@ class SalesApiController extends Controller
     public function search(Request $request)
     {
         try {
-            // $searchQuery = $request->search;
-
-            // $data = DB::table('spareparts')
             // Validasi input
             $request->validate([
                 'search' => 'required|string|max:255'
             ]);
 
-            // Ambil input pencarian dan pisahkan menjadi kata-kata
+            // Ambil input pencarian
             $searchQuery = trim($request->input('search'));
+
+            // Pisahkan input pencarian menjadi array kata
             $keywords = explode(' ', $searchQuery);
 
-            // Buat query
+            // Buat query dasar
             $query = DB::table('spareparts')
                 ->where('kode_owner', '=', $this->getThisUser()->id_upline);
-            // ->where([
-            //     ['nama_sparepart', 'LIKE', '%' . $searchQuery . '%'],
-            //     ['kode_owner', '=', $this->getThisUser()->id_upline]
-            // ])
-            // Tambahkan kondisi untuk setiap kata kunci
+
+            // Pencarian untuk frasa lengkap (cocokkan seluruh input pencarian sekaligus)
+            $query->where('nama_sparepart', 'LIKE', '%' . $searchQuery . '%');
+
+            // Tambahkan kondisi pencocokan berbasis kata-kata
             foreach ($keywords as $keyword) {
                 $query->where('nama_sparepart', 'LIKE', '%' . $keyword . '%');
             }
+
             // Eksekusi query
             $data = $query->select([
                 'id',
@@ -53,25 +53,27 @@ class SalesApiController extends Controller
                 'created_at',
                 'updated_at'
             ])->get();
-            // ->select([
-            //     'id',
-            //     'kode_sparepart',
-            //     'nama_sparepart',
-            //     'harga_beli',
-            //     'harga_ecer',
-            //     'stok_sparepart',
-            //     'created_at',
-            //     'updated_at'
-            // ])
-            // ->get();
 
+            // Filter hasil untuk memastikan hanya yang benar-benar spesifik
+            $filteredData = $data->filter(function ($item) use ($keywords) {
+                foreach ($keywords as $keyword) {
+                    // Pastikan setiap kata kunci ada di nama sparepart
+                    if (stripos($item->nama_sparepart, $keyword) === false) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+
+            // Kembalikan hasil dalam format JSON
             return response()->json([
                 'status' => 'success',
                 'message' => 'Data retrieved successfully',
-                'total_items' => $data->count(),
-                'data' => $data
+                'total_items' => $filteredData->count(),
+                'data' => $filteredData->values()
             ], 200);
         } catch (\Exception $e) {
+            // Jika terjadi error, kembalikan respons error
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve data',
