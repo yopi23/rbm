@@ -60,15 +60,15 @@ class SalesApiController extends Controller
     // Get sales history
     public function getSalesHistory()
     {
-        // Mendapatkan tanggal awal dan akhir bulan saat ini
-        $startOfMonth = now()->startOfMonth()->toDateString();
-        $endOfMonth = now()->endOfMonth()->toDateString();
+        // Mendapatkan tanggal 7 hari terakhir
+        $oneWeekAgo = now()->subDays(7)->toDateString();
+        $today = now()->toDateString();
 
         $sales = Penjualan::where([
             ['kode_owner', '=', $this->getThisUser()->id_upline],
             ['status_penjualan', '!=', '0']
         ])
-            ->whereBetween('tgl_penjualan', [$startOfMonth, $endOfMonth]) // Filter satu bulan
+            ->whereBetween('tgl_penjualan', [$oneWeekAgo, $today]) // Filter 7 hari terakhir
             ->latest()
             ->with(['detailBarang', 'detailSparepart'])
             ->get();
@@ -78,6 +78,7 @@ class SalesApiController extends Controller
             'data' => $sales
         ]);
     }
+
 
 
     // Create new sale
