@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Api\SparepartApiController;
 use App\Http\Controllers\Api\PengambilanController;
 use App\Http\Controllers\Api\SalesApiController;
+use App\Http\Controllers\Api\UserDataController;
 use FontLib\Table\Type\name;
 
 /*
@@ -61,6 +62,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/sales/{id}/update', [SalesApiController::class, 'updateSale']);
     Route::delete('/sales/{id}/delete', [SalesApiController::class, 'deleteSale']);
     // });
+
+    Route::get('/user-profile/{kode_user}', [UserDataController::class, 'getUserProfile']);
+    Route::post('/penarikan', [UserDataController::class, 'store_penarikan']);
 });
 
 Route::post('login', [AuthController::class, 'login']);
