@@ -458,10 +458,11 @@ class DashboardController extends Controller
     public function get_pending_services(Request $request)
     {
         // Ambil data service dengan status 'Antri'
-        $services = modelServices::where([
-            ['kode_owner', '=', $this->getThisUser()->id_upline],
-            ['status_services', '=', 'Antri'],
-        ])->latest()->get();
+        $services = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+        ->whereIn('status_services', ['Antri', 'Proses'])
+        ->latest()
+        ->get();
+
 
         // Cek apakah ada data
         if ($services->isEmpty()) {
