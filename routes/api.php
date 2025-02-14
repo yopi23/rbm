@@ -4,7 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Admin\DashboardController;
-use App\Http\Controllers\Admin\ServiceController;
+use App\Http\Controllers\Api\ServiceApiController;
 use App\Http\Controllers\Api\SparepartApiController;
 use App\Http\Controllers\Api\PengambilanController;
 use App\Http\Controllers\Api\SalesApiController;
@@ -25,8 +25,8 @@ use FontLib\Table\Type\name;
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/create-service', [DashboardController::class, 'create_service_api']);
     Route::post('/pending-services', [DashboardController::class, 'get_pending_services']);
-    Route::get('/services/completed-today', [ServiceController::class, 'getCompletedToday']);
-    Route::get('/services/completedAll', [ServiceController::class, 'getCompletedservice']);
+    Route::get('/services/completed-today', [ServiceApiController::class, 'getCompletedToday']);
+    Route::get('/services/completedAll', [ServiceApiController::class, 'getCompletedservice']);
     // detail service
     Route::get('/services/getServiceDetails/{id}', [SparepartApiController::class, 'getServiceDetails']);
     // update service
@@ -54,6 +54,8 @@ Route::middleware('auth:sanctum')->group(function () {
         return $request->user();
     });
     Route::get('/spareparts/search', [SalesApiController::class, 'search']);
+
+    Route::get('/service/search', [ServiceApiController::class, 'allservice']);
     // Route::prefix('api')->group(function () {
     Route::get('/sales-history', [SalesApiController::class, 'getSalesHistory']);
     Route::post('/sales', [SalesApiController::class, 'createSale']);
