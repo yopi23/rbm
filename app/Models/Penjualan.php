@@ -31,4 +31,5 @@ class Penjualan extends Model
     {
         return $this->hasMany(DetailSparepartPenjualan::class, 'kode_penjualan', 'id');
     }
+
 }

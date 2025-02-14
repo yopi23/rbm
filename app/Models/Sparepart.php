@@ -23,4 +23,8 @@ class Sparepart extends Model
         'kode_owner',
         'kode_spl',
     ];
+    // public function detailSparepart()
+    // {
+    //     return $this->hasMany(DetailSparepartPenjualan::class, 'kode_sparepart', 'id');
+    // }
 }

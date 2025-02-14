@@ -241,7 +241,7 @@ class SalesApiController extends Controller
     // Get sale detail
     public function getSaleDetail($id)
     {
-        $sale = Penjualan::with(['detailBarang', 'detailSparepart'])
+        $sale = Penjualan::with(['detailBarang', 'detailSparepart.sparepart:id,nama_sparepart'])
             ->findOrFail($id);
 
         return response()->json([

@@ -17,4 +17,8 @@ class DetailSparepartPenjualan extends Model
         'user_input',
         'status_rf',
     ];
+    public function sparepart()
+    {
+        return $this->belongsTo(Sparepart::class, 'kode_sparepart', 'id');
+    }
 }
