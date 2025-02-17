@@ -79,8 +79,6 @@ class SalesApiController extends Controller
         ]);
     }
 
-
-
     // Create new sale
     // public function createSale(Request $request)
     // {
@@ -249,7 +247,51 @@ class SalesApiController extends Controller
             'data' => $sale,
         ]);
     }
+    public function updateSaleStatus(Request $request)
+    {
+        $request->validate([
+            'id_penjualan' => 'required|exists:penjualans,id',
+        ]);
 
+        // Cari data penjualan berdasarkan kode_penjualan
+        $sale = Penjualan::where('id', $request->id_penjualan)->first();
+
+        if (!$sale) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Data penjualan tidak ditemukan',
+            ], 404);
+        }
+
+        // Cek apakah status sudah lunas
+        if ($sale->status_penjualan == '1') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Penjualan ini sudah lunas',
+            ], 400);
+        }
+
+        // Update status menjadi lunas (1)
+        $sale->update([
+            'status_penjualan' => '1',
+            'total_bayar' => $sale->total_penjualan, // Update total bayar
+            'updated_at' => now(),
+        ]);
+
+        // Catat ke laci jika dibutuhkan
+        $this->recordLaciHistory(
+            $request->kategori_laci_id,
+            $sale->total_penjualan, // Uang masuk
+            null,
+            'Pelunasan: ' . $sale->kode_penjualan . ' - Customer: ' . ($sale->nama_customer ?? '-')
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Status penjualan berhasil diperbarui menjadi lunas.',
+            'data' => $sale,
+        ]);
+    }
 
     private function adjustPriceBasedOnCustomerType($sparepart, $selectedCustomerType)
     {

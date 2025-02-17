@@ -59,6 +59,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Route::prefix('api')->group(function () {
     Route::get('/sales-history', [SalesApiController::class, 'getSalesHistory']);
     Route::post('/sales', [SalesApiController::class, 'createSale']);
+    Route::post('/updateSale', [SalesApiController::class, 'updateSaleStatus']);
     Route::post('/pemasukan', [SalesApiController::class, 'createPemasukkanLainApi']);
     Route::get('/sales/{id}/detail', [SalesApiController::class, 'getSaleDetail']);
     Route::put('/sales/{id}/update', [SalesApiController::class, 'updateSale']);
