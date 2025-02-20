@@ -37,6 +37,7 @@ class SalesApiController extends Controller
                 'kode_sparepart',
                 'nama_sparepart',
                 'harga_beli',
+                'harga_jual',
                 'harga_ecer',
                 'harga_pasang',
                 'stok_sparepart',
