@@ -320,7 +320,7 @@ Route::group(['middleware' => 'checkRole:0,1,2'], function () {
     Route::post('/serviceUpdate', [ServiceController::class, 'selesaikan'])->name('serviceUpdate');
 
     Route::get('/whatsapp', function () {
-        $response = Http::get('http://localhost:3001/qr');
+        $response = Http::get('http://localhost:3000/qr');
         $data = $response->json();
         return view('whatsapp.qr', ['qr' => $data['qr'] ?? null]);
     });
