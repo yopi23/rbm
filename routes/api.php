@@ -73,6 +73,7 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 Route::prefix('whatsapp')->group(function () {
     Route::get('/status', [WhatsAppController::class, 'checkStatus']);
+    Route::post('/logout', [WhatsAppController::class, 'logout']);
     Route::post('/send', [WhatsAppController::class, 'sendMessage']);
 });
 
