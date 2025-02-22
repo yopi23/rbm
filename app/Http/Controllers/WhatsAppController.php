@@ -39,7 +39,19 @@ class WhatsAppController extends Controller
             ], 500);
         }
     }
-
+// WhatsAppController.php
+public function forceDisconnect()
+{
+    try {
+        $response = Http::post($this->baseUrl . '/force-disconnect');
+        return $response->json();
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Tidak dapat terhubung ke WhatsApp service: ' . $e->getMessage()
+        ], 500);
+    }
+}
     public function sendMessage(Request $request)
     {
         $request->validate([

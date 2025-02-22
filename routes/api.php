@@ -75,6 +75,7 @@ Route::prefix('whatsapp')->group(function () {
     Route::get('/status', [WhatsAppController::class, 'checkStatus']);
     Route::post('/logout', [WhatsAppController::class, 'logout']);
     Route::post('/send', [WhatsAppController::class, 'sendMessage']);
+    Route::post('/force-disconnect', [WhatsAppController::class, 'forceDisconnect']);
 });
 
 Route::post('login', [AuthController::class, 'login']);
