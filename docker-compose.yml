@@ -34,7 +34,7 @@ services:
         environment:
             HOST: http://localhost:8080
             SESSION_NAME: session_1
-            AUTO_START: "n"
+            AUTO_START: "y"
             PREFIX: "."
             SESSION_PATH: /usr/src/app/session
             LOG_PATH: /usr/src/app/public/log
