@@ -38,12 +38,16 @@
         <div id="status" class="status"></div>
         <div id="qrcode"></div>
     </div>
+    {{-- test --}}
+
 
     <script>
         function checkStatus() {
             fetch('/api/whatsapp/status')
                 .then(response => response.json())
                 .then(data => {
+                    console.log("API Response:", data); // Cek apakah API mengembalikan data
+
                     const statusDiv = document.getElementById('status');
                     const qrcodeDiv = document.getElementById('qrcode');
 
@@ -56,14 +60,13 @@
                         statusDiv.textContent = 'Waiting for connection...';
 
                         if (data.qrCode) {
+                            console.log("Raw QR Code:", data.qrCode); // Cek bentuk asli data
+
                             qrcodeDiv.innerHTML = ''; // Reset QR Code div
 
-                            // Ambil hanya bagian pertama dari qrCode sebelum koma
-                            let qrCodeString = data.qrCode.split(',')[0];
-
-                            // Generate QR Code
+                            // Coba gunakan QR Code secara langsung tanpa split
                             new QRCode(qrcodeDiv, {
-                                text: qrCodeString,
+                                text: data.qrCode,
                                 width: 256,
                                 height: 256
                             });
