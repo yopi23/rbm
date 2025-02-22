@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 
 class WhatsAppController extends Controller
 {
@@ -12,7 +11,8 @@ class WhatsAppController extends Controller
 
     public function __construct()
     {
-        $this->baseUrl = env('WHATSAPP_SERVICE_URL', 'http://localhost:3000');
+        // Gunakan domain server Anda
+        $this->baseUrl = env('WHATSAPP_SERVICE_URL', 'https://domain-anda.com:3000');
     }
 
     public function checkStatus()
@@ -21,10 +21,9 @@ class WhatsAppController extends Controller
             $response = Http::get($this->baseUrl . '/status');
             return $response->json();
         } catch (\Exception $e) {
-            Log::error('WhatsApp Status Error: ' . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Tidak dapat terhubung ke WhatsApp service'
+                'message' => 'Tidak dapat terhubung ke WhatsApp service: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -32,8 +31,8 @@ class WhatsAppController extends Controller
     public function sendMessage(Request $request)
     {
         $request->validate([
-            'number' => 'required|string',
-            'message' => 'required|string'
+            'number' => 'required',
+            'message' => 'required'
         ]);
 
         try {
@@ -44,10 +43,9 @@ class WhatsAppController extends Controller
 
             return $response->json();
         } catch (\Exception $e) {
-            Log::error('WhatsApp Send Error: ' . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Gagal mengirim pesan'
+                'message' => 'Gagal mengirim pesan: ' . $e->getMessage()
             ], 500);
         }
     }
