@@ -9,7 +9,7 @@ services:
         restart: unless-stopped
         tty: true
         ports:
-            - "9000:9000" # Port internal untuk PHP-FPM
+            - "8000:9000" # Port internal untuk PHP-FPM
         environment:
             SERVICE_NAME: app
             SERVICE_TAGS: dev
