@@ -22,37 +22,6 @@ services:
             - rbmnet
         platform: linux/amd64
 
-    # WhatsApp Gateway Service
-    whatsapp:
-        build:
-            context: /www/wwwroot/whatsapp-gateway
-            dockerfile: Dockerfile
-        container_name: wa_gateway
-        restart: unless-stopped
-        ports:
-            - "8899:80"
-        environment:
-            HOST: http://localhost:8899
-            SESSION_NAME: session_1
-            AUTO_START: "y"
-            PREFIX: "."
-            SESSION_PATH: /usr/src/app/session
-            LOG_PATH: /usr/src/app/public/log
-            DB_NAME: wagateway
-            DB_USER: Yop1
-            DB_PASSWORD: dockerrbm
-            DB_HOST: db
-            DB_PORT: 3306
-            DB_DIALECT: mysql
-        volumes:
-            - /www/wwwroot/whatsapp-gateway:/usr/src/app
-            - wa_sessions:/usr/src/app/session
-            - wa_logs:/usr/src/app/public/log
-        networks:
-            - rbmnet
-        depends_on:
-            - db
-
     # Nginx Service
     webserver:
         image: nginx:alpine
@@ -116,8 +85,3 @@ networks:
 volumes:
     lbdata:
         driver: local
-
-    wa_sessions:
-        driver: local # Menambahkan definisi volume wa_sessions
-    wa_logs:
-        driver: local # Menambahkan definisi volume wa_logs
