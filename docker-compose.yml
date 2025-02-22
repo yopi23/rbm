@@ -25,7 +25,7 @@ services:
     # WhatsApp Gateway Service
     whatsapp:
         build:
-            context: ./whatsapp-gateway
+            context: /www/wwwroot/whatsapp-gateway
             dockerfile: Dockerfile
         container_name: wa_gateway
         restart: unless-stopped
@@ -45,7 +45,7 @@ services:
             DB_PORT: 3306
             DB_DIALECT: mysql
         volumes:
-            - ./whatsapp-gateway:/usr/src/app
+            - /www/wwwroot/whatsapp-gateway:/usr/src/app
             - wa_sessions:/usr/src/app/session
             - wa_logs:/usr/src/app/public/log
         networks:
