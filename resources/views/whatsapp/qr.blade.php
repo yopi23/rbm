@@ -126,8 +126,8 @@
             }
         }
 
-        // Cek status setiap 10 detik
-        setInterval(checkStatus, 10000);
+        // Cek status setiap 100 detik
+        setInterval(checkStatus, 100000);
         checkStatus(); // Panggil pertama kali saat halaman dimuat
     </script>
 </body>
