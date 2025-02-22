@@ -30,7 +30,7 @@ services:
         container_name: wa_gateway
         restart: unless-stopped
         ports:
-            - "8899:8899"
+            - "8899:80"
         environment:
             HOST: http://localhost:8899
             SESSION_NAME: session_1
@@ -64,6 +64,7 @@ services:
             - "443:443" # Port standar HTTPS
         volumes:
             - .:/www/wwwroot/rbm
+            - .:/www/wwwroot/whatsapp-gateway
             - ./storage/app.conf:/etc/nginx/conf.d/default.conf
             - ./certs:/etc/ssl/certs # Folder untuk sertifikat SSL
             - ./keys:/etc/ssl/private # Folder untuk private key SSL
