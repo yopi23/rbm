@@ -38,7 +38,7 @@ services:
             PREFIX: "."
             SESSION_PATH: /usr/src/app/session
             LOG_PATH: /usr/src/app/public/log
-            DB_NAME: wa-gateway
+            DB_NAME: wagateway
             DB_USER: Yop1
             DB_PASSWORD: dockerrbm
             DB_HOST: db
