@@ -8,19 +8,30 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <style>
-        .container {
+        body {
+            font-family: Arial, sans-serif;
             text-align: center;
             margin-top: 50px;
         }
 
-        #qrcode {
-            margin: 20px auto;
+        .container {
+            display: inline-block;
+            text-align: center;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
+            background: white;
+        }
+
+        #qr-container {
+            margin: 20px 0;
         }
 
         .status {
-            margin: 20px;
             padding: 10px;
             border-radius: 5px;
+            font-weight: bold;
+            display: inline-block;
         }
 
         .connected {
@@ -36,8 +47,13 @@
 </head>
 
 <body>
-    <h2>Scan QR Code WhatsApp</h2>
-    <div id="qr-container"></div> <!-- Tempat QR Code -->
+    <div class="container">
+        <h2>Scan QR Code WhatsApp</h2>
+        <div id="status-container">
+            <p class="status disconnected">Menunggu koneksi...</p>
+        </div>
+        <div id="qr-container"></div> <!-- Tempat QR Code -->
+    </div>
 
     <script>
         async function checkStatus() {
@@ -46,15 +62,22 @@
                 const data = await response.json();
                 console.log("API Response:", data);
 
-                if (data.qrCode) {
-                    document.getElementById('qr-container').innerHTML = ""; // Hapus QR lama
-                    new QRCode(document.getElementById("qr-container"), {
-                        text: data.qrCode,
-                        width: 200,
-                        height: 200
-                    });
-                } else if (data.status === 'connected') {
-                    document.getElementById('qr-container').innerHTML = '<p>WhatsApp Connected!</p>';
+                const statusContainer = document.getElementById('status-container');
+                const qrContainer = document.getElementById('qr-container');
+
+                if (data.status === 'connected') {
+                    statusContainer.innerHTML = '<p class="status connected">WhatsApp Connected!</p>';
+                    qrContainer.innerHTML = ''; // Hapus QR jika sudah terhubung
+                } else {
+                    statusContainer.innerHTML = '<p class="status disconnected">Menunggu scan QR...</p>';
+                    if (data.qrCode) {
+                        qrContainer.innerHTML = ""; // Hapus QR lama
+                        new QRCode(qrContainer, {
+                            text: data.qrCode,
+                            width: 200,
+                            height: 200
+                        });
+                    }
                 }
             } catch (error) {
                 console.error("Error fetching status:", error);
@@ -62,10 +85,9 @@
         }
 
         // Cek status setiap 10 detik
-        setInterval(checkStatus, 100000);
+        setInterval(checkStatus, 10000);
         checkStatus(); // Panggil pertama kali saat halaman dimuat
     </script>
 </body>
-
 
 </html>
