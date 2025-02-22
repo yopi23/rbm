@@ -23,7 +23,7 @@ services:
         platform: linux/amd64
 
     # WhatsApp Gateway Service
-   whatsapp:
+    whatsapp:
         build:
             context: /www/wwwroot/whatsapp-gateway
             dockerfile: Dockerfile
@@ -117,6 +117,6 @@ volumes:
         driver: local
 
     wa_sessions:
-        driver: local    # Menambahkan definisi volume wa_sessions
+        driver: local # Menambahkan definisi volume wa_sessions
     wa_logs:
-        driver: local    # Menambahkan definisi volume wa_logs
+        driver: local # Menambahkan definisi volume wa_logs
