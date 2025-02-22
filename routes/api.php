@@ -69,10 +69,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user-profile/{kode_user}', [UserDataController::class, 'getUserProfile']);
     Route::post('/penarikan', [UserDataController::class, 'store_penarikan']);
 
-    Route::prefix('whatsapp')->group(function () {
-        Route::get('/status', [WhatsAppController::class, 'checkStatus']);
-        Route::post('/send', [WhatsAppController::class, 'sendMessage']);
-    });
+});
+Route::prefix('whatsapp')->group(function () {
+    Route::get('/status', [WhatsAppController::class, 'checkStatus']);
+    Route::post('/send', [WhatsAppController::class, 'sendMessage']);
 });
 
 Route::post('login', [AuthController::class, 'login']);
