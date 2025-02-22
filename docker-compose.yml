@@ -30,9 +30,9 @@ services:
         container_name: wa_gateway
         restart: unless-stopped
         ports:
-            - "8080:8080"
+            - "3000:3000"
         environment:
-            HOST: http://localhost:8080
+            HOST: http://localhost:3000
             SESSION_NAME: session_1
             AUTO_START: "y"
             PREFIX: "."
