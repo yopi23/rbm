@@ -39,14 +39,13 @@
         <div id="qrcode"></div>
     </div>
     {{-- test --}}
-
-
     <script>
         function checkStatus() {
+            console.log("Starting checkStatus function...");
             fetch('/api/whatsapp/status')
                 .then(response => response.json())
                 .then(data => {
-                    console.log("API Response:", data); // Cek apakah API mengembalikan data
+                    console.log("API Response:", data); // Cek apakah API merespons
 
                     const statusDiv = document.getElementById('status');
                     const qrcodeDiv = document.getElementById('qrcode');
@@ -59,22 +58,27 @@
                         statusDiv.className = 'status disconnected';
                         statusDiv.textContent = 'Waiting for connection...';
 
+                        console.log("Checking QR Code field...");
+
                         if (data.qrCode) {
-                            console.log("Raw QR Code:", data.qrCode); // Cek bentuk asli data
+                            console.log("Raw QR Code:", data.qrCode); // Ini yang kita cek
 
                             qrcodeDiv.innerHTML = ''; // Reset QR Code div
 
-                            // Coba gunakan QR Code secara langsung tanpa split
+                            let qrText = data.qrCode.split(',')[0]; // Ambil hanya bagian pertama
+
                             new QRCode(qrcodeDiv, {
-                                text: data.qrCode,
+                                text: qrText,
                                 width: 256,
                                 height: 256
                             });
+                        } else {
+                            console.warn("No QR Code found in API response!");
                         }
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
+                    console.error('Error fetching API:', error);
                     document.getElementById('status').textContent = 'Error connecting to WhatsApp service';
                 });
         }
