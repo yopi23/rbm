@@ -59,6 +59,13 @@
         #disconnect-btn:hover {
             background: #c82333;
         }
+
+        .loading {
+            display: none;
+            margin: 10px 0;
+            font-style: italic;
+            color: #666;
+        }
     </style>
 </head>
 
@@ -68,7 +75,8 @@
         <div id="status-container">
             <p class="status disconnected">Menunggu koneksi...</p>
         </div>
-        <div id="qr-container"></div> <!-- Tempat QR Code -->
+        <div id="loading" class="loading">Memproses...</div>
+        <div id="qr-container"></div>
         <div id="connected-info" style="display: none;">
             <p><strong>Terhubung dengan:</strong> <span id="connected-number"></span></p>
             <button id="disconnect-btn" onclick="disconnectWhatsApp()">Disconnect</button>
@@ -87,16 +95,16 @@
                 const connectedInfo = document.getElementById('connected-info');
                 const connectedNumber = document.getElementById('connected-number');
 
-                if (data.status === 'connected' && data.number) {
+                if (data.status === 'connected' && data.connectedNumber) { // Perhatikan property yang diubah
                     statusContainer.innerHTML = '<p class="status connected">WhatsApp Connected!</p>';
-                    connectedNumber.textContent = data.number;
-                    connectedInfo.style.display = "block"; // Tampilkan info nomor & tombol Disconnect
-                    qrContainer.innerHTML = ''; // Hapus QR jika sudah terhubung
+                    connectedNumber.textContent = data.connectedNumber;
+                    connectedInfo.style.display = "block";
+                    qrContainer.innerHTML = '';
                 } else {
                     statusContainer.innerHTML = '<p class="status disconnected">Menunggu scan QR...</p>';
-                    connectedInfo.style.display = "none"; // Sembunyikan info jika belum terhubung
+                    connectedInfo.style.display = "none";
                     if (data.qrCode) {
-                        qrContainer.innerHTML = ""; // Hapus QR lama
+                        qrContainer.innerHTML = "";
                         new QRCode(qrContainer, {
                             text: data.qrCode,
                             width: 200,
@@ -106,28 +114,41 @@
                 }
             } catch (error) {
                 console.error("Error fetching status:", error);
+                const statusContainer = document.getElementById('status-container');
+                statusContainer.innerHTML = '<p class="status disconnected">Error: Gagal terhubung ke server</p>';
             }
         }
 
         async function disconnectWhatsApp() {
             try {
+                const loading = document.getElementById('loading');
+                loading.style.display = 'block';
+
                 const response = await fetch('/api/whatsapp/logout', {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
                 });
+
                 const result = await response.json();
+                loading.style.display = 'none';
+
                 if (result.success) {
                     alert("Berhasil disconnect!");
                     checkStatus(); // Perbarui tampilan
                 } else {
-                    alert("Gagal disconnect!");
+                    alert(result.message || "Gagal disconnect!");
                 }
             } catch (error) {
                 console.error("Error disconnecting:", error);
+                alert("Terjadi kesalahan saat mencoba disconnect");
+                loading.style.display = 'none';
             }
         }
 
-        // Cek status setiap 100 detik
-        setInterval(checkStatus, 100000);
+        // Cek status setiap 10 detik (100000ms terlalu lama)
+        setInterval(checkStatus, 10000);
         checkStatus(); // Panggil pertama kali saat halaman dimuat
     </script>
 </body>
