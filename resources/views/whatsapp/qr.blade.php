@@ -38,27 +38,29 @@
     <h2>Scan QR Code WhatsApp</h2>
     <script>
         async function checkStatus() {
-            const response = await fetch('/api/whatsapp/status');
-            const data = await response.json();
+            try {
+                const response = await fetch('/api/whatsapp/status');
 
-            // Debugging: Cek response sebelum parsing JSON
-            const text = await response.text();
-            console.log("Raw Response:", text);
+                // Debugging: Cek response sebelum parsing JSON
+                const text = await response.text();
+                console.log("Raw Response:", text);
 
-            // Coba parsing ke JSON
-            const data = JSON.parse(text);
-            console.log("Parsed JSON:", data);
+                // Coba parsing ke JSON
+                const data = JSON.parse(text);
+                console.log("Parsed JSON:", data);
 
-            if (data.qrCode) {
-                // Tampilkan QR code (gunakan library qrcode.js atau yang lain)
-                displayQR(data.qrCode);
-            } else if (data.status === 'connected') {
-                document.getElementById('qr-code').innerHTML = 'WhatsApp Connected!';
+                if (data.qrCode) {
+                    document.body.innerHTML += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                } else if (data.status === 'connected') {
+                    document.getElementById('qr-code').innerHTML = 'WhatsApp Connected!';
+                }
+            } catch (error) {
+                console.error("Error fetching status:", error);
             }
         }
 
-        // Cek status setiap 5 detik
-        setInterval(checkStatus, 50000);
+        // Cek status setiap 10 detik (kurangi frekuensi)
+        setInterval(checkStatus, 10000);
     </script>
 </body>
 
