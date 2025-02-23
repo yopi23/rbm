@@ -35,6 +35,10 @@ services:
             - .:/www/wwwroot/rbm
             - .:/www/wwwroot/whatsapp-gateway
             - ./storage/app.conf:/etc/nginx/conf.d/default.conf
+            #waget
+            - /etc/letsencrypt/live/neostore.my.id:/etc/letsencrypt/live/neostore.my.id:ro
+            - /etc/letsencrypt/archive/neostore.my.id:/etc/letsencrypt/archive/neostore.my.id:ro
+            #waget end
             - ./certs:/etc/ssl/certs # Folder untuk sertifikat SSL
             - ./keys:/etc/ssl/private # Folder untuk private key SSL
             - /etc/letsencrypt:/etc/letsencrypt:ro
