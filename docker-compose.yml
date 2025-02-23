@@ -71,7 +71,7 @@ services:
         container_name: pma_rbm
         environment:
             PMA_HOST: db # Nama service database
-            PMA_USER: Yop1 # User yang digunakan untuk login
+            PMA_USER: root # User yang digunakan untuk login
             PMA_PASSWORD: dockerrbm # Password untuk user
             MEMORY_LIMIT: 1000M
             UPLOAD_LIMIT: 40M
