@@ -7,58 +7,40 @@ use Illuminate\Support\Facades\Http;
 
 class WhatsAppController extends Controller
 {
-    private $waApiUrl;
-
-    public function __construct()
-    {
-        $this->waApiUrl = env('WHATSAPP_API_URL', 'http://localhost:3000');
-    }
+    private $serverUrl = 'http://localhost:3000/api/whatsapp';
 
     public function checkStatus()
     {
-        try {
-            $response = Http::get($this->waApiUrl . '/status');
-            return $response->json();
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to connect to WhatsApp service'
-            ], 500);
-        }
+        $response = Http::get("{$this->serverUrl}/status");
+        return response()->json($response->json());
+    }
+
+    public function startSession()
+    {
+        $response = Http::post("{$this->serverUrl}/start");
+        return response()->json($response->json());
     }
 
     public function sendMessage(Request $request)
     {
-        try {
-            $request->validate([
-                'number' => 'required|string',
-                'message' => 'required|string'
-            ]);
+        $validated = $request->validate([
+            'number' => 'required',
+            'message' => 'required'
+        ]);
 
-            $response = Http::post($this->waApiUrl . '/send', [
-                'number' => $request->number,
-                'message' => $request->message
-            ]);
-
-            return $response->json();
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to send message'
-            ], 500);
-        }
+        $response = Http::post("{$this->serverUrl}/send", $validated);
+        return response()->json($response->json());
     }
 
     public function logout()
     {
-        try {
-            $response = Http::post($this->waApiUrl . '/logout');
-            return $response->json();
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to logout'
-            ], 500);
-        }
+        $response = Http::post("{$this->serverUrl}/logout");
+        return response()->json($response->json());
+    }
+
+    public function forceDisconnect()
+    {
+        $response = Http::post("{$this->serverUrl}/force-disconnect");
+        return response()->json($response->json());
     }
 }

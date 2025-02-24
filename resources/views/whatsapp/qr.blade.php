@@ -1,155 +1,67 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scan QR WhatsApp</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin-top: 50px;
-            background: #f4f4f4;
-        }
-
-        .container {
-            display: inline-block;
-            text-align: center;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
-            background: white;
-        }
-
-        #qr-container {
-            margin: 20px 0;
-        }
-
-        .status {
-            padding: 10px;
-            border-radius: 5px;
-            font-weight: bold;
-            display: inline-block;
-        }
-
-        .connected {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .disconnected {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        #disconnect-btn {
-            margin-top: 15px;
-            padding: 10px 15px;
-            border: none;
-            border-radius: 5px;
-            background: #dc3545;
-            color: white;
-            font-size: 14px;
-            cursor: pointer;
-        }
-
-        #disconnect-btn:hover {
-            background: #c82333;
-        }
-
-        .loading {
-            display: none;
-            margin: 10px 0;
-            font-style: italic;
-            color: #666;
-        }
-    </style>
+    <title>WhatsApp Gateway</title>
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 
 <body>
-    <div class="container">
-        <h2>Scan QR Code WhatsApp</h2>
-        <div id="status-container">
-            <p class="status disconnected">Menunggu koneksi...</p>
-        </div>
-        <div id="loading" class="loading">Memproses...</div>
-        <div id="qr-container"></div>
-        <div id="connected-info" style="display: none;">
-            <p><strong>Terhubung dengan:</strong> <span id="connected-number"></span></p>
-            <button id="disconnect-btn" onclick="disconnectWhatsApp()">Disconnect</button>
-        </div>
+    <h1>WhatsApp Gateway</h1>
+    <div id="status">Checking status...</div>
+    <div id="qr-container" style="display: none;">
+        <h3>Scan QR Code</h3>
+        <img id="qr-code" src="" alt="QR Code">
     </div>
+    <button id="start-session" style="display: none;">Tambah Device</button>
+    <button id="logout" style="display: none;">Logout</button>
+    <button id="force-disconnect" style="display: none;">Hapus Sandingan</button>
 
     <script>
-        async function checkStatus() {
-            try {
-                const response = await fetch('/api/whatsapp/status');
-                const data = await response.json();
-                console.log("API Response:", data);
+        const socket = io("http://localhost:3000");
 
-                const statusContainer = document.getElementById('status-container');
-                const qrContainer = document.getElementById('qr-container');
-                const connectedInfo = document.getElementById('connected-info');
-                const connectedNumber = document.getElementById('connected-number');
-
-                if (data.status === 'connected' && data.connectedNumber) { // Perhatikan property yang diubah
-                    statusContainer.innerHTML = '<p class="status connected">WhatsApp Connected!</p>';
-                    connectedNumber.textContent = data.connectedNumber;
-                    connectedInfo.style.display = "block";
-                    qrContainer.innerHTML = '';
+        function checkStatus() {
+            $.get("/api/whatsapp/status", function(data) {
+                if (data.connected) {
+                    $("#status").text("Device Connected");
+                    $("#logout, #force-disconnect").show();
+                    $("#start-session, #qr-container").hide();
                 } else {
-                    statusContainer.innerHTML = '<p class="status disconnected">Menunggu scan QR...</p>';
-                    connectedInfo.style.display = "none";
-                    if (data.qrCode) {
-                        qrContainer.innerHTML = "";
-                        new QRCode(qrContainer, {
-                            text: data.qrCode,
-                            width: 200,
-                            height: 200
-                        });
-                    }
+                    $("#status").text("No Device Connected");
+                    $("#start-session").show();
+                    $("#logout, #force-disconnect, #qr-container").hide();
                 }
-            } catch (error) {
-                console.error("Error fetching status:", error);
-                const statusContainer = document.getElementById('status-container');
-                statusContainer.innerHTML = '<p class="status disconnected">Error: Gagal terhubung ke server</p>';
-            }
+            });
         }
 
-        async function disconnectWhatsApp() {
-            try {
-                const loading = document.getElementById('loading');
-                loading.style.display = 'block';
+        socket.on("qr", function(qr) {
+            $("#qr-code").attr("src", "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" +
+                encodeURIComponent(qr));
+            $("#qr-container").show();
+        });
 
-                const response = await fetch('/api/whatsapp/logout', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
+        $("#start-session").click(function() {
+            $.post("/api/whatsapp/start", function() {
+                $("#start-session").hide();
+            });
+        });
 
-                const result = await response.json();
-                loading.style.display = 'none';
+        $("#logout").click(function() {
+            $.post("/api/whatsapp/logout", function() {
+                checkStatus();
+            });
+        });
 
-                if (result.success) {
-                    alert("Berhasil disconnect!");
-                    checkStatus(); // Perbarui tampilan
-                } else {
-                    alert(result.message || "Gagal disconnect!");
-                }
-            } catch (error) {
-                console.error("Error disconnecting:", error);
-                alert("Terjadi kesalahan saat mencoba disconnect");
-                loading.style.display = 'none';
-            }
-        }
+        $("#force-disconnect").click(function() {
+            $.post("/api/whatsapp/force-disconnect", function() {
+                checkStatus();
+            });
+        });
 
-        // Cek status setiap 10 detik (100000ms terlalu lama)
-        setInterval(checkStatus, 10000);
-        checkStatus(); // Panggil pertama kali saat halaman dimuat
+        checkStatus();
     </script>
 </body>
 
