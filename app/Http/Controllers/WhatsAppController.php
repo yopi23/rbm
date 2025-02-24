@@ -12,7 +12,7 @@ class WhatsAppController extends Controller
     public function __construct()
     {
         // Gunakan domain server Anda
-        $this->baseUrl = env('WHATSAPP_SERVICE_URL','https://yoyoycell.my.id:3000');
+        $this->baseUrl = env('WHATSAPP_SERVICE_URL','https://yoyoycell.my.id:8080');
     }
 
     public function checkStatus()
