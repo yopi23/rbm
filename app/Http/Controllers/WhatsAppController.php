@@ -7,60 +7,35 @@ use Illuminate\Support\Facades\Http;
 
 class WhatsAppController extends Controller
 {
-    protected $baseUrl;
+    private $waApiUrl;
 
     public function __construct()
     {
-        // Gunakan domain server Anda
-        $this->baseUrl = env('WHATSAPP_SERVICE_URL','https://yoyoycell.my.id:8080');
+        $this->waApiUrl = env('WHATSAPP_API_URL', 'http://localhost:3000');
     }
 
     public function checkStatus()
     {
         try {
-            $response = Http::get($this->baseUrl . '/status');
+            $response = Http::get($this->waApiUrl . '/status');
             return $response->json();
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Tidak dapat terhubung ke WhatsApp service: ' . $e->getMessage()
+                'message' => 'Failed to connect to WhatsApp service'
             ], 500);
         }
     }
-    public function logout()
-    {
-        try {
-            $response = Http::post($this->baseUrl . '/logout');
-            return $response->json();
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Tidak dapat terhubung ke WhatsApp service: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-// WhatsAppController.php
-public function forceDisconnect()
-{
-    try {
-        $response = Http::post($this->baseUrl . '/force-disconnect');
-        return $response->json();
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Tidak dapat terhubung ke WhatsApp service: ' . $e->getMessage()
-        ], 500);
-    }
-}
+
     public function sendMessage(Request $request)
     {
-        $request->validate([
-            'number' => 'required',
-            'message' => 'required'
-        ]);
-
         try {
-            $response = Http::post($this->baseUrl . '/send', [
+            $request->validate([
+                'number' => 'required|string',
+                'message' => 'required|string'
+            ]);
+
+            $response = Http::post($this->waApiUrl . '/send', [
                 'number' => $request->number,
                 'message' => $request->message
             ]);
@@ -68,8 +43,21 @@ public function forceDisconnect()
             return $response->json();
         } catch (\Exception $e) {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Gagal mengirim pesan: ' . $e->getMessage()
+                'success' => false,
+                'message' => 'Failed to send message'
+            ], 500);
+        }
+    }
+
+    public function logout()
+    {
+        try {
+            $response = Http::post($this->waApiUrl . '/logout');
+            return $response->json();
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to logout'
             ], 500);
         }
     }
