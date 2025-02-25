@@ -9,8 +9,8 @@ use App\Http\Controllers\Api\SparepartApiController;
 use App\Http\Controllers\Api\PengambilanController;
 use App\Http\Controllers\Api\SalesApiController;
 use App\Http\Controllers\Api\UserDataController;
+use App\Http\Controllers\Api\WhatsAppMessageController;
 use FontLib\Table\Type\name;
-use App\Http\Controllers\WhatsAppController;
 
 /*
 |--------------------------------------------------------------------------
@@ -71,11 +71,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/penarikan', [UserDataController::class, 'store_penarikan']);
 
 });
-Route::prefix('whatsapp')->group(function () {
-    Route::get('/status', [WhatsAppController::class, 'checkStatus']);
-    Route::post('/logout', [WhatsAppController::class, 'logout']);
-    Route::post('/send', [WhatsAppController::class, 'sendMessage']);
-    Route::post('/force-disconnect', [WhatsAppController::class, 'forceDisconnect']);
-});
+// routes/api.php
+Route::post('/send-message', [WhatsAppMessageController::class, 'sendMessage']);
 
 Route::post('login', [AuthController::class, 'login']);
