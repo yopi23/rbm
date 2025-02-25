@@ -13,7 +13,7 @@ class WhatsAppController extends Controller
 
     public function __construct()
     {
-        $this->apiBaseUrl = config('services.whatsapp.api_url', 'http://localhost:3000');
+        $this->apiBaseUrl = config('services.whatsapp.api_url', 'http://103.196.154.19:3000');
     }
 
     public function index()
