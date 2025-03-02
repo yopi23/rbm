@@ -80,74 +80,75 @@ class UserDataController extends Controller
             $new_saldo = $user->saldo - $jumlahPenarikan;
             $pegawais->update(['saldo' => $new_saldo]);
 
+            //wa send
+// Status WhatsApp notification
+$whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
+
+// Dapatkan admin dari upline
+$admin = UserDetail::where([['kode_user', '=', $pegawais->id_upline]])->get()->first();
+
+// Array untuk menyimpan nomor telepon valid
+$validPhoneNumbers = [];
+
+// Inject WhatsAppService
+$whatsAppService = app(WhatsAppService::class);
+
+// Cek nomor admin
+if (!empty($admin->no_telp) && $whatsAppService->isValidPhoneNumber($admin->no_telp)) {
+    $validPhoneNumbers[] = $admin->no_telp;
+}
+
+// Cek nomor owner/recipient kedua
+if (!empty($pegawais->no_telp) && $whatsAppService->isValidPhoneNumber($pegawais->no_telp)) {
+    $validPhoneNumbers[] = $pegawais->no_telp;
+}
+
+// Kirim notifikasi WhatsApp jika ada nomor telepon valid
+if (count($validPhoneNumbers) > 0) {
+    try {
+        // Kirim notifikasi ke semua nomor valid sekaligus
+        $waResult = $whatsAppService->penarikanNotification([
+            'teknisi' => $pegawais->fullname,
+            'jumlah' => 'Rp ' . number_format($jumlahPenarikan, 0, ',', '.'),
+            'catatan' => $request->catatan_penarikan != null ? $request->catatan_penarikan : '-',
+            'no_hp' => $validPhoneNumbers,
+        ]);
+
+        if ($waResult['status']) {
+            $whatsappStatus = 'Pesan WhatsApp berhasil dikirim ke semua penerima';
+        } else {
+            // Cek apakah sebagian berhasil
+            $successCount = count(array_filter($waResult['details'], function($detail) {
+                return $detail['status'] === true;
+            }));
+
+            if ($successCount > 0) {
+                $whatsappStatus = "Pesan WhatsApp berhasil dikirim ke {$successCount} dari " . count($validPhoneNumbers) . " penerima";
+            } else {
+                $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
+            }
+        }
+    } catch (\Exception $waException) {
+        // Log error tapi jangan batalkan transaksi utama
+        \Log::error("Failed to send WhatsApp notification: " . $waException->getMessage(), [
+            'penarikan' => $pegawais->fullname,
+            'recipients' => $validPhoneNumbers,
+            'exception' => $waException
+        ]);
+
+        $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
+    }
+} else {
+    $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Tidak ada nomor telepon valid';
+}
+
+            //end wa send
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Penarikan berhasil dibuat',
                 'data' => $create
             ], 201);
-
-
-            // Status WhatsApp notification
-            $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
-
-            // Dapatkan admin dari upline
-            $admin = UserDetail::where([['kode_user', '=', $pegawais->id_upline]])->get()->first();
-
-            // Array untuk menyimpan nomor telepon valid
-            $validPhoneNumbers = [];
-
-            // Inject WhatsAppService
-            $whatsAppService = app(WhatsAppService::class);
-
-            // Cek nomor admin
-            if (!empty($admin->no_telp) && $whatsAppService->isValidPhoneNumber($admin->no_telp)) {
-                $validPhoneNumbers[] = $admin->no_telp;
-            }
-
-            // Cek nomor owner/recipient kedua
-            if (!empty($pegawais->no_telp) && $whatsAppService->isValidPhoneNumber($pegawais->no_telp)) {
-                $validPhoneNumbers[] = $pegawais->no_telp;
-            }
-
-            // Kirim notifikasi WhatsApp jika ada nomor telepon valid
-            if (count($validPhoneNumbers) > 0) {
-                try {
-                    // Kirim notifikasi ke semua nomor valid sekaligus
-                    $waResult = $whatsAppService->penarikanNotification([
-                        'teknisi' => $pegawais->fullname,
-                        'jumlah' => 'Rp ' . number_format($jumlahPenarikan, 0, ',', '.'),
-                        'catatan' => $request->catatan_penarikan != null ? $request->catatan_penarikan : '-',
-                        'no_hp' => $validPhoneNumbers,
-                    ]);
-
-                    if ($waResult['status']) {
-                        $whatsappStatus = 'Pesan WhatsApp berhasil dikirim ke semua penerima';
-                    } else {
-                        // Cek apakah sebagian berhasil
-                        $successCount = count(array_filter($waResult['details'], function($detail) {
-                            return $detail['status'] === true;
-                        }));
-
-                        if ($successCount > 0) {
-                            $whatsappStatus = "Pesan WhatsApp berhasil dikirim ke {$successCount} dari " . count($validPhoneNumbers) . " penerima";
-                        } else {
-                            $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
-                        }
-                    }
-                } catch (\Exception $waException) {
-                    // Log error tapi jangan batalkan transaksi utama
-                    \Log::error("Failed to send WhatsApp notification: " . $waException->getMessage(), [
-                        'penarikan' => $pegawais->fullname,
-                        'recipients' => $validPhoneNumbers,
-                        'exception' => $waException
-                    ]);
-
-                    $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
-                }
-            } else {
-                $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Tidak ada nomor telepon valid';
-            }
-
 
         }
 
