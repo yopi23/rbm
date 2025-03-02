@@ -674,42 +674,42 @@ class SparepartApiController extends Controller
                     }
                 }
 
-                // // Status WhatsApp notification
-                // $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
+                // Status WhatsApp notification
+                $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
 
-                // // Kirim notifikasi WhatsApp jika nomor telepon tersedia
-                // if (!empty($update->no_telp)) {
-                //     // Inject WhatsAppService
-                //     $whatsAppService = app(WhatsatAppService::class);
+                // Kirim notifikasi WhatsApp jika nomor telepon tersedia
+                if (!empty($update->no_telp)) {
+                    // Inject WhatsAppService
+                    $whatsAppService = app(WhatsatAppService::class);
 
-                //     // Validasi nomor telepon terlebih dahulu
-                //     if (!$whatsAppService->isValidPhoneNumber($update->no_telp)) {
-                //         $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak valid';
-                //     } else {
-                //         try {
-                //             // Kirim notifikasi
-                //             $waResult = $whatsAppService->sendServiceCompletionNotification([
-                //                 'nomor_services' => $update->kode_service,
-                //                 'nama_barang' => $update->type_unit,
-                //                 'no_hp' => $update->no_telp,
-                //             ]);
+                    // Validasi nomor telepon terlebih dahulu
+                    if (!$whatsAppService->isValidPhoneNumber($update->no_telp)) {
+                        $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak valid';
+                    } else {
+                        try {
+                            // Kirim notifikasi
+                            $waResult = $whatsAppService->sendServiceCompletionNotification([
+                                'nomor_services' => $update->kode_service,
+                                'nama_barang' => $update->type_unit,
+                                'no_hp' => $update->no_telp,
+                            ]);
 
-                //             if ($waResult['status']) {
-                //                 $whatsappStatus = 'Pesan WhatsApp berhasil dikirim';
-                //             } else {
-                //                 $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
-                //             }
-                //         } catch (\Exception $waException) {
-                //             // Log error tapi jangan batalkan transaksi utama
-                //             \Log::error("Failed to send WhatsApp notification: " . $waException->getMessage(), [
-                //                 'service_id' => $id,
-                //                 'exception' => $waException
-                //             ]);
+                            if ($waResult['status']) {
+                                $whatsappStatus = 'Pesan WhatsApp berhasil dikirim';
+                            } else {
+                                $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
+                            }
+                        } catch (\Exception $waException) {
+                            // Log error tapi jangan batalkan transaksi utama
+                            \Log::error("Failed to send WhatsApp notification: " . $waException->getMessage(), [
+                                'service_id' => $id,
+                                'exception' => $waException
+                            ]);
 
-                //             $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
-                //         }
-                //     }
-                // }
+                            $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
+                        }
+                    }
+                }
 
                 return response()->json([
                     'success' => true,
