@@ -24,11 +24,11 @@ services:
 
     wa-gateway:
         build:
-            context: ./path-to-wa-gateway # Update this to the directory containing your wa-gateway.js
+            context: ../wa-gateway # Update this to the directory containing your wa-gateway.js
         container_name: wa-gateway
         restart: unless-stopped
         volumes:
-            - ./wa-sessions:/usr/src/app/sessions # Persist sessions outside container
+            - ../wa-sessions:/usr/src/app/sessions # Persist sessions outside container
         environment:
             - WA_SESSIONS_DIR=/usr/src/app/sessions
             - NODE_ENV=production
