@@ -320,12 +320,13 @@ Route::group(['middleware' => 'checkRole:0,1,2'], function () {
     Route::get('/cari-service', [ServiceController::class, 'list_all_service'])->name('cariService');
     Route::post('/serviceUpdate', [ServiceController::class, 'selesaikan'])->name('serviceUpdate');
 
+
     Route::prefix('whatsapp')->group(function () {
         Route::get('/', [WhatsAppController::class, 'index'])->name('whatsapp.index');
         Route::post('/devices', [WhatsAppController::class, 'createDevice'])->name('whatsapp.devices.create');
         Route::get('/devices/{id}', [WhatsAppController::class, 'showDevice'])->name('whatsapp.show');
         Route::delete('/devices/{id}', [WhatsAppController::class, 'disconnectDevice'])->name('whatsapp.devices.disconnect');
         Route::get('/devices/{id}/qr-code', [WhatsAppController::class, 'getQrCode'])->name('whatsapp.devices.qrcode');
-        Route::get('/devices/refresh-status', [WhatsAppController::class, 'refreshDeviceStatus'])->name('whatsapp.devices.refresh');
+        Route::get('/devices/{id}/refresh-status', [WhatsAppController::class, 'refreshDeviceStatus'])->name('whatsapp.devices.refresh-status');
     });
 });

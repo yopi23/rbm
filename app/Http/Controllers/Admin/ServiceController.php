@@ -14,6 +14,7 @@ use App\Models\Sevices as modelServices;
 use App\Models\Sparepart;
 use App\Models\User;
 use App\Models\UserDetail;
+use App\Services\WhatsAppService;
 use Milon\Barcode\Facades\DNS1DFacade;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -434,6 +435,7 @@ class ServiceController extends Controller
                     ]);
                 }
             }
+
             if ($request->status_services == 'Selesai') {
                 // if ($this->getThisUser()->jabatan != '1') {
                 $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')->where([['kode_services', '=', $id]])->get(['detail_part_services.id as id_detail_part', 'detail_part_services.*', 'spareparts.*']);
@@ -474,6 +476,43 @@ class ServiceController extends Controller
                         $pegawais->update([
                             'saldo' => $new_saldo
                         ]);
+                    }
+                }
+
+                // Status WhatsApp notification
+                $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
+
+                // Kirim notifikasi WhatsApp jika nomor telepon tersedia
+                if (!empty($update->no_telp)) {
+                    // Inject WhatsAppService
+                    $whatsAppService = app(WhatsAppService::class);
+
+                    // Validasi nomor telepon terlebih dahulu
+                    if (!$whatsAppService->isValidPhoneNumber($update->no_telp)) {
+                        $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak valid';
+                    } else {
+                        try {
+                            // Kirim notifikasi
+                            $waResult = $whatsAppService->sendServiceCompletionNotification([
+                                'nomor_services' => $update->kode_service,
+                                'nama_barang' => $update->type_unit,
+                                'no_hp' => $update->no_telp,
+                            ]);
+
+                            if ($waResult['status']) {
+                                $whatsappStatus = 'Pesan WhatsApp berhasil dikirim';
+                            } else {
+                                $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
+                            }
+                        } catch (\Exception $waException) {
+                            // Log error tapi jangan batalkan transaksi utama
+                            \Log::error("Failed to send WhatsApp notification: " . $waException->getMessage(), [
+                                'service_id' => $id,
+                                'exception' => $waException
+                            ]);
+
+                            $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
+                        }
                     }
                 }
                 // }

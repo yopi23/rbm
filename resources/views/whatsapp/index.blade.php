@@ -58,6 +58,10 @@
                                                 </div>
                                             </td>
                                             <td>
+                                                <button class="btn btn-sm btn-outline-secondary refresh-status"
+                                                    data-session-id="{{ $device->session_id }}">
+                                                    <i class="fas fa-sync-alt"></i> Refresh
+                                                </button>
                                                 <a href="{{ route('whatsapp.show', $device->id) }}"
                                                     class="btn btn-sm btn-primary">Details</a>
                                                 <button class="btn btn-sm btn-danger"
@@ -71,6 +75,7 @@
                                                     @method('DELETE')
                                                 </form>
                                             </td>
+
                                         </tr>
                                     @endforeach
                                 </tbody>
@@ -107,24 +112,108 @@
 @endsection
 
 @push('scripts')
-    <script src="https://cdn.jsdelivr.net/npm/clipboard@2.0.8/dist/clipboard.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Initialize clipboard.js
-            new ClipboardJS('.copy-btn');
+            // Auto refresh semua device status saat halaman dimuat
+            refreshAllDevices();
 
-            // Refresh device status
-            document.getElementById('refresh-status')?.addEventListener('click', function() {
-                fetch('{{ route('whatsapp.devices.refresh') }}')
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.devices) {
-                            // Refresh the table with new data
-                            location.reload();
+            // Event listener untuk tombol refresh per device
+            document.addEventListener('click', function(event) {
+                if (event.target.closest('.refresh-status')) {
+                    let button = event.target.closest('.refresh-status');
+                    let deviceId = button.getAttribute('data-session-id');
+
+                    if (!deviceId) {
+                        alert("Device ID tidak ditemukan!");
+                        return;
+                    }
+
+                    // Menampilkan indikator loading pada tombol
+                    const originalHtml = button.innerHTML;
+                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+                    button.disabled = true;
+
+                    // Memanggil API untuk refresh status device
+                    fetch(`/whatsapp/devices/${deviceId}/refresh-status`)
+                    headers: {
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute(
+                                'content')
                         }
-                    })
-                    .catch(error => console.error('Error refreshing device status:', error));
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('Network response was not ok');
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            // Update phone number
+                            phoneCell.textContent = data.phone_number || 'Not connected';
+
+                            // Update status badge
+                            statusCell.textContent = data.status;
+
+                            if (data.status === 'READY') {
+                                statusCell.classList.remove('bg-warning');
+                                statusCell.classList.add('bg-success');
+                            } else {
+                                statusCell.classList.remove('bg-success');
+                                statusCell.classList.add('bg-warning');
+                            }
+
+                            // Untuk tombol refresh
+                            button.innerHTML = originalHtml;
+                            button.disabled = false;
+                        })
+                }
             });
         });
+
+        // Function untuk refresh semua device sekaligus
+        function refreshAllDevices() {
+            const rows = document.querySelectorAll('#devices-table-body tr');
+
+            // Jika tidak ada device, keluar dari function
+            if (rows.length === 0) return;
+
+            // Untuk setiap device, lakukan refresh status
+            rows.forEach(row => {
+                const deviceId = row.querySelector('.refresh-status').getAttribute('data-session-id');
+                const statusCell = row.querySelector('td:nth-child(3) .badge');
+                const phoneCell = row.querySelector('td:nth-child(2)');
+
+                // Tambahkan indikator loading pada status
+                statusCell.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+
+                fetch(`/whatsapp/devices/${deviceId}/refresh-status`)
+                headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    }
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Update phone number
+                        phoneCell.textContent = data.phone_number || 'Not connected';
+
+                        // Update status badge
+                        statusCell.textContent = data.status;
+
+                        if (data.status === 'READY') {
+                            statusCell.classList.remove('bg-warning');
+                            statusCell.classList.add('bg-success');
+                        } else {
+                            statusCell.classList.remove('bg-success');
+                            statusCell.classList.add('bg-warning');
+                        }
+
+                        // Untuk tombol refresh
+                        button.innerHTML = originalHtml;
+                        button.disabled = false;
+                    })
+            });
+        }
     </script>
 @endpush

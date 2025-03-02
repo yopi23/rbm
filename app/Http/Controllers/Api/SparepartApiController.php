@@ -14,6 +14,7 @@ use App\Models\PresentaseUser;
 use App\Models\ProfitPresentase;
 use App\Models\User;
 use App\Models\UserDetail;
+use App\Services\WhatsAppService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
@@ -415,7 +416,7 @@ class SparepartApiController extends Controller
         }
         return response()->json(['message' => 'Data not found.'], 404);
     }
-    // Delete service
+    // end Delete service
     // Delete Sparepart Toko
     public function deleteSparepartToko($id)
     {
@@ -507,6 +508,103 @@ class SparepartApiController extends Controller
     }
 
     // selesaikan
+    // public function updateServiceStatus(Request $request, $id)
+    // {
+    //     try {
+    //         $request->validate([
+    //             'status_services' => 'required|string|in:Selesai', // Validasi status harus "Selesai"
+    //             'id_teknisi' => 'required|exists:user_details,kode_user', // Validasi ID teknisi
+    //         ]);
+
+    //         $update = modelServices::findOrFail($id); // Cari service berdasarkan ID
+    //         $id_teknisi = $request->id_teknisi;
+
+    //         if ($request->status_services === 'Selesai') {
+    //             // Ambil detail part toko dan luar toko
+    //             $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+    //                 ->where('detail_part_services.kode_services', $id)
+    //                 ->get(['detail_part_services.*', 'spareparts.*']);
+
+    //             $part_luar_toko_service = DetailPartLuarService::where('kode_services', $id)->get();
+
+    //             // Ambil presentase teknisi
+    //             $presentase = PresentaseUser::where('kode_user', $id_teknisi)->first();
+
+    //             // Hitung total part
+    //             $total_part = 0;
+    //             foreach ($part_toko_service as $a) {
+    //                 $total_part += $a->harga_jual * $a->qty_part;
+    //             }
+    //             foreach ($part_luar_toko_service as $b) {
+    //                 $total_part += $b->harga_part * $b->qty_part;
+    //             }
+
+    //             // Update total part ke service
+    //             $update->update([
+    //                 'harga_sp' => $total_part,
+    //                 'status_services' => $request->status_services, // Ubah status menjadi "Selesai"
+    //                 'id_teknisi' => $request->id_teknisi,
+    //             ]);
+
+    //             if ($presentase) {
+    //                 // Periksa apakah komisi sudah pernah dibuat untuk service ini
+    //                 $komisi_exist = ProfitPresentase::where('kode_service', $id)->exists();
+
+    //                 if (!$komisi_exist) {
+    //                     // Hitung profit teknisi
+    //                     $profit = $update->total_biaya - $total_part;
+    //                     $fix_profit = $profit * $presentase->presentase / 100;
+
+    //                     // Ambil data teknisi
+    //                     $teknisi = UserDetail::where('kode_user', $id_teknisi)->first();
+
+    //                     // Simpan data profit ke ProfitPresentase
+    //                     $komisi = ProfitPresentase::create([
+    //                         'tgl_profit' => now(),
+    //                         'kode_service' => $id,
+    //                         'kode_presentase' => $presentase->id,
+    //                         'kode_user' => $id_teknisi,
+    //                         'profit' => $fix_profit,
+    //                         'saldo' => $teknisi->saldo,
+    //                     ]);
+
+    //                     if ($komisi) {
+    //                         // Update saldo teknisi
+    //                         $teknisi->update([
+    //                             'saldo' => $teknisi->saldo + $fix_profit,
+    //                         ]);
+    //                     }
+    //                 }
+    //             }
+    //             // Kirim pesan WhatsApp ke customer
+    //             $this->sendWhatsAppNotification($update);
+
+    //             return response()->json([
+    //                 'success' => true,
+    //                 'message' => "Service status updated to 'Selesai' successfully by technician {$id_teknisi}.",
+    //                 'data' => [
+    //                     'service_id' => $id,
+    //                     'technician_id' => $id_teknisi,
+    //                     'nama' => $teknisi->fullname,
+    //                     'status' => $request->status_services,
+    //                 ],
+    //             ], 200);
+    //         }
+
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Invalid status provided.',
+    //             'data' => null,
+    //         ], 400);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Failed to update service status.',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
     public function updateServiceStatus(Request $request, $id)
     {
         try {
@@ -576,6 +674,43 @@ class SparepartApiController extends Controller
                     }
                 }
 
+                // Status WhatsApp notification
+                $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
+
+                // Kirim notifikasi WhatsApp jika nomor telepon tersedia
+                if (!empty($update->no_telp)) {
+                    // Inject WhatsAppService
+                    $whatsAppService = app(WhatsatAppService::class);
+
+                    // Validasi nomor telepon terlebih dahulu
+                    if (!$whatsAppService->isValidPhoneNumber($update->no_telp)) {
+                        $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak valid';
+                    } else {
+                        try {
+                            // Kirim notifikasi
+                            $waResult = $whatsAppService->sendServiceCompletionNotification([
+                                'nomor_services' => $update->kode_service,
+                                'nama_barang' => $update->type_unit,
+                                'no_hp' => $update->no_telp,
+                            ]);
+
+                            if ($waResult['status']) {
+                                $whatsappStatus = 'Pesan WhatsApp berhasil dikirim';
+                            } else {
+                                $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
+                            }
+                        } catch (\Exception $waException) {
+                            // Log error tapi jangan batalkan transaksi utama
+                            \Log::error("Failed to send WhatsApp notification: " . $waException->getMessage(), [
+                                'service_id' => $id,
+                                'exception' => $waException
+                            ]);
+
+                            $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
+                        }
+                    }
+                }
+
                 return response()->json([
                     'success' => true,
                     'message' => "Service status updated to 'Selesai' successfully by technician {$id_teknisi}.",
@@ -584,6 +719,7 @@ class SparepartApiController extends Controller
                         'technician_id' => $id_teknisi,
                         'nama' => $teknisi->fullname,
                         'status' => $request->status_services,
+                        'whatsapp_notification' => $whatsappStatus
                     ],
                 ], 200);
             }

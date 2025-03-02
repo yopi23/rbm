@@ -13,7 +13,7 @@ class WhatsAppController extends Controller
 
     public function __construct()
     {
-        $this->apiBaseUrl = config('services.whatsapp.api_url', 'http://103.196.154.19:3000');
+        $this->apiBaseUrl = config('services.whatsapp.api_url', 'http://127.0.0.1:3000');
     }
 
     public function index()
@@ -64,6 +64,13 @@ class WhatsAppController extends Controller
 
         if ($response->successful()) {
             $deviceStatus = $response->json();
+
+                // Update status di database
+                $device->update([
+                    'status' => $deviceStatus['session']['status'] ?? 'UNKNOWN',
+                    'phone_number' => $deviceStatus['session']['phoneNumber'] ?? null
+                ]);
+
             return view('whatsapp.show', compact('device', 'deviceStatus'));
         }
 
@@ -81,8 +88,9 @@ class WhatsAppController extends Controller
             // Delete from our database
             $device->delete();
             return redirect()->route('whatsapp.index')->with('success', 'Device disconnected successfully');
+        }elseif ($response->status() == 404) {
+        $device->delete();
         }
-
         return back()->withErrors(['error' => 'Failed to disconnect device']);
     }
 
@@ -100,30 +108,45 @@ class WhatsAppController extends Controller
         return response()->json(['error' => 'QR code not available'], 404);
     }
 
-    public function refreshDeviceStatus()
+    public function refreshDeviceStatus($id)
     {
-        $devices = WhatsappDevice::all();
-        $updatedDevices = [];
+        // Ambil satu data perangkat berdasarkan id
+        $device = WhatsappDevice::findOrFail($id);
 
-        foreach ($devices as $device) {
-            $response = Http::get("{$this->apiBaseUrl}/session/check/{$device->session_id}");
+        // Panggil API eksternal
+        $response = Http::get("{$this->apiBaseUrl}/session/check/{$device->session_id}");
 
-            if ($response->successful()) {
-                $status = $response->json();
-                $device->update([
-                    'status' => $status['session']['status'],
-                    'phone_number' => $status['session']['phoneNumber']
-                ]);
+        // Cek apakah request berhasil
+        if ($response->successful()) {
+            $status = $response->json();
+            // Update status di database
+            $device->update([
+                'status' => $status['session']['status'] ?? 'UNKNOWN',
+                'phone_number' => $status['session']['phoneNumber'] ?? null
+            ]);
+            return response()->json([
+                'id' => $device->id,
+                'name' => $device->name,
+                'status' => $status['session']['status'] ?? 'UNKNOWN',
+                'phone_number' => $status['session']['phoneNumber'] ?? null
+            ]);
+        } else {
+            // Jika API memberikan response 404 Not Found, berarti device tidak ada di API
+            if ($response->status() === 404) {
+                // Hapus device dari database
+                $device->delete();
 
-                $updatedDevices[] = [
+                return response()->json([
                     'id' => $device->id,
                     'name' => $device->name,
-                    'status' => $status['session']['status'],
-                    'phone_number' => $status['session']['phoneNumber']
-                ];
+                    'status' => 'DELETED',
+                    'phone_number' => null,
+                    'message' => 'Device telah dihapus karena tidak ditemukan di API'
+                ]);
             }
+            Log::error("Gagal mengambil data untuk session ID: {$device->session_id}");
+            return response()->json(['error' => 'Gagal mengambil data dari API'], 500);
         }
-
-        return response()->json(['devices' => $updatedDevices]);
     }
+
 }
