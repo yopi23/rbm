@@ -22,6 +22,21 @@ services:
             - rbmnet
         platform: linux/amd64
 
+    wa-gateway:
+        build:
+            context: ./path-to-wa-gateway # Update this to the directory containing your wa-gateway.js
+        container_name: wa-gateway
+        restart: unless-stopped
+        volumes:
+            - ./wa-sessions:/usr/src/app/sessions # Persist sessions outside container
+        environment:
+            - WA_SESSIONS_DIR=/usr/src/app/sessions
+            - NODE_ENV=production
+        ports:
+            - "3000:3000" # Adjust if needed
+        networks:
+            - rbmnet
+
     # Nginx Service
     webserver:
         image: nginx:alpine
