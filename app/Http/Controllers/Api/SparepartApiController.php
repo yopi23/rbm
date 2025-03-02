@@ -680,7 +680,7 @@ class SparepartApiController extends Controller
                 // Kirim notifikasi WhatsApp jika nomor telepon tersedia
                 if (!empty($update->no_telp)) {
                     // Inject WhatsAppService
-                    $whatsAppService = app(WhatsatAppService::class);
+                    $whatsAppService = app(WhatsAppService::class);
 
                     // Validasi nomor telepon terlebih dahulu
                     if (!$whatsAppService->isValidPhoneNumber($update->no_telp)) {
