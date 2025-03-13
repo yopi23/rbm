@@ -19,39 +19,85 @@ class WhatsAppMessageController extends Controller
     public function sendMessage(Request $request)
     {
         $validated = $request->validate([
-            'api_key' => 'required|string',
-            'number' => 'required|string',
+            'number'  => 'required|string',
             'message' => 'required|string',
         ]);
 
-        // Find the device by API key
-        $device = WhatsappDevice::where('api_key', $validated['api_key'])->first();
+        // 🔹 1️⃣ Validasi Nomor WhatsApp
+        $formattedNumber = $this->formatPhoneNumber($validated['number']);
+
+        // 🔹 3️⃣ Ambil Perangkat yang Siap Digunakan
+        $device = WhatsappDevice::where('status', 'READY')->first();
 
         if (!$device) {
             return response()->json([
-                'status' => false,
-                'message' => 'Invalid API key'
+                'status'  => false,
+                'message' => 'No active WhatsApp device found',
             ], 401);
         }
 
-        // Call the WhatsApp Gateway API to send the message
-        $response = Http::post("{$this->apiBaseUrl}/messsage/send/{$device->session_id}", [
-            'number' => $validated['number'],
-            'message' => $validated['message']
+        // 🔹 4️⃣ Kirim Pesan ke API WhatsApp Gateway
+        $response = Http::post("{$this->apiBaseUrl}/message/send/{$device->session_id}", [
+            'number'  => $formattedNumber,
+            'message' => $validated['message'],
         ]);
 
         if ($response->successful()) {
             return response()->json([
-                'status' => true,
+                'status'  => true,
+                'type'=>'chat',
                 'message' => 'Message sent successfully',
-                'data' => $response->json()
+                'data'    => $response->json(),
             ]);
         }
 
         return response()->json([
-            'status' => false,
+            'status'  => false,
             'message' => 'Failed to send message',
-            'error' => $response->json()
+            'error'   => $response->json(),
         ], $response->status());
     }
+    /**
+     * 🔹 Format Nomor HP ke Standar Internasional (+62)
+     */
+    private function formatPhoneNumber($number)
+    {
+        // Hapus spasi, strip, dan karakter selain angka
+        // Hapus semua karakter non-numerik
+        $number = preg_replace('/[^0-9]/', '', $number);
+
+        // Jika nomor kosong setelah pembersihan atau hanya berisi "0", return null
+        if (empty($number) || $number === '0' || $number === '00') {
+            return null;
+        }
+
+        // Jika nomor dimulai dengan 0, ganti dengan 62
+        if (substr($number, 0, 1) === '0') {
+            $number = '62' . substr($number, 1);
+        }
+        // Jika nomor belum dimulai dengan 62, tambahkan 62
+        elseif (substr($number, 0, 2) !== '62') {
+            $number = '62' . $number;
+        }
+
+        // Pastikan nomor memiliki panjang minimal 10 digit (termasuk 62)
+        if (strlen($number) < 10) {
+            return null;
+        }
+
+        return $number;
+    }
+
+    /**
+     * 🔹 Cek Apakah Nomor Terdaftar di WhatsApp
+     */
+    private function isWhatsAppNumber($number)
+    {
+        $response = Http::get("{$this->apiBaseUrl}/check-number", [
+            'number' => $number,
+        ]);
+
+        return $response->successful() && $response->json()['status'] === true;
+    }
+
 }

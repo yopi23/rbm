@@ -78,7 +78,8 @@ class SparepartApiController extends Controller
                         'part,(nama barang)',
                         'cancel',
                         'selesaikan',
-                        'rincian atau rinci'
+                        'rincian atau rinci',
+                        'wa (isi pesan)'
                     ]
                 ]);
             }
@@ -115,6 +116,59 @@ class SparepartApiController extends Controller
                     ]);
                 }
             }
+
+            // Cek apakah input dimulai dengan "wa"
+            if (str_starts_with($command, 'wa')) {
+                // Tangkap pesan setelah "wa"
+                $pattern = '/^wa[\s,:-]*(.+)$/';
+                if (preg_match($pattern, $command, $matches)) {
+                    $pesan = trim($matches[1]);
+
+                    if (empty($pesan)) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => "Format perintah tidak valid. Gunakan: 'wa (pesan)'"
+                        ]);
+                    }
+
+                    // Ambil service_id dari request
+                    $id = $request->input('service_id');
+                    $service = modelServices::find($id);
+
+                    if (!$service || empty($service->no_telp)) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => "Nomor telepon tidak ditemukan untuk service ID $id"
+                        ], 404);
+                    }
+
+                    $number = $service->no_telp;
+
+                    // Kirim data ke API /send-message dengan token
+                    $results =[
+                        'number'  => $number,
+                        'message' => $pesan,
+                    ];
+
+                    // Periksa respons dari API eksternal
+                    if ($number) {
+                        return response()->json([
+                            'success' => true,
+                            'type'    => 'chat',
+                            'data' => $results,
+                        ]);
+                    } else {
+                        return response()->json([
+                            'success' => false,
+                            'message' => "Gagal mengirim pesan",
+                            'error'   => $response->json(),
+                        ], 500);
+                    }
+                }
+            }
+
+
+            //end wa chat
 
             if ($command === 'selesaikan') {
                 $jab = [1, 2]; // Jabatan yang harus dikecualikan
@@ -161,7 +215,8 @@ class SparepartApiController extends Controller
                     'part,(nama barang)',
                     'cancel',
                     'selesaikan',
-                    'rincian atau rinci'
+                    'rincian atau rinci',
+                    'wa (isi pesan)'
                 ]
             ]);
         } catch (\Exception $e) {
