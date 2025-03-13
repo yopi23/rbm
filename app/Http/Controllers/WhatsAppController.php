@@ -99,7 +99,7 @@ class WhatsAppController extends Controller
         $device = WhatsappDevice::findOrFail($id);
 
         // Proxy the QR code from the API
-        $response = Http::get("{$this->apiBaseUrl}/qrcode/{$device->session_id}");
+        $response = Http::get("{$this->apiBaseUrl}/session/qrcode/{$device->session_id}");
 
         if ($response->successful()) {
             return response($response->body(), 200)->header('Content-Type', 'image/png');

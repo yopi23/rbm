@@ -73,7 +73,7 @@ class WhatsAppService
             }
 
             // Kirim request ke WhatsApp API
-            $response = Http::post("{$this->apiBaseUrl}/send/{$deviceId}", [
+            $response = Http::post("{$this->apiBaseUrl}/message/send/{$deviceId}", [
                 'number' => $formattedNumber,
                 'message' => $message
             ]);

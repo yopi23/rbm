@@ -126,4 +126,27 @@ class ServiceApiController extends Controller
         }
     }
 
+    function cekService(Request $request) {
+        $data = modelServices::where('kode_service', $request->q)->first();
+
+        if (!$data) {
+            return response()->json(['message' => 'Service not found'], 404);
+        }
+
+        $teknisi = $data->id_teknisi ? User::where('id', $data->id_teknisi)->value('name') : '-';
+        $garansi = Garansi::where('kode_garansi', $request->q)->where('type_garansi', 'service')->get();
+        $detail = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+            ->where('detail_part_services.kode_services', $data->id)
+            ->get(['detail_part_services.id as id_detail_part', 'detail_part_services.*', 'spareparts.*']);
+        $detail_luar = DetailPartLuarService::where('kode_services', $data->id)->get();
+
+        return response()->json([
+            'teknisi' => $teknisi,
+            'data' => $data,
+            'garansi' => $garansi,
+            'detail' => $detail,
+            'detail_luar' => $detail_luar,
+        ]);
+    }
+
  } // End API

@@ -70,8 +70,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user-profile/{kode_user}', [UserDataController::class, 'getUserProfile']);
     Route::post('/penarikan', [UserDataController::class, 'store_penarikan']);
 
+    // routes/api.php
+    Route::post('/send-message', [WhatsAppMessageController::class, 'sendMessage']);
 });
-// routes/api.php
-Route::post('/send-message', [WhatsAppMessageController::class, 'sendMessage']);
 
+Route::get('/cek-service', [ServiceApiController::class,'cekService']);
 Route::post('login', [AuthController::class, 'login']);

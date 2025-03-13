@@ -35,7 +35,7 @@ class WhatsAppMessageController extends Controller
         }
 
         // Call the WhatsApp Gateway API to send the message
-        $response = Http::post("{$this->apiBaseUrl}/send/{$device->session_id}", [
+        $response = Http::post("{$this->apiBaseUrl}/messsage/send/{$device->session_id}", [
             'number' => $validated['number'],
             'message' => $validated['message']
         ]);
