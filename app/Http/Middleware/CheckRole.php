@@ -29,8 +29,9 @@ class CheckRole
         // Jika role tidak cocok, kembalikan response 403 atau redirect
         if ($request->expectsJson()) {
             return response()->json(['message' => 'Unauthorized'], 403);
+
         }
 
-        return redirect()->back()->with('error', 'You are not authorized to access this page.');
+        return redirect()->route('dashboard')->with('error', 'You are not authorized to access this page.');
     }
 }

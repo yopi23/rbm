@@ -301,6 +301,12 @@ Route::group(['middleware' => ['auth']], function () {
 
     // web.php atau api.php
     Route::delete('/hutang/{id}', [LaporanController::class, 'destroy'])->name('hutang.destroy');
+
+
+
+    Route::get('/spareparts/search', [App\Http\Controllers\Api\SalesApiController::class, 'search'])->name('search');
+    Route::post('/pembelian/search-spareparts-ajax', [App\Http\Controllers\Admin\PembelianController::class, 'searchSparepartsAjax'])
+        ->name('pembelian.search-spareparts-ajax');
 }); //admin
 
 Route::get('/laci/form', [LaciController::class, 'form'])->name('laci.form');
@@ -330,3 +336,18 @@ Route::group(['middleware' => 'checkRole:0,1,2'], function () {
         Route::get('/devices/{id}/refresh-status', [WhatsAppController::class, 'refreshDeviceStatus'])->name('whatsapp.devices.refresh-status');
     });
 });
+Route::group(['middleware' => 'checkRole:0,1'], function () {
+     // Pembelian Routes
+     Route::prefix('admin')->middleware(['auth'])->group(function () {
+        Route::get('/pembelian', [App\Http\Controllers\Admin\PembelianController::class, 'index'])->name('pembelian.index');
+        Route::get('/pembelian/create', [App\Http\Controllers\Admin\PembelianController::class, 'create'])->name('pembelian.create');
+        Route::post('/pembelian', [App\Http\Controllers\Admin\PembelianController::class, 'store'])->name('pembelian.store');
+        Route::get('/pembelian/{id}', [App\Http\Controllers\Admin\PembelianController::class, 'show'])->name('pembelian.show');
+        Route::get('/pembelian/{id}/edit', [App\Http\Controllers\Admin\PembelianController::class, 'edit'])->name('pembelian.edit');
+        Route::post('/pembelian/{id}/add-item', [App\Http\Controllers\Admin\PembelianController::class, 'addItem'])->name('pembelian.add-item');
+        Route::delete('/pembelian/item/{id}', [App\Http\Controllers\Admin\PembelianController::class, 'removeItem'])->name('pembelian.remove-item');
+        Route::post('/pembelian/{id}/finalize', [App\Http\Controllers\Admin\PembelianController::class, 'finalize'])->name('pembelian.finalize');
+        Route::patch('/pembelian/{id}', [App\Http\Controllers\Admin\PembelianController::class, 'update'])->name('pembelian.update');
+    });
+});
+

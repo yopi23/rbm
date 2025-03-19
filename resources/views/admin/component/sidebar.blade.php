@@ -220,6 +220,12 @@
                                      </a>
                                  </li>
                                  <li class="nav-item">
+                                     <a href="{{ route('pembelian.index') }}" class="nav-link @yield('Pembelian')">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Pembelian</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
                                      <a href="{{ route('pesanan') }}" class="nav-link ">
                                          <i class="far fa-circle nav-icon"></i>
                                          <p>Pesanan</p>

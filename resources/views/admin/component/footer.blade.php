@@ -19,13 +19,7 @@
   </script>
   <!-- Bootstrap 4 -->
   <script src="{{ asset('admin/plugins/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
-  <!-- ChartJS -->
-  <script src="{{ asset('admin/plugins/chart.js/Chart.min.js') }}"></script>
-  <!-- Sparkline -->
-  <script src="{{ asset('admin/plugins/sparklines/sparkline.js') }}"></script>
-  <!-- JQVMap -->
-  <script src="{{ asset('admin/plugins/jqvmap/jquery.vmap.min.js') }}"></script>
-  <script src="{{ asset('admin/plugins/jqvmap/maps/jquery.vmap.usa.js') }}"></script>
+
   <!-- jQuery Knob Chart -->
   <script src="{{ asset('admin/plugins/jquery-knob/jquery.knob.min.js') }}"></script>
   <!-- daterangepicker -->
@@ -161,6 +155,7 @@
           });
       });
   </script>
+  @stack('scripts')
   </body>
 
   </html>
