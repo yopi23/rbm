@@ -345,6 +345,7 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
         Route::get('/pembelian/{id}', [App\Http\Controllers\Admin\PembelianController::class, 'show'])->name('pembelian.show');
         Route::get('/pembelian/{id}/edit', [App\Http\Controllers\Admin\PembelianController::class, 'edit'])->name('pembelian.edit');
         Route::post('/pembelian/{id}/add-item', [App\Http\Controllers\Admin\PembelianController::class, 'addItem'])->name('pembelian.add-item');
+        Route::patch('pembelian/update-item/{detailId}', [App\Http\Controllers\Admin\PembelianController::class, 'updateItem'])->name('pembelian.update-item');
         Route::delete('/pembelian/item/{id}', [App\Http\Controllers\Admin\PembelianController::class, 'removeItem'])->name('pembelian.remove-item');
         Route::post('/pembelian/{id}/finalize', [App\Http\Controllers\Admin\PembelianController::class, 'finalize'])->name('pembelian.finalize');
         Route::patch('/pembelian/{id}', [App\Http\Controllers\Admin\PembelianController::class, 'update'])->name('pembelian.update');

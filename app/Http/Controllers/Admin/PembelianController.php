@@ -270,6 +270,47 @@ class PembelianController extends Controller
         }
     }
 
+    public function updateItem(Request $request, $detailId)
+{
+    $detail = DetailPembelian::findOrFail($detailId);
+
+    // Validate input
+    $request->validate([
+        'nama_item' => 'required|string|max:255',
+        'jumlah' => 'required|integer|min:1',
+        'harga_beli' => 'required|numeric|min:0',
+        'harga_jual' => 'nullable|numeric|min:0',
+        'harga_ecer' => 'nullable|numeric|min:0',
+        'harga_pasang' => 'nullable|numeric|min:0',
+    ]);
+
+    // Get the pembelian id from the detail
+    $pembelianId = $detail->pembelian_id;
+
+    // Calculate the old total
+    $oldTotal = $detail->total;
+
+    // Update the detail
+    $detail->nama_item = $request->nama_item;
+    $detail->jumlah = $request->jumlah;
+    $detail->harga_beli = $request->harga_beli;
+    $detail->harga_jual = $request->harga_jual;
+    $detail->harga_ecer = $request->harga_ecer;
+    $detail->harga_pasang = $request->harga_pasang;
+
+    // Calculate new total
+    $detail->total = $request->jumlah * $request->harga_beli;
+    $detail->save();
+
+    // Update pembelian total
+    $pembelian = Pembelian::findOrFail($pembelianId);
+    $pembelian->total_harga = $pembelian->total_harga - $oldTotal + $detail->total;
+    $pembelian->save();
+
+    return redirect()->route('pembelian.edit', $pembelianId)
+        ->with('success', 'Item berhasil diperbarui');
+}
+
     /**
      * Remove item dari pembelian
      */

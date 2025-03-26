@@ -115,6 +115,7 @@
     </div>
 
     <div class="col-md-7">
+        <!-- Perbaikan pada Form Tambah/Edit Item -->
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Tambah Item</h3>
@@ -138,6 +139,10 @@
 
                 <form action="{{ route('pembelian.add-item', $pembelian->id) }}" method="POST" id="formAddItem">
                     @csrf
+                    <!-- Tambahkan input hidden untuk mode edit -->
+                    <input type="hidden" name="edit_mode" id="edit_mode" value="0">
+                    <input type="hidden" id="edit_detail_id" name="edit_detail_id">
+
                     <div class="form-group">
                         <div class="custom-control custom-radio custom-control-inline">
                             <input class="custom-control-input" type="radio" id="customRadio1" name="is_new_item"
@@ -251,7 +256,19 @@
                         </div>
                     </div>
 
-                    <button type="submit" class="btn btn-primary btn-block">Tambah Item</button>
+                    <div class="row">
+                        <div class="col-12">
+                            <!-- Tombol submit dengan id dinamis -->
+                            <button type="submit" class="btn btn-primary btn-block" id="submitButton">Tambah
+                                Item</button>
+
+                            <!-- Tombol batal yang hanya muncul pada mode edit -->
+                            <button type="button" class="btn btn-secondary btn-block mt-2" id="cancelButton"
+                                style="display: none;" onclick="cancelEdit()">
+                                Batal Edit
+                            </button>
+                        </div>
+                    </div>
                 </form>
             </div>
         </div>
@@ -269,7 +286,7 @@
                             <th>Jumlah</th>
                             <th>Harga Beli</th>
                             <th>Total</th>
-                            <th style="width: 40px">Aksi</th>
+                            <th style="width: 85px">Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -281,8 +298,16 @@
                                 <td>Rp {{ number_format($detail->harga_beli, 0, ',', '.') }}</td>
                                 <td>Rp {{ number_format($detail->total, 0, ',', '.') }}</td>
                                 <td>
+                                    <!-- Edit Button -->
+                                    <button type="button" class="btn btn-primary btn-sm mr-1 my-2"
+                                        onclick="editItem({{ $detail->id }}, '{{ $detail->nama_item }}', {{ $detail->jumlah }}, {{ $detail->harga_beli }}, {{ $detail->harga_jual ?? 0 }}, {{ $detail->harga_ecer ?? 0 }}, {{ $detail->harga_pasang ?? 0 }})">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+
+                                    <!-- Delete Button -->
                                     <form action="{{ route('pembelian.remove-item', $detail->id) }}" method="POST"
-                                        onsubmit="return confirm('Yakin hapus item ini?')">
+                                        onsubmit="return confirm('Yakin hapus item ini?')"
+                                        style="display: inline-block;">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="btn btn-danger btn-sm">
@@ -623,4 +648,69 @@
             }
         });
     }
+</script>
+{{-- untuk edit --}}
+<script>
+    function editItem(id, nama, jumlah, hargaBeli, hargaJual, hargaEcer, hargaPasang) {
+        // Set form to edit mode
+        document.getElementById('edit_mode').value = '1';
+        document.getElementById('edit_detail_id').value = id;
+
+        // Fill the form with the item's data
+        document.getElementById('nama_item').value = nama;
+        document.getElementById('nama_item').readOnly = false;
+        document.getElementById('jumlah').value = jumlah;
+        document.getElementById('harga_beli').value = hargaBeli;
+
+        // Set other price fields if they exist
+        if (hargaJual) document.getElementById('harga_jual').value = hargaJual;
+        if (hargaEcer) document.getElementById('harga_ecer').value = hargaEcer;
+        if (hargaPasang) document.getElementById('harga_pasang').value = hargaPasang;
+
+        // Update total and price differences
+        hitungTotal();
+        triggerPriceDifferenceUpdate();
+
+        // Change button text
+        document.getElementById('submitButton').textContent = 'Perbarui Item';
+        document.getElementById('cancelButton').style.display = 'block';
+
+        // Scroll to form
+        document.getElementById('formAddItem').scrollIntoView({
+            behavior: 'smooth'
+        });
+    }
+
+    function cancelEdit() {
+        // Reset form to add mode
+        document.getElementById('edit_mode').value = '0';
+        document.getElementById('edit_detail_id').value = '';
+
+        // Clear the form
+        document.getElementById('formAddItem').reset();
+        document.getElementById('sparepart_id').value = '';
+
+        // Set restock radio button
+        document.getElementById('customRadio1').checked = true;
+        toggleNewItem(false);
+
+        // Reset button text
+        document.getElementById('submitButton').textContent = 'Tambah Item';
+        document.getElementById('cancelButton').style.display = 'none';
+    }
+
+    // Add an event listener to the form submission
+    document.getElementById('formAddItem').addEventListener('submit', function(e) {
+        // If in edit mode, change the form action
+        if (document.getElementById('edit_mode').value === '1') {
+            const detailId = document.getElementById('edit_detail_id').value;
+            this.action = "{{ route('pembelian.index') }}/update-item/" + detailId;
+            // Add method override for PUT/PATCH
+            const methodField = document.createElement('input');
+            methodField.type = 'hidden';
+            methodField.name = '_method';
+            methodField.value = 'PATCH';
+            this.appendChild(methodField);
+        }
+    });
 </script>
