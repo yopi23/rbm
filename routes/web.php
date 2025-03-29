@@ -28,6 +28,9 @@ use App\Http\Controllers\LaciController;
 use App\Http\Controllers\SearchController;
 use SebastianBergmann\CodeCoverage\Report\Html\Dashboard;
 use App\Http\Controllers\WhatsAppController;
+use App\Http\Controllers\Admin\StockManagementController;
+use App\Http\Controllers\Admin\PembelianController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -337,18 +340,31 @@ Route::group(['middleware' => 'checkRole:0,1,2'], function () {
     });
 });
 Route::group(['middleware' => 'checkRole:0,1'], function () {
+     // Routes untuk inventory management
+     Route::prefix('admin/inventory')->name('admin.inventory.')->middleware(['auth'])->group(function () {
+        // Dashboard dan laporan
+        Route::get('/home', [StockManagementController::class, 'dashboard'])->name('home');
+        Route::get('/restock-report', [StockManagementController::class, 'restockReport'])->name('restock-report');
+        Route::get('/bestsellers', [StockManagementController::class, 'bestSellersReport'])->name('bestsellers');
+
+        // API endpoints untuk data
+        Route::get('/reorder-recommendation/{itemId}', [StockManagementController::class, 'getReorderRecommendation'])->name('reorder-recommendation');
+        Route::get('/item-chart/{itemId}', [StockManagementController::class, 'getItemStockAndSalesChart'])->name('item-chart');
+    });
      // Pembelian Routes
      Route::prefix('admin')->middleware(['auth'])->group(function () {
-        Route::get('/pembelian', [App\Http\Controllers\Admin\PembelianController::class, 'index'])->name('pembelian.index');
-        Route::get('/pembelian/create', [App\Http\Controllers\Admin\PembelianController::class, 'create'])->name('pembelian.create');
-        Route::post('/pembelian', [App\Http\Controllers\Admin\PembelianController::class, 'store'])->name('pembelian.store');
-        Route::get('/pembelian/{id}', [App\Http\Controllers\Admin\PembelianController::class, 'show'])->name('pembelian.show');
-        Route::get('/pembelian/{id}/edit', [App\Http\Controllers\Admin\PembelianController::class, 'edit'])->name('pembelian.edit');
-        Route::post('/pembelian/{id}/add-item', [App\Http\Controllers\Admin\PembelianController::class, 'addItem'])->name('pembelian.add-item');
-        Route::patch('pembelian/update-item/{detailId}', [App\Http\Controllers\Admin\PembelianController::class, 'updateItem'])->name('pembelian.update-item');
-        Route::delete('/pembelian/item/{id}', [App\Http\Controllers\Admin\PembelianController::class, 'removeItem'])->name('pembelian.remove-item');
-        Route::post('/pembelian/{id}/finalize', [App\Http\Controllers\Admin\PembelianController::class, 'finalize'])->name('pembelian.finalize');
-        Route::patch('/pembelian/{id}', [App\Http\Controllers\Admin\PembelianController::class, 'update'])->name('pembelian.update');
+        Route::get('/pembelian', [PembelianController::class, 'index'])->name('pembelian.index');
+        Route::get('/pembelian/create', [PembelianController::class, 'create'])->name('pembelian.create');
+        Route::post('/pembelian', [PembelianController::class, 'store'])->name('pembelian.store');
+        Route::get('/pembelian/{id}', [PembelianController::class, 'show'])->name('pembelian.show');
+        Route::get('/pembelian/{id}/edit', [PembelianController::class, 'edit'])->name('pembelian.edit');
+        Route::post('/pembelian/{id}/add-item', [PembelianController::class, 'addItem'])->name('pembelian.add-item');
+        Route::patch('pembelian/update-item/{detailId}', [PembelianController::class, 'updateItem'])->name('pembelian.update-item');
+        Route::delete('/pembelian/item/{id}', [PembelianController::class, 'removeItem'])->name('pembelian.remove-item');
+        Route::post('/pembelian/{id}/finalize', [PembelianController::class, 'finalize'])->name('pembelian.finalize');
+        Route::patch('/pembelian/{id}', [PembelianController::class, 'update'])->name('pembelian.update');
     });
+
+
 });
 

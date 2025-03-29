@@ -92,6 +92,43 @@
                  @endif
                  @if ($this_user->jabatan != '1' || $this_user->jabatan != '2')
                      <li class="nav-header">DATA MASTER</li>
+                     @if ($this_user->jabatan == '1')
+                         <!-- Menu Inventory Management -->
+                         <li
+                             class="nav-item {{ in_array(request()->route()->getName(), ['admin.inventory.home', 'admin.inventory.restock-report', 'admin.inventory.bestsellers']) ? 'menu-open' : '' }}">
+                             <a href="#"
+                                 class="nav-link {{ in_array(request()->route()->getName(), ['admin.inventory.home', 'admin.inventory.restock-report', 'admin.inventory.bestsellers']) ? 'active' : '' }}">
+                                 <i class="nav-icon fas fa-box"></i>
+                                 <p>
+                                     Manajemen Stok
+                                     <i class="right fas fa-angle-left"></i>
+                                 </p>
+                             </a>
+                             <ul class="nav nav-treeview">
+                                 <li class="nav-item">
+                                     <a href="{{ route('admin.inventory.home') }}"
+                                         class="nav-link {{ request()->route()->getName() == 'admin.inventory.home' ? 'active' : '' }}">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Statistik</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('admin.inventory.restock-report') }}"
+                                         class="nav-link {{ request()->route()->getName() == 'admin.inventory.restock-report' ? 'active' : '' }}">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Laporan Restock</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('admin.inventory.bestsellers') }}"
+                                         class="nav-link {{ request()->route()->getName() == 'admin.inventory.bestsellers' ? 'active' : '' }}">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Produk Terlaris</p>
+                                     </a>
+                                 </li>
+                             </ul>
+                         </li>
+                     @endif
                      <li class="nav-item ">
                          <a href="#" class="nav-link ">
                              <i class="nav-icon fas fa-box"></i>

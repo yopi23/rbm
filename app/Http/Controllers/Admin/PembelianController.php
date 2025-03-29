@@ -12,6 +12,8 @@ use App\Models\Supplier;
 use App\Models\KategoriSparepart;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Models\StockHistory;
+use App\Models\StockNotification;
 
 class PembelianController extends Controller
 {
@@ -344,101 +346,171 @@ class PembelianController extends Controller
         }
     }
 
-    /**
-     * Selesaikan pembelian dan update stok sparepart
-     */
-    public function finalize($id)
-    {
-        DB::beginTransaction();
+   /**
+ * Selesaikan pembelian dan update stok sparepart
+ */
+public function finalize($id)
+{
+    DB::beginTransaction();
 
-        try {
-            $pembelian = Pembelian::with('detailPembelians')->findOrFail($id);
+    try {
+        $pembelian = Pembelian::with('detailPembelians')->findOrFail($id);
 
-            // Jika pembelian sudah selesai, jangan proses lagi
-            if ($pembelian->status === 'selesai') {
-                return redirect()->route('pembelian.index')->with('info', 'Pembelian sudah diselesaikan sebelumnya.');
-            }
+        // Jika pembelian sudah selesai, jangan proses lagi
+        if ($pembelian->status === 'selesai') {
+            return redirect()->route('pembelian.index')->with('info', 'Pembelian sudah diselesaikan sebelumnya.');
+        }
 
-            // Validasi apakah ada detail pembelian
-            if ($pembelian->detailPembelians->count() == 0) {
-                return back()->withErrors(['error' => 'Pembelian tidak dapat diselesaikan karena tidak ada item.']);
-            }
+        // Validasi apakah ada detail pembelian
+        if ($pembelian->detailPembelians->count() == 0) {
+            return back()->withErrors(['error' => 'Pembelian tidak dapat diselesaikan karena tidak ada item.']);
+        }
 
-            $supplierId = request('supplier');
-            $kategoriId = request('kategori');
+        $supplierId = request('supplier');
+        $kategoriId = request('kategori');
 
-            // Get the actual objects for their codes
-            $supplier = Supplier::find($supplierId);
-            $kategori = KategoriSparepart::find($kategoriId);
+        // Get the actual objects for their codes
+        $supplier = Supplier::find($supplierId);
+        $kategori = KategoriSparepart::find($kategoriId);
 
-            if (!$supplier || !$kategori) {
-                return back()->withErrors(['error' => 'Supplier atau Kategori tidak valid. Mohon pilih supplier dan kategori terlebih dahulu.']);
-            }
+        if (!$supplier || !$kategori) {
+            return back()->withErrors(['error' => 'Supplier atau Kategori tidak valid. Mohon pilih supplier dan kategori terlebih dahulu.']);
+        }
 
-            // Update pembelian with supplier info
-            $pembelian->supplier = $supplier->nama_supplier;
-            $pembelian->update();
+        // Update pembelian with supplier info
+        $pembelian->supplier = $supplier->nama_supplier;
+        $pembelian->update();
 
-            // Proses semua item pembelian untuk update atau insert sparepart
-            foreach ($pembelian->detailPembelians as $detail) {
-                if ($detail->is_new_item) {
-                    // Buat sparepart baru
-                    $sparepartData = [
-                        'kode_sparepart' => 'SP-' . date('Ymd') . rand(1000, 9999),
-                        'kode_kategori' => $kategoriId,
-                        'kode_spl' => $supplierId,
-                        'nama_sparepart' => $detail->nama_item,
-                        'stok_sparepart' => $detail->jumlah,
-                        'harga_beli' => $detail->harga_beli,
-                        'harga_jual' => $detail->harga_jual ?? ($detail->harga_beli * 1.2), // Default markup 20%
-                        'harga_ecer' => $detail->harga_ecer ?? ($detail->harga_beli * 1.3), // Default markup 30%
-                        'harga_pasang' => $detail->harga_pasang ?? ($detail->harga_beli * 1.4), // Default markup 40%
-                        'kode_owner' => $this->getThisUser()->id_upline,
-                        'foto_sparepart'=>'-',
-                    ];
+        // Proses semua item pembelian untuk update atau insert sparepart
+        foreach ($pembelian->detailPembelians as $detail) {
+            if ($detail->is_new_item) {
+                // Buat sparepart baru
+                $sparepartData = [
+                    'kode_sparepart' => 'SP-' . date('Ymd') . rand(1000, 9999),
+                    'kode_kategori' => $kategoriId,
+                    'kode_spl' => $supplierId,
+                    'nama_sparepart' => $detail->nama_item,
+                    'stok_sparepart' => $detail->jumlah,
+                    'harga_beli' => $detail->harga_beli,
+                    'harga_jual' => $detail->harga_jual ?? ($detail->harga_beli * 1.2), // Default markup 20%
+                    'harga_ecer' => $detail->harga_ecer ?? ($detail->harga_beli * 1.3), // Default markup 30%
+                    'harga_pasang' => $detail->harga_pasang ?? ($detail->harga_beli * 1.4), // Default markup 40%
+                    'kode_owner' => $this->getThisUser()->id_upline,
+                    'foto_sparepart'=>'-',
+                ];
 
-                    $sparepart = Sparepart::create($sparepartData);
+                $sparepart = Sparepart::create($sparepartData);
 
-                    // Update detail pembelian dengan sparepart_id baru
-                    $detail->sparepart_id = $sparepart->id;
-                    $detail->save();
-                } else {
-                    // Update stok sparepart yang sudah ada
-                    if ($detail->sparepart_id) {
-                        $sparepart = Sparepart::find($detail->sparepart_id);
-                        if ($sparepart) {
-                            $sparepart->stok_sparepart += $detail->jumlah;
-                            $sparepart->harga_beli = $detail->harga_beli;
+                // Update detail pembelian dengan sparepart_id baru
+                $detail->sparepart_id = $sparepart->id;
+                $detail->save();
 
-                            // Update harga lain jika ada di detail
-                            if (isset($detail->harga_jual)) {
-                                $sparepart->harga_jual = $detail->harga_jual;
-                            }
-                            if (isset($detail->harga_ecer)) {
-                                $sparepart->harga_ecer = $detail->harga_ecer;
-                            }
-                            if (isset($detail->harga_pasang)) {
-                                $sparepart->harga_pasang = $detail->harga_pasang;
-                            }
-                            if ($detail->nama_item != $sparepart->nama_sparepart ) {
-                                $sparepart->nama_sparepart = $detail->nama_item;
-                            }
+                // Catat di StockHistory - sparepart baru
+                $this->logStockChange(
+                    $sparepart->id,
+                    $detail->jumlah,
+                    'purchase',
+                    $pembelian->kode_pembelian,
+                    'Stok awal dari pembelian',
+                    $this->getThisUser()->id
+                );
 
-                            $sparepart->save();
+            } else {
+                // Update stok sparepart yang sudah ada
+                if ($detail->sparepart_id) {
+                    $sparepart = Sparepart::find($detail->sparepart_id);
+                    if ($sparepart) {
+                        // Simpan stok sebelum diupdate untuk dicatat di history
+                        $stockBefore = $sparepart->stok_sparepart;
+
+                        $sparepart->stok_sparepart += $detail->jumlah;
+                        $sparepart->harga_beli = $detail->harga_beli;
+
+                        // Update harga lain jika ada di detail
+                        if (isset($detail->harga_jual)) {
+                            $sparepart->harga_jual = $detail->harga_jual;
                         }
+                        if (isset($detail->harga_ecer)) {
+                            $sparepart->harga_ecer = $detail->harga_ecer;
+                        }
+                        if (isset($detail->harga_pasang)) {
+                            $sparepart->harga_pasang = $detail->harga_pasang;
+                        }
+                        if ($detail->nama_item != $sparepart->nama_sparepart ) {
+                            $sparepart->nama_sparepart = $detail->nama_item;
+                        }
+
+                        $sparepart->save();
+
+                        // Catat di StockHistory - update sparepart yang sudah ada
+                        $this->logStockChange(
+                            $sparepart->id,
+                            $detail->jumlah,
+                            'purchase',
+                            $pembelian->kode_pembelian,
+                            'Penambahan stok dari pembelian',
+                            $this->getThisUser()->id,
+                            $stockBefore,
+                            $sparepart->stok_sparepart
+                        );
+
+                        // Update status notifikasi stok rendah jika ada
+                        $this->updateStockNotification($sparepart->id, $pembelian->kode_pembelian, $this->getThisUser()->id);
                     }
                 }
             }
-
-            // Update status pembelian menjadi selesai
-            $pembelian->status = 'selesai';
-            $pembelian->save();
-
-            DB::commit();
-            return redirect()->route('pembelian.index')->with('success', 'Pembelian berhasil diselesaikan dan stok berhasil diupdate.');
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->withErrors(['error' => 'Terjadi kesalahan: ' . $e->getMessage()]);
         }
+
+        // Update status pembelian menjadi selesai
+        $pembelian->status = 'selesai';
+        $pembelian->save();
+
+        DB::commit();
+        return redirect()->route('pembelian.index')->with('success', 'Pembelian berhasil diselesaikan dan stok berhasil diupdate.');
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return back()->withErrors(['error' => 'Terjadi kesalahan: ' . $e->getMessage()]);
     }
+}
+
+/**
+ * Helper method untuk mencatat perubahan stok
+ */
+private function logStockChange($sparepartId, $quantityChange, $referenceType, $referenceId, $notes = null, $userId, $stockBefore = 0, $stockAfter = null)
+{
+    // Jika stockAfter tidak disetel, hitung berdasarkan stockBefore + quantityChange
+    if ($stockAfter === null) {
+        $stockAfter = $stockBefore + $quantityChange;
+    }
+
+    // Buat log stock history
+    StockHistory::create([
+        'sparepart_id' => $sparepartId,
+        'quantity_change' => $quantityChange,
+        'reference_type' => $referenceType,
+        'reference_id' => $referenceId,
+        'stock_before' => $stockBefore,
+        'stock_after' => $stockAfter,
+        'notes' => $notes,
+        'user_input' => $userId,
+    ]);
+}
+
+/**
+ * Helper method untuk update notifikasi stok rendah
+ */
+private function updateStockNotification($sparepartId, $purchaseId, $userId)
+{
+    $notification = StockNotification::where('sparepart_id', $sparepartId)
+        ->where('status', 'pending')
+        ->first();
+
+    if ($notification) {
+        $notification->status = 'processed';
+        $notification->processed_by = $userId;
+        $notification->processed_at = now();
+        $notification->notes = 'Diproses melalui pembelian #' . $purchaseId;
+        $notification->save();
+    }
+}
 }

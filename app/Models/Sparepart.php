@@ -27,4 +27,72 @@ class Sparepart extends Model
     // {
     //     return $this->hasMany(DetailSparepartPenjualan::class, 'kode_sparepart', 'id');
     // }
+    /**
+ * Relasi ke model StockHistory
+ */
+    public function stockHistory()
+    {
+        return $this->hasMany(StockHistory::class);
+    }
+
+    /**
+     * Relasi ke model StockNotification
+     */
+    public function stockNotifications()
+    {
+        return $this->hasMany(StockNotification::class);
+    }
+
+    /**
+     * Method untuk mencatat perubahan stok
+     */
+    public function logStockChange($change, $referenceType, $referenceId, $notes = null, $userId)
+    {
+        $stockBefore = $this->stok_sparepart;
+        $stockAfter = $stockBefore + $change;
+
+        // Update stok sparepart
+        $this->stok_sparepart = $stockAfter;
+        $this->save();
+
+        // Buat log history
+        return StockHistory::create([
+            'sparepart_id' => $this->id,
+            'quantity_change' => $change,
+            'reference_type' => $referenceType,
+            'reference_id' => $referenceId,
+            'stock_before' => $stockBefore,
+            'stock_after' => $stockAfter,
+            'notes' => $notes,
+            'user_input' => $userId,
+        ]);
+    }
+
+    /**
+     * Method untuk check dan membuat notifikasi stok rendah
+     */
+    public function checkAndCreateLowStockNotification($userId)
+    {
+        if ($this->stok_sparepart <= $this->reorder_point) {
+            // Cek apakah sudah ada notifikasi pending
+            $existingNotification = $this->stockNotifications()
+                                        ->where('status', 'pending')
+                                        ->first();
+
+            if (!$existingNotification) {
+                return StockNotification::create([
+                    'sparepart_id' => $this->id,
+                    'current_stock' => $this->stok_sparepart,
+                    'reorder_point' => $this->reorder_point,
+                    'reorder_quantity' => $this->reorder_quantity,
+                    'status' => 'pending',
+                    'created_by' => $userId,
+                ]);
+            }
+
+            return $existingNotification;
+        }
+
+        return null;
+    }
 }
