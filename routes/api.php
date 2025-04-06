@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\SalesApiController;
 use App\Http\Controllers\Api\UserDataController;
 use App\Http\Controllers\Api\WhatsAppMessageController;
 use FontLib\Table\Type\name;
+use App\Http\Controllers\Api\OrderApiController;
 
 /*
 |--------------------------------------------------------------------------
@@ -72,6 +73,28 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // routes/api.php
     Route::post('/send-message', [WhatsAppMessageController::class, 'sendMessage']);
+
+    Route::get('/suppliers', [OrderApiController::class, 'getSuppliers']);
+
+});
+Route::prefix('orders')->middleware(['auth:sanctum'])->group(function () {
+    // Mendapatkan data
+    Route::get('/', [OrderApiController::class, 'getOrders']);
+    Route::get('/{id}', [OrderApiController::class, 'getOrderDetail']);
+    Route::get('/{id}/low-stock-items', [OrderApiController::class, 'getLowStockItems']);
+
+    // Pencarian sparepart untuk ditambahkan ke pesanan
+    Route::get('/search/spareparts', [OrderApiController::class, 'searchSpareparts']);
+
+    // Membuat dan mengelola pesanan
+    Route::post('/', [OrderApiController::class, 'createOrder']);
+    Route::put('/{id}', [OrderApiController::class, 'updateOrder']);
+    Route::post('/{id}/finalize', [OrderApiController::class, 'finalizeOrder']);
+
+    // Mengelola item pesanan
+    Route::post('/{id}/items', [OrderApiController::class, 'addOrderItem']);
+    Route::post('/{id}/items/multiple', [OrderApiController::class, 'addMultipleItems']);
+    Route::delete('/items/{itemId}', [OrderApiController::class, 'removeOrderItem']);
 });
 
 Route::get('/cek-service', [ServiceApiController::class,'cekService']);

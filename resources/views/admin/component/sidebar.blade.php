@@ -93,6 +93,55 @@
                  @if ($this_user->jabatan != '1' || $this_user->jabatan != '2')
                      <li class="nav-header">DATA MASTER</li>
                      @if ($this_user->jabatan == '1')
+                         {{-- Tambahkan menu berikut di sidebar menu dalam file sidebar.blade.php --}}
+
+                         <!-- Menu Keuangan -->
+                         <li class="nav-item {{ request()->is('financial*') ? 'menu-open' : '' }}">
+                             <a href="#" class="nav-link {{ request()->is('financial*') ? 'active' : '' }}">
+                                 <i class="nav-icon fas fa-money-bill-wave"></i>
+                                 <p>
+                                     Keuangan
+                                     <i class="right fas fa-angle-left"></i>
+                                 </p>
+                             </a>
+                             <ul class="nav nav-treeview">
+                                 <li class="nav-item">
+                                     <a href="{{ route('financial.index') }}"
+                                         class="nav-link {{ request()->is('financial') ? 'active' : '' }}">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Dashboard</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('financial.transactions') }}"
+                                         class="nav-link {{ request()->is('financial/transactions') ? 'active' : '' }}">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Transaksi</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('financial.create') }}"
+                                         class="nav-link {{ request()->is('financial/create') ? 'active' : '' }}">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Tambah Transaksi</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('financial.categories') }}"
+                                         class="nav-link {{ request()->is('financial/categories') ? 'active' : '' }}">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Kategori</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('financial.reports') }}"
+                                         class="nav-link {{ request()->is('financial/reports') ? 'active' : '' }}">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Laporan</p>
+                                     </a>
+                                 </li>
+                             </ul>
+                         </li>
                          <!-- Menu Inventory Management -->
                          <li
                              class="nav-item {{ in_array(request()->route()->getName(), ['admin.inventory.home', 'admin.inventory.restock-report', 'admin.inventory.bestsellers']) ? 'menu-open' : '' }}">

@@ -95,4 +95,14 @@ class Sparepart extends Model
 
         return null;
     }
+    // Di file app/Models/Sparepart.php
+    public function kategori()
+    {
+        return $this->belongsTo(KategoriSparepart::class, 'kode_kategori');
+    }
+
+    public function supplier()
+    {
+        return $this->belongsTo(Supplier::class, 'kode_spl');
+    }
 }

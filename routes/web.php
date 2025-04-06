@@ -30,6 +30,7 @@ use SebastianBergmann\CodeCoverage\Report\Html\Dashboard;
 use App\Http\Controllers\WhatsAppController;
 use App\Http\Controllers\Admin\StockManagementController;
 use App\Http\Controllers\Admin\PembelianController;
+use App\Http\Controllers\Admin\OrderController;
 
 
 /*
@@ -365,6 +366,57 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
         Route::patch('/pembelian/{id}', [PembelianController::class, 'update'])->name('pembelian.update');
     });
 
+    // Routes untuk Pesanan
+Route::prefix('admin/order')->name('order.')->middleware(['auth'])->group(function () {
+    Route::get('/', [OrderController::class, 'index'])->name('index');
+    Route::post('/', [OrderController::class, 'create'])->name('create');
+    Route::get('/{id}/edit', [OrderController::class, 'edit'])->name('edit');
+    Route::get('/{id}', [OrderController::class, 'show'])->name('show');
+    Route::put('/{id}', [OrderController::class, 'update'])->name('update');
 
+    // Item management
+    Route::post('/{id}/add-item', [OrderController::class, 'addItem'])->name('add-item');
+    Route::post('/{id}/add-low-stock-item', [OrderController::class, 'addLowStockItem'])->name('add-low-stock-item');
+    Route::put('/update-item/{itemId}', [OrderController::class, 'updateItem'])->name('update-item');
+    Route::get('/remove-item/{itemId}', [OrderController::class, 'removeItem'])->name('remove-item');
+
+    // Order status management
+    Route::get('/{id}/finalize', [OrderController::class, 'finalize'])->name('finalize');
+    Route::get('/{id}/convert-to-purchase', [OrderController::class, 'convertToPurchase'])->name('convert-to-purchase');
+    Route::get('/{id}/cancel', [OrderController::class, 'cancel'])->name('cancel');
 });
 
+});
+Route::middleware(['auth'])->group(function () {
+    // Dashboard Keuangan
+    Route::get('/financial', [App\Http\Controllers\Admin\FinancialController::class, 'index'])->name('financial.index');
+
+    // Daftar Transaksi
+    Route::get('/financial/transactions', [App\Http\Controllers\Admin\FinancialController::class, 'transactions'])->name('financial.transactions');
+
+    // Tambah Transaksi
+    Route::get('/financial/create', [App\Http\Controllers\Admin\FinancialController::class, 'create'])->name('financial.create');
+    Route::post('/financial/store', [App\Http\Controllers\Admin\FinancialController::class, 'store'])->name('financial.store');
+
+    // Edit Transaksi
+    Route::get('/financial/{id}/edit', [App\Http\Controllers\Admin\FinancialController::class, 'edit'])->name('financial.edit');
+    Route::put('/financial/{id}', [App\Http\Controllers\Admin\FinancialController::class, 'update'])->name('financial.update');
+
+    // Hapus Transaksi
+    Route::delete('/financial/{id}', [App\Http\Controllers\Admin\FinancialController::class, 'destroy'])->name('financial.destroy');
+
+    // Kategori Keuangan
+    Route::get('/financial/categories', [App\Http\Controllers\Admin\FinancialController::class, 'categories'])->name('financial.categories');
+    Route::post('/financial/categories', [App\Http\Controllers\Admin\FinancialController::class, 'storeCategory'])->name('financial.categories.store');
+    Route::put('/financial/categories/{id}', [App\Http\Controllers\Admin\FinancialController::class, 'updateCategoryStatus'])->name('financial.categories.update');
+
+    // Laporan Keuangan
+    Route::get('/financial/reports', [App\Http\Controllers\Admin\FinancialController::class, 'reports'])->name('financial.reports');
+    Route::post('/financial/reports/pdf', [App\Http\Controllers\Admin\FinancialController::class, 'exportPdf'])->name('financial.export.pdf');
+    Route::post('/financial/reports/excel', [App\Http\Controllers\Admin\FinancialController::class, 'exportExcel'])->name('financial.export.excel');
+
+    // Integrasi dengan Service
+    Route::get('/financial/service/{serviceId}', [App\Http\Controllers\Admin\FinancialController::class, 'createFromService'])->name('financial.create.from.service');
+});
+// Routes untuk pencarian sparepart via AJAX (jika belum ada)
+Route::get('admin/sparepart/search-ajax', [SparepartController::class, 'searchAjax'])->name('sparepart.search-ajax');

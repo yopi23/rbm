@@ -9,6 +9,8 @@ use App\Models\DetailSparepartPenjualan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use App\Models\Order;
+use App\Models\Supplier;
 
 class StockManagementController extends Controller
 {
@@ -25,10 +27,11 @@ class StockManagementController extends Controller
         // ];
 
         // Mendapatkan sparepart dengan stok di bawah threshold (misalnya 5)
-        $lowStockItems = $this->getLowStockItems(5);
+        // Limit untuk dashboard
+        $lowStockItems = $this->getLowStockItems(5, 10);
 
-        // Mendapatkan produk terlaris (30 hari terakhir)
-        $topSellingItems = $this->getTopSellingItems(30);
+        // Mendapatkan produk terlaris (30 hari terakhir) - Limit untuk dashboard
+        $topSellingItems = $this->getTopSellingItems(30, 10);
 
         // Statistik penjualan harian (7 hari terakhir)
         $dailySales = $this->getDailySales(7);
@@ -46,17 +49,14 @@ class StockManagementController extends Controller
     /**
      * Menampilkan laporan restock
      */
+    // Modifikasi method restockReport
     public function restockReport(Request $request)
     {
         $page ='Laporan Restock';
-        // [
-        //     'title' => 'Laporan Restock',
-        //     'subtitle' => 'Daftar Sparepart yang Perlu Di-restock',
-        //     'active_menu' => 'inventory-restock',
-        // ];
 
         $threshold = $request->input('threshold', 10);
 
+        // Get all low stock items for DataTables server-side processing
         $lowStockItems = $this->getLowStockItems($threshold);
 
         // Tambahkan informasi penjualan 30 hari terakhir untuk tiap item
@@ -66,10 +66,21 @@ class StockManagementController extends Controller
                 round(($item->stok_sparepart / ($item->sales_last_30_days / 30)) * 30) : 0;
         }
 
+        // Ambil data supplier untuk dropdown di modal
+        $suppliers = Supplier::where('kode_owner', $this->getThisUser()->id_upline)->get();
+
+        // Ambil daftar pesanan aktif (status draft) untuk dropdown
+        $activeOrders = Order::where('kode_owner', $this->getThisUser()->id_upline)
+            ->where('status_order', 'draft')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
         // Generate view dengan menggunakan blank_page layout
         $content = view('admin.page.inventory.restock_report', compact(
             'lowStockItems',
-            'threshold'
+            'threshold',
+            'suppliers',
+            'activeOrders'
         ))->render();
 
         return view('admin.layout.blank_page', compact('page', 'content'));
@@ -88,15 +99,14 @@ class StockManagementController extends Controller
         // ];
 
         $days = $request->input('days', 30);
-        $limit = $request->input('limit', 20);
 
-        $topSellingItems = $this->getTopSellingItems($days, $limit);
+        // Get all top selling items without limit for DataTables
+        $topSellingItems = $this->getTopSellingItems($days);
 
         // Generate view dengan menggunakan blank_page layout
         $content = view('admin.page.inventory.bestsellers', compact(
             'topSellingItems',
-            'days',
-            'limit'
+            'days'
         ))->render();
 
         return view('admin.layout.blank_page', compact('page', 'content'));
@@ -105,17 +115,23 @@ class StockManagementController extends Controller
     /**
      * Mendapatkan daftar sparepart dengan stok di bawah threshold
      */
-    public function getLowStockItems($threshold = 5)
+    public function getLowStockItems($threshold = 5, $limit = null)
     {
-        return Sparepart::where('stok_sparepart', '<=', $threshold)
-            ->orderBy('stok_sparepart', 'asc')
-            ->get();
+        $query = Sparepart::with(['kategori', 'supplier'])
+            ->where('stok_sparepart', '<=', $threshold)
+            ->orderBy('stok_sparepart', 'asc');
+
+        if ($limit) {
+            $query->limit($limit);
+        }
+
+        return $query->get();
     }
 
     /**
      * Mendapatkan produk terlaris berdasarkan periode (dalam hari)
      */
-    public function getTopSellingItems($days = 30, $limit = 10)
+    public function getTopSellingItems($days = 30, $limit = null)
     {
         $startDate = Carbon::now()->subDays($days);
 
@@ -137,17 +153,22 @@ class StockManagementController extends Controller
         // Gabungkan kedua query
         $combinedSales = $salesFromPenjualan->unionAll($salesFromServices);
 
-        // Dapatkan hasil akhir dengan sum dari seluruh penjualan
-        $topProducts = DB::query()
+        // Query builder for top products
+        $topProductsQuery = DB::query()
             ->fromSub($combinedSales, 'combined_sales')
             ->select(
                 'combined_sales.kode_sparepart',
                 DB::raw('SUM(combined_sales.total_qty) as grand_total')
             )
             ->groupBy('combined_sales.kode_sparepart')
-            ->orderBy('grand_total', 'desc')
-            ->limit($limit)
-            ->get();
+            ->orderBy('grand_total', 'desc');
+
+        // Apply limit if specified
+        if ($limit) {
+            $topProductsQuery->limit($limit);
+        }
+
+        $topProducts = $topProductsQuery->get();
 
         // Ambil data lengkap sparepart
         $result = [];

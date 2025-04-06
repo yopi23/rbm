@@ -97,7 +97,7 @@
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover m-0">
+                    <table class="table table-striped table-hover m-0" id="topselling-table">
                         <thead>
                             <tr>
                                 <th>Nama Sparepart</th>
@@ -155,7 +155,7 @@
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover m-0">
+                    <table class="table table-striped table-hover m-0" id="lowstock-table">
                         <thead>
                             <tr>
                                 <th>Kode</th>
@@ -216,6 +216,35 @@
 
 <script>
     $(function() {
+        // Initialize DataTables
+        $('#topselling-table').DataTable({
+            "paging": true,
+            "lengthChange": false,
+            "searching": true,
+            "ordering": true,
+            "info": true,
+            "autoWidth": false,
+            "responsive": true,
+            "pageLength": 5,
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Indonesian.json"
+            }
+        });
+
+        $('#lowstock-table').DataTable({
+            "paging": true,
+            "lengthChange": false,
+            "searching": true,
+            "ordering": true,
+            "info": true,
+            "autoWidth": false,
+            "responsive": true,
+            "pageLength": 5,
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Indonesian.json"
+            }
+        });
+
         // Data dari controller
         const salesData = @json($dailySales);
 

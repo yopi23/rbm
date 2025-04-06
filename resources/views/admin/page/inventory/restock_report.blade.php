@@ -1,7 +1,7 @@
 <!-- resources/views/admin/page/inventory/restock_report.blade.php -->
 
 <div class="row">
-    <div class="col-md-12">
+    <div class="col-md-6">
         <div class="card card-primary card-outline">
             <div class="card-header">
                 <h3 class="card-title">
@@ -10,35 +10,107 @@
                 </h3>
             </div>
             <div class="card-body">
-                <form action="{{ route('admin.inventory.restock-report') }}" method="GET" class="row">
-                    <div class="col-md-4">
-                        <div class="form-group">
-                            <label for="threshold">Threshold Stok Rendah</label>
-                            <input type="number" class="form-control" id="threshold" name="threshold"
-                                value="{{ request('threshold', 10) }}" min="1" max="100">
-                            <small class="form-text text-muted">
-                                Tampilkan produk dengan stok di bawah atau sama dengan nilai ini
-                            </small>
+                <form action="{{ route('admin.inventory.restock-report') }}" method="GET">
+                    <div class="row">
+                        <div class="col">
+                            <div class="form-group">
+                                <input type="number" class="form-control" id="threshold" name="threshold"
+                                    value="{{ request('threshold', 10) }}" min="1" max="100">
+                                <small class="form-text text-muted">
+                                    Tampilkan produk dengan stok di bawah atau sama dengan nilai ini
+                                </small>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-md-8 d-flex align-items-end">
-                        <div class="form-group">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-search mr-1"></i> Terapkan Filter
-                            </button>
-                            <a href="{{ route('admin.inventory.home') }}" class="btn btn-secondary ml-2">
-                                <i class="fas fa-arrow-left mr-1"></i> Kembali ke Dashboard
-                            </a>
-                            <button type="button" class="btn btn-success ml-2" onclick="exportToExcel()">
-                                <i class="fas fa-file-excel mr-1"></i> Export Excel
-                            </button>
+                    <div class="row">
+                        <div class="col d-flex align-items-end">
+                            <div class="form-group">
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-search mr-1"></i> Terapkan Filter
+                                </button>
+                                <a href="{{ route('admin.inventory.home') }}" class="btn btn-secondary ml-2 btn-sm">
+                                    <i class="fas fa-arrow-left mr-1"></i> Kembali ke Dashboard
+                                </a>
+                                <button type="button" class="btn btn-success ml-2 btn-sm" onclick="exportToExcel()">
+                                    <i class="fas fa-file-excel mr-1"></i> Export Excel
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </form>
             </div>
         </div>
     </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    Informasi
+                </h3>
+
+                <div class="card-tools">
+                    <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                        <i class="fas fa-minus"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="info-box bg-danger">
+                            {{-- <span class="info-box-icon"><i class="fas fa-exclamation-triangle"></i></span> --}}
+                            <div class="info-box-content">
+                                <span class="info-box-text">Stok Kritis</span>
+                                <span
+                                    class="info-box-number">{{ $lowStockItems->where('stok_sparepart', '<=', 2)->count() }}</span>
+                                <div class="progress">
+                                    <div class="progress-bar" style="width: 100%"></div>
+                                </div>
+                                <span class="progress-description">
+                                    Stok <= 2 (Perlu segera direstock) </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="info-box bg-warning">
+                            {{-- <span class="info-box-icon"><i class="fas fa-exclamation"></i></span> --}}
+                            <div class="info-box-content">
+                                <span class="info-box-text">Perlu Restock</span>
+                                <span
+                                    class="info-box-number">{{ $lowStockItems->whereIn('stok_sparepart', [3, 4, 5])->count() }}</span>
+                                <div class="progress">
+                                    <div class="progress-bar" style="width: 100%"></div>
+                                </div>
+                                <span class="progress-description">
+                                    Stok 3-5 (Segera siapkan pemesanan)
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="info-box bg-info">
+                            {{-- <span class="info-box-icon"><i class="fas fa-bell"></i></span> --}}
+                            <div class="info-box-content">
+                                <span class="info-box-text">Stok Rendah</span>
+                                <span
+                                    class="info-box-number">{{ $lowStockItems->where('stok_sparepart', '>', 5)->where('stok_sparepart', '<=', request('threshold', 10))->count() }}</span>
+                                <div class="progress">
+                                    <div class="progress-bar" style="width: 100%"></div>
+                                </div>
+                                <span class="progress-description">
+                                    Stok > 5 (Mulai pertimbangkan pemesanan)
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
+
+
 
 <div class="row">
     <div class="col-md-12">
@@ -48,15 +120,23 @@
                     <i class="fas fa-exclamation-triangle mr-1"></i>
                     Daftar Item yang Perlu Di-restock
                 </h3>
+                <!-- Modifikasi pada bagian card tools di header -->
                 <div class="card-tools">
+                    <a href="{{ route('order.index') }}" class="btn btn-info btn-sm mr-2">
+                        <i class="fas fa-clipboard-list mr-1"></i> Lihat Daftar Pesanan
+                    </a>
+                    <button type="button" class="btn btn-danger btn-sm mr-2" data-toggle="modal"
+                        data-target="#createOrderModal">
+                        <i class="fas fa-plus-circle mr-1"></i> Buat Pesanan Baru
+                    </button>
                     <button type="button" class="btn btn-tool" data-card-widget="collapse">
                         <i class="fas fa-minus"></i>
                     </button>
                 </div>
             </div>
-            <div class="card-body p-0">
+            <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-striped table-bordered m-0" id="restockTable">
+                    <table class="table table-striped table-bordered" id="restockTable">
                         <thead>
                             <tr>
                                 <th>Kode</th>
@@ -96,10 +176,16 @@
                                     <td class="text-right">Rp {{ number_format($item->harga_beli, 0, ',', '.') }}</td>
                                     <td>{{ $item->kode_spl ?? 'Tidak ada' }}</td>
                                     <td class="text-center">
-                                        <button class="btn btn-sm btn-info"
-                                            onclick="getReorderRecommendation({{ $item->id }})">
-                                            <i class="fas fa-calculator mr-1"></i> Hitung Reorder
-                                        </button>
+                                        <div class="btn-group">
+                                            <button class="btn btn-sm btn-info"
+                                                onclick="getReorderRecommendation({{ $item->id }})">
+                                                <i class="fas fa-calculator mr-1"></i> Hitung Reorder
+                                            </button>
+                                            <button class="btn btn-sm btn-success ml-1"
+                                                onclick="addToOrder({{ $item->id }}, '{{ $item->nama_sparepart }}', {{ $item->harga_beli }})">
+                                                <i class="fas fa-cart-plus mr-1"></i> Tambah ke Pesanan
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             @empty
@@ -181,67 +267,226 @@
     </div>
 </div>
 
+<!-- Tambahkan Modal untuk Pesanan Baru -->
+<div class="modal fade" id="createOrderModal" tabindex="-1" aria-labelledby="createOrderModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createOrderModalLabel">Buat Pesanan Baru</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form action="{{ route('order.create') }}" method="POST">
+                @csrf
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="kode_supplier">Supplier</label>
+                        <select class="form-control" id="kode_supplier" name="kode_supplier" required>
+                            <option value="">-- Pilih Supplier --</option>
+                            @foreach ($suppliers as $supplier)
+                                <option value="{{ $supplier->id }}">{{ $supplier->nama_supplier }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="catatan">Catatan (opsional)</label>
+                        <textarea class="form-control" id="catatan" name="catatan" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary">Buat Pesanan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal untuk Tambah ke Pesanan yang Ada -->
+<div class="modal fade" id="addToOrderModal" tabindex="-1" aria-labelledby="addToOrderModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addToOrderModalLabel">Tambahkan ke Pesanan</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="addToOrderForm" action="{{ route('order.add-low-stock-item', 0) }}" method="POST">
+                @csrf
+                <div class="modal-body">
+                    <input type="hidden" id="modal_sparepart_id" name="sparepart_id">
+
+                    <div class="form-group">
+                        <label>Item</label>
+                        <input type="text" class="form-control" id="modal_item_name" readonly>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="modal_jumlah">Jumlah</label>
+                        <input type="number" class="form-control" id="modal_jumlah" name="jumlah" min="1"
+                            value="10" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="order_id">Pilih Pesanan</label>
+                        <select class="form-control" id="order_id" name="order_id" required>
+                            <option value="">-- Pilih Pesanan --</option>
+                            @foreach ($activeOrders as $activeOrder)
+                                <option value="{{ $activeOrder->id }}">
+                                    {{ $activeOrder->kode_order }}
+                                    ({{ $activeOrder->supplier ? $activeOrder->supplier->nama_supplier : 'Tanpa Supplier' }})
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            Jika belum ada pesanan, silakan buat pesanan baru terlebih dahulu.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary" id="btnAddToOrder">Tambahkan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Tambahkan script untuk fungsi tambah ke pesanan -->
 <script>
+    // Fungsi untuk menambahkan item ke pesanan
+    function addToOrder(sparepartId, sparepartName, price) {
+        // Set nilai di modal
+        $('#modal_sparepart_id').val(sparepartId);
+        $('#modal_item_name').val(sparepartName);
+
+        // Tampilkan modal
+        $('#addToOrderModal').modal('show');
+    }
+
+    // Update formulir saat pesanan dipilih
+    $('#order_id').change(function() {
+        const orderId = $(this).val();
+        if (orderId) {
+            const newAction = "{{ url('admin/order/add-low-stock-item') }}/" + orderId;
+            $('#addToOrderForm').attr('action', newAction);
+            $('#btnAddToOrder').prop('disabled', false);
+        } else {
+            $('#btnAddToOrder').prop('disabled', true);
+        }
+    });
+</script>
+
+<script>
+    $(function() {
+        // Initialize DataTable
+        $('#restockTable').DataTable({
+            "paging": true,
+            "lengthChange": true,
+            "searching": true,
+            "ordering": true,
+            "info": true,
+            "autoWidth": false,
+            "responsive": true,
+            "pageLength": 10,
+            "lengthMenu": [
+                [10, 25, 50, 100, -1],
+                [10, 25, 50, 100, "Semua"]
+            ],
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Indonesian.json"
+            },
+            "columnDefs": [{
+                    "orderable": false,
+                    "targets": 8
+                } // Disable sorting on actions column
+            ],
+            "createdRow": function(row, data, dataIndex) {
+                // This function allows us to maintain the original row classes
+                // even when DataTables redraws the rows
+                if ($(row).hasClass('bg-danger')) {
+                    $(row).find('td').addClass('text-white');
+                }
+            }
+        });
+    });
+
     // Fungsi untuk mendapatkan rekomendasi jumlah pemesanan
     function getReorderRecommendation(itemId) {
-        const modal = new bootstrap.Modal(document.getElementById('reorderModal'));
-        modal.show();
+        const modal = $('#reorderModal');
+        modal.modal('show');
 
-        document.getElementById('reorderSpinner').style.display = 'block';
-        document.getElementById('reorderContent').style.display = 'none';
+        $('#reorderSpinner').show();
+        $('#reorderContent').hide();
 
         // Simpan itemId di variabel global untuk recalculate
         window.currentItemId = itemId;
 
-        const leadTime = document.getElementById('leadTime').value;
-        const safetyStock = document.getElementById('safetyStock').value;
+        const leadTime = $('#leadTime').val();
+        const safetyStock = $('#safetyStock').val();
 
-        fetch(
-                `{{ url('admin/inventory/reorder-recommendation') }}/${itemId}?lead_time=${leadTime}&safety_stock=${safetyStock}`
-            )
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('reorderSpinner').style.display = 'none';
-                document.getElementById('reorderContent').style.display = 'block';
+        $.ajax({
+            url: `{{ url('admin/inventory/reorder-recommendation') }}/${itemId}`,
+            data: {
+                lead_time: leadTime,
+                safety_stock: safetyStock
+            },
+            method: 'GET',
+            success: function(data) {
+                $('#reorderSpinner').hide();
+                $('#reorderContent').show();
 
-                document.getElementById('itemName').textContent = data.item.nama_sparepart;
-                document.getElementById('currentStock').textContent = data.current_stock;
-                document.getElementById('periodSales').textContent = data.period_sales;
-                document.getElementById('dailyAverage').textContent = data.daily_average;
-                document.getElementById('reorderQuantity').textContent = data.reorder_quantity;
-            })
-            .catch(error => {
+                $('#itemName').text(data.item.nama_sparepart);
+                $('#currentStock').text(data.current_stock);
+                $('#periodSales').text(data.period_sales);
+                $('#dailyAverage').text(data.daily_average);
+                $('#reorderQuantity').text(data.reorder_quantity);
+            },
+            error: function(xhr, status, error) {
                 console.error('Error:', error);
                 alert('Terjadi kesalahan saat mengambil data.');
-            });
+            }
+        });
     }
 
     // Fungsi untuk menghitung ulang berdasarkan parameter yang diubah
     function recalculateReorder() {
         const itemId = window.currentItemId;
-        const leadTime = document.getElementById('leadTime').value;
-        const safetyStock = document.getElementById('safetyStock').value;
+        const leadTime = $('#leadTime').val();
+        const safetyStock = $('#safetyStock').val();
 
-        document.getElementById('reorderSpinner').style.display = 'block';
-        document.getElementById('reorderContent').style.display = 'none';
+        $('#reorderSpinner').show();
+        $('#reorderContent').hide();
 
-        fetch(
-                `{{ url('admin/inventory/reorder-recommendation') }}/${itemId}?lead_time=${leadTime}&safety_stock=${safetyStock}`
-            )
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('reorderSpinner').style.display = 'none';
-                document.getElementById('reorderContent').style.display = 'block';
+        $.ajax({
+            url: `{{ url('admin/inventory/reorder-recommendation') }}/${itemId}`,
+            data: {
+                lead_time: leadTime,
+                safety_stock: safetyStock
+            },
+            method: 'GET',
+            success: function(data) {
+                $('#reorderSpinner').hide();
+                $('#reorderContent').show();
 
-                document.getElementById('currentStock').textContent = data.current_stock;
-                document.getElementById('periodSales').textContent = data.period_sales;
-                document.getElementById('dailyAverage').textContent = data.daily_average;
-                document.getElementById('reorderQuantity').textContent = data.reorder_quantity;
-            })
-            .catch(error => {
+                $('#currentStock').text(data.current_stock);
+                $('#periodSales').text(data.period_sales);
+                $('#dailyAverage').text(data.daily_average);
+                $('#reorderQuantity').text(data.reorder_quantity);
+            },
+            error: function(xhr, status, error) {
                 console.error('Error:', error);
                 alert('Terjadi kesalahan saat mengambil data.');
-            });
+            }
+        });
     }
 
     function exportToExcel() {
@@ -267,7 +512,7 @@
         // Buat link untuk download
         let link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = 'bestsellers_' + new Date().toISOString().slice(0, 10) + '.xls';
+        link.download = 'restock_report_' + new Date().toISOString().slice(0, 10) + '.xls';
         link.click();
     }
 </script>

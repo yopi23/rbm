@@ -75,9 +75,9 @@
                     </button>
                 </div>
             </div>
-            <div class="card-body p-0">
+            <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-striped table-bordered m-0" id="bestsellersTable">
+                    <table class="table table-striped table-bordered" id="bestsellersTable">
                         <thead>
                             <tr>
                                 <th class="text-center">No</th>
@@ -167,6 +167,32 @@
 </div>
 
 <script>
+    $(function() {
+        // Initialize DataTable
+        $('#bestsellersTable').DataTable({
+            "paging": true,
+            "lengthChange": true,
+            "searching": true,
+            "ordering": true,
+            "info": true,
+            "autoWidth": false,
+            "responsive": true,
+            "pageLength": 10,
+            "lengthMenu": [
+                [10, 25, 50, 100, -1],
+                [10, 25, 50, 100, "Semua"]
+            ],
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Indonesian.json"
+            },
+            "columnDefs": [{
+                    "orderable": false,
+                    "targets": 9
+                } // Disable sorting on actions column
+            ]
+        });
+    });
+
     // Fungsi untuk menampilkan grafik item
     function showItemChart(itemId) {
         const modal = new bootstrap.Modal(document.getElementById('chartModal'));
