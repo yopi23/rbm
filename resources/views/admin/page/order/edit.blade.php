@@ -29,7 +29,7 @@
                 </div>
 
                 <div class="table-responsive">
-                    <table class="table table-striped table-bordered table-hover orderItemsTable">
+                    <table class="table table-striped table-bordered table-hover orderItemsTable" id="orderItemsTable">
                         <thead>
                             <tr>
                                 <th>No</th>
@@ -42,7 +42,7 @@
                         </thead>
                         <tbody>
                             @forelse($listItems as $index => $item)
-                                <tr>
+                                <tr data-item-id="{{ $item->id }}">
                                     <td>{{ $index + 1 }}</td>
                                     <td>{{ $item->nama_item }}</td>
                                     <td class="text-center">{{ $item->jumlah }}</td>
@@ -55,9 +55,11 @@
                                     </td>
                                     <td>{{ $item->catatan_item ?? '-' }}</td>
                                     <td class="text-center">
+                                        <!-- Menggunakan data attributes untuk menyimpan data item -->
                                         <button type="button" class="btn btn-sm btn-primary edit-item-btn"
                                             data-id="{{ $item->id }}" data-nama="{{ $item->nama_item }}"
-                                            data-jumlah="{{ $item->jumlah }}" data-harga="{{ $item->harga_perkiraan }}"
+                                            data-jumlah="{{ $item->jumlah }}"
+                                            data-harga="{{ $item->harga_perkiraan }}"
                                             data-catatan="{{ $item->catatan_item }}">
                                             <i class="fas fa-edit"></i>
                                         </button>
@@ -160,7 +162,7 @@
                     </div>
                 </div>
 
-                <form action="{{ route('order.add-item', $order->id) }}" method="POST">
+                <form action="{{ route('order.add-item', $order->id) }}" method="POST" id="addItemForm">
                     @csrf
                     <div class="row">
                         <div class="col-md-4">
@@ -258,7 +260,7 @@
                 </div>
 
                 <div class="table-responsive">
-                    <table class="table table-striped table-bordered table-sm orderItemsTable">
+                    <table class="table table-striped table-bordered table-sm" id="lowStockItemsTable">
                         <thead>
                             <tr>
                                 <th>Kode</th>
@@ -280,7 +282,7 @@
                                     <td class="text-right">Rp {{ number_format($item->harga_beli, 0, ',', '.') }}</td>
                                     <td class="text-center">
                                         <form action="{{ route('order.add-low-stock-item', $order->id) }}"
-                                            method="POST" class="d-inline">
+                                            method="POST" class="d-inline add-stock-form">
                                             @csrf
                                             <input type="hidden" name="sparepart_id" value="{{ $item->id }}">
                                             <input type="hidden" name="jumlah" value="10">
@@ -357,7 +359,8 @@
 
     <script>
         $(function() {
-            $('.orderItemsTable').DataTable({
+            // Inisialisasi DataTables dengan opsi yang tepat
+            var orderItemsTable = $('#orderItemsTable').DataTable({
                 "paging": true,
                 "lengthChange": true,
                 "searching": true,
@@ -382,6 +385,52 @@
                 }
             });
 
+            var lowStockItemsTable = $('#lowStockItemsTable').DataTable({
+                "paging": true,
+                "lengthChange": true,
+                "searching": true,
+                "ordering": true,
+                "info": true,
+                "autoWidth": false,
+                "responsive": true,
+                "pageLength": 10,
+                "language": {
+                    "lengthMenu": "Tampilkan _MENU_ data per halaman",
+                    "zeroRecords": "Tidak ada data yang ditemukan",
+                    "info": "Menampilkan _START_ sampai _END_ dari _TOTAL_ data",
+                    "infoEmpty": "Tidak ada data yang tersedia",
+                    "infoFiltered": "(difilter dari _MAX_ total data)",
+                    "search": "Cari:",
+                    "paginate": {
+                        "first": "Pertama",
+                        "last": "Terakhir",
+                        "next": ">>",
+                        "previous": "<<"
+                    }
+                }
+            });
+
+            // Perbaikan untuk modal edit: Gunakan event delegation karena elemen mungkin diubah oleh DataTables
+            $(document).on('click', '.edit-item-btn', function() {
+                const id = $(this).data('id');
+                const nama = $(this).data('nama');
+                const jumlah = $(this).data('jumlah');
+                const harga = $(this).data('harga');
+                const catatan = $(this).data('catatan');
+
+                // Masukkan data ke form modal
+                $('#edit_nama_item').val(nama);
+                $('#edit_jumlah').val(jumlah);
+                $('#edit_harga_perkiraan').val(harga);
+                $('#edit_catatan_item').val(catatan);
+
+                // Set action URL form
+                $('#editItemForm').attr('action', "{{ url('admin/order/update-item') }}/" + id);
+
+                // Tampilkan modal
+                $('#editItemModal').modal('show');
+            });
+
             // Inisialisasi pencarian
             $('#btnSearch').click(function() {
                 const searchTerm = $('#search_item').val();
@@ -401,21 +450,46 @@
                 }
             });
 
-            // Edit item modal
-            $('.edit-item-btn').click(function() {
-                const id = $(this).data('id');
-                const nama = $(this).data('nama');
-                const jumlah = $(this).data('jumlah');
-                const harga = $(this).data('harga');
-                const catatan = $(this).data('catatan');
+            // Prevent double submission untuk semua form
+            $('#addItemForm').on('submit', function() {
+                $(this).find('button[type="submit"]').prop('disabled', true);
+                setTimeout(function() {
+                    $('#addItemForm button[type="submit"]').prop('disabled', false);
+                }, 3000); // Re-enable after 3 seconds
+            });
 
-                $('#edit_nama_item').val(nama);
-                $('#edit_jumlah').val(jumlah);
-                $('#edit_harga_perkiraan').val(harga);
-                $('#edit_catatan_item').val(catatan);
+            $('.add-stock-form').on('submit', function() {
+                $(this).find('button[type="submit"]').prop('disabled', true);
+                setTimeout(function() {
+                    $('.add-stock-form button[type="submit"]').prop('disabled', false);
+                }, 3000); // Re-enable after 3 seconds
+            });
 
-                $('#editItemForm').attr('action', "{{ url('admin/order/update-item') }}/" + id);
-                $('#editItemModal').modal('show');
+            $('#editItemForm').on('submit', function() {
+                $(this).find('button[type="submit"]').prop('disabled', true);
+                setTimeout(function() {
+                    $('#editItemForm button[type="submit"]').prop('disabled', false);
+                }, 3000); // Re-enable after 3 seconds
+            });
+
+            // Tambahkan validasi input untuk form
+            $('#addItemForm').on('submit', function(e) {
+                const namaItem = $('#nama_item').val().trim();
+                const jumlah = parseInt($('#jumlah').val());
+
+                if (namaItem === '') {
+                    alert('Nama item tidak boleh kosong');
+                    e.preventDefault();
+                    return false;
+                }
+
+                if (isNaN(jumlah) || jumlah < 1) {
+                    alert('Jumlah harus berupa angka positif');
+                    e.preventDefault();
+                    return false;
+                }
+
+                return true;
             });
         });
 
@@ -437,6 +511,9 @@
                     if (response.success && response.results.length > 0) {
                         let html = '';
                         response.results.forEach(function(item) {
+                            // Escape single quotes untuk menghindari masalah JavaScript
+                            const escapedName = item.nama_sparepart.replace(/'/g, "\\'");
+
                             html += `
                             <tr>
                                 <td>${item.kode_sparepart}</td>
@@ -445,7 +522,7 @@
                                 <td>Rp ${numberWithCommas(item.harga_beli)}</td>
                                 <td>
                                     <button type="button" class="btn btn-sm btn-success"
-                                        onclick="selectSparepart('${item.id}', '${item.nama_sparepart}', ${item.harga_beli})">
+                                        onclick="selectSparepart('${item.id}', '${escapedName}', ${item.harga_beli})">
                                         <i class="fas fa-check mr-1"></i> Pilih
                                     </button>
                                 </td>
@@ -487,32 +564,68 @@
             const copyAllButton = document.getElementById('copy-all-for-wa');
             if (copyAllButton) {
                 copyAllButton.addEventListener('click', function() {
-                    // Membuat array untuk menyimpan semua data
-                    const items = [];
+                    try {
+                        // Membuat array untuk menyimpan semua data
+                        const items = [];
 
-                    // Mengumpulkan semua data dari tabel
-                    @foreach ($listItems as $index => $item)
-                        items.push({
-                            no: {{ $index + 1 }},
-                            nama: "{{ $item->nama_item }}",
-                            jumlah: {{ $item->jumlah }}
+                        // Mengumpulkan semua data dari tabel - ditingkatkan untuk bekerja dengan DataTables
+                        @foreach ($listItems as $index => $item)
+                            items.push({
+                                no: {{ $index + 1 }},
+                                nama: "{{ $item->nama_item }}",
+                                jumlah: {{ $item->jumlah }}
+                            });
+                        @endforeach
+
+                        // Format teks untuk WhatsApp dengan baris baru
+                        let copyText = "Daftar Pesanan:\n";
+                        items.forEach(item => {
+                            copyText += item.no + ". " + item.nama + " - " + item.jumlah + "\n";
                         });
-                    @endforeach
 
-                    // Format teks untuk WhatsApp dengan baris baru
-                    let copyText = "Daftar Pesanan:\n";
-                    items.forEach(item => {
-                        copyText += item.no + ". " + item.nama + " - " + item.jumlah + "\n";
-                    });
+                        // Menyalin ke clipboard
+                        navigator.clipboard.writeText(copyText).then(function() {
+                            // Pemberitahuan sukses
+                            alert('Berhasil menyalin daftar pesanan!');
+                        }).catch(function(err) {
+                            console.error('Gagal menyalin: ', err);
+                            alert('Gagal menyalin teks. Silakan coba lagi.');
 
-                    // Menyalin ke clipboard
-                    navigator.clipboard.writeText(copyText).then(function() {
-                        // Pemberitahuan sukses
-                        alert('Berhasil menyalin daftar pesanan!');
-                    }).catch(function() {
-                        alert('Gagal menyalin teks. Silakan coba lagi.');
-                    });
+                            // Fallback method jika clipboard API tidak didukung
+                            fallbackCopyTextToClipboard(copyText);
+                        });
+                    } catch (e) {
+                        console.error('Error copying: ', e);
+                        alert('Terjadi kesalahan saat menyalin: ' + e.message);
+                    }
                 });
+            }
+
+            // Fungsi fallback untuk browser yang tidak mendukung clipboard API
+            function fallbackCopyTextToClipboard(text) {
+                var textArea = document.createElement("textarea");
+                textArea.value = text;
+
+                // Make the textarea out of viewport
+                textArea.style.position = "fixed";
+                textArea.style.left = "-999999px";
+                textArea.style.top = "-999999px";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+
+                try {
+                    var successful = document.execCommand('copy');
+                    var msg = successful ? 'successful' : 'unsuccessful';
+                    console.log('Fallback: Copying text command was ' + msg);
+                    alert(successful ? 'Berhasil menyalin daftar pesanan!' :
+                        'Gagal menyalin teks. Silakan coba lagi.');
+                } catch (err) {
+                    console.error('Fallback: Oops, unable to copy', err);
+                    alert('Gagal menyalin teks. Silakan coba lagi.');
+                }
+
+                document.body.removeChild(textArea);
             }
         });
     </script>
