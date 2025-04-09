@@ -22,6 +22,7 @@ class AuthController extends Controller
             ]);
 
             // Cek versi aplikasi terlebih dahulu
+            // $clientVersion = '2025.04.06';
             $clientVersion = $request->input('version');
             $minVersion = '2025.04.06'; // versi minimum yang diizinkan
 
@@ -67,6 +68,7 @@ class AuthController extends Controller
         try {
             // Ambil versi dari request
             $clientVersion = $request->input('version');
+            // $clientVersion = $request->input('version');
             $minVersion = '2025.04.06'; // versi minimum yang diizinkan
 
             // Cek versi aplikasi terlebih dahulu, terlepas dari token
