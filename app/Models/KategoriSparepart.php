@@ -13,4 +13,9 @@ class KategoriSparepart extends Model
         'nama_kategori',
         'kode_owner',
     ];
+
+    public function spareparts()
+{
+    return $this->hasMany(Sparepart::class, 'kode_kategori', 'kode_kategori');
+}
 }

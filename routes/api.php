@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\UserDataController;
 use App\Http\Controllers\Api\WhatsAppMessageController;
 use FontLib\Table\Type\name;
 use App\Http\Controllers\Api\OrderApiController;
+use App\Http\Controllers\Api\StockOpnameController;
 
 /*
 |--------------------------------------------------------------------------
@@ -95,6 +96,34 @@ Route::prefix('orders')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/{id}/items', [OrderApiController::class, 'addOrderItem']);
     Route::post('/{id}/items/multiple', [OrderApiController::class, 'addMultipleItems']);
     Route::delete('/items/{itemId}', [OrderApiController::class, 'removeOrderItem']);
+});
+// API Routes untuk Stock Opname
+Route::prefix('stock-opname')->middleware(['auth:sanctum'])->group(function () {
+    // Periode Stock Opname
+    Route::get('/periods', [StockOpnameController::class, 'getPeriods']);
+    Route::get('/periods/{id}', [StockOpnameController::class, 'getPeriodDetail']);
+    Route::post('/periods', [StockOpnameController::class, 'createPeriod']);
+    Route::put('/periods/{id}/start', [StockOpnameController::class, 'startProcess']);
+    Route::put('/periods/{id}/complete', [StockOpnameController::class, 'completePeriod']);
+    Route::put('/periods/{id}/cancel', [StockOpnameController::class, 'cancelPeriod']);
+
+    // Item Stock Opname
+    Route::get('/periods/{id}/pending-items', [StockOpnameController::class, 'getPendingItems']);
+    Route::get('/periods/{id}/checked-items', [StockOpnameController::class, 'getCheckedItems']);
+    Route::post('/periods/{id}/scan', [StockOpnameController::class, 'scanSparepart']);
+    Route::post('/periods/{periodId}/items/{detailId}/check', [StockOpnameController::class, 'saveItemCheck']);
+
+    // Penyesuaian Stok
+    Route::get('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'getAdjustmentDetail']);
+    Route::post('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'saveAdjustment']);
+
+    // Laporan
+    Route::get('/periods/{id}/report', [StockOpnameController::class, 'getReport']);
+    Route::get('/periods/{id}/items-with-selisih', [StockOpnameController::class, 'getItemsWithSelisih']);
+
+    // Tambahkan endpoint untuk kategori dan supplier
+    Route::get('/categories', [StockOpnameController::class, 'getCategories']);
+    Route::get('/suppliers', [StockOpnameController::class, 'getSuppliers']);
 });
 
 Route::get('/cek-service', [ServiceApiController::class,'cekService']);

@@ -31,6 +31,7 @@ use App\Http\Controllers\WhatsAppController;
 use App\Http\Controllers\Admin\StockManagementController;
 use App\Http\Controllers\Admin\PembelianController;
 use App\Http\Controllers\Admin\OrderController;
+use App\Http\Controllers\Admin\StockOpnameController;
 
 
 /*
@@ -367,24 +368,50 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
     });
 
     // Routes untuk Pesanan
-Route::prefix('admin/order')->name('order.')->middleware(['auth'])->group(function () {
-    Route::get('/', [OrderController::class, 'index'])->name('index');
-    Route::post('/', [OrderController::class, 'create'])->name('create');
-    Route::get('/{id}/edit', [OrderController::class, 'edit'])->name('edit');
-    Route::get('/{id}', [OrderController::class, 'show'])->name('show');
-    Route::put('/{id}', [OrderController::class, 'update'])->name('update');
+    Route::prefix('admin/order')->name('order.')->middleware(['auth'])->group(function () {
+        Route::get('/', [OrderController::class, 'index'])->name('index');
+        Route::post('/', [OrderController::class, 'create'])->name('create');
+        Route::get('/{id}/edit', [OrderController::class, 'edit'])->name('edit');
+        Route::get('/{id}', [OrderController::class, 'show'])->name('show');
+        Route::put('/{id}', [OrderController::class, 'update'])->name('update');
 
-    // Item management
-    Route::post('/{id}/add-item', [OrderController::class, 'addItem'])->name('add-item');
-    Route::post('/{id}/add-low-stock-item', [OrderController::class, 'addLowStockItem'])->name('add-low-stock-item');
-    Route::put('/update-item/{itemId}', [OrderController::class, 'updateItem'])->name('update-item');
-    Route::get('/remove-item/{itemId}', [OrderController::class, 'removeItem'])->name('remove-item');
+        // Item management
+        Route::post('/{id}/add-item', [OrderController::class, 'addItem'])->name('add-item');
+        Route::post('/{id}/add-low-stock-item', [OrderController::class, 'addLowStockItem'])->name('add-low-stock-item');
+        Route::put('/update-item/{itemId}', [OrderController::class, 'updateItem'])->name('update-item');
+        Route::get('/remove-item/{itemId}', [OrderController::class, 'removeItem'])->name('remove-item');
 
-    // Order status management
-    Route::get('/{id}/finalize', [OrderController::class, 'finalize'])->name('finalize');
-    Route::get('/{id}/convert-to-purchase', [OrderController::class, 'convertToPurchase'])->name('convert-to-purchase');
-    Route::get('/{id}/cancel', [OrderController::class, 'cancel'])->name('cancel');
-});
+        // Order status management
+        Route::get('/{id}/finalize', [OrderController::class, 'finalize'])->name('finalize');
+        Route::get('/{id}/convert-to-purchase', [OrderController::class, 'convertToPurchase'])->name('convert-to-purchase');
+        Route::get('/{id}/cancel', [OrderController::class, 'cancel'])->name('cancel');
+    });
+    // Routes untuk Stock Opname
+    Route::prefix('admin/stock-opname')->name('stock-opname.')->middleware(['auth'])->group(function () {
+        Route::get('/', [StockOpnameController::class, 'index'])->name('index');
+        Route::get('/create', [StockOpnameController::class, 'create'])->name('create');
+        Route::post('/', [StockOpnameController::class, 'store'])->name('store');
+        Route::get('/{id}', [StockOpnameController::class, 'show'])->name('show');
+
+        // Proses stock opname
+        Route::get('/{id}/start-process', [StockOpnameController::class, 'startProcess'])->name('start-process');
+        Route::get('/{id}/check-items', [StockOpnameController::class, 'checkItems'])->name('check-items');
+        Route::post('/{periodId}/check-items/{detailId}', [StockOpnameController::class, 'saveItemCheck'])->name('save-item-check');
+        Route::post('/{id}/scan-item', [StockOpnameController::class, 'scanItem'])->name('scan-item');
+
+        // Penyesuaian stok
+        Route::get('/{periodId}/adjustment/{detailId}', [StockOpnameController::class, 'adjustmentForm'])->name('adjustment-form');
+        Route::post('/{periodId}/adjustment/{detailId}', [StockOpnameController::class, 'saveAdjustment'])->name('save-adjustment');
+
+        // Manajemen periode
+        Route::get('/{id}/complete', [StockOpnameController::class, 'completePeriod'])->name('complete-period');
+        Route::get('/{id}/cancel', [StockOpnameController::class, 'cancelPeriod'])->name('cancel-period');
+        Route::put('/{id}/edit-notes', [StockOpnameController::class, 'editNotes'])->name('edit-notes');
+
+        // Laporan
+        Route::get('/{id}/report', [StockOpnameController::class, 'report'])->name('report');
+        Route::get('/{id}/export-excel', [StockOpnameController::class, 'exportExcel'])->name('export-excel');
+    });
 
 });
 Route::middleware(['auth'])->group(function () {
@@ -420,3 +447,4 @@ Route::middleware(['auth'])->group(function () {
 });
 // Routes untuk pencarian sparepart via AJAX (jika belum ada)
 Route::get('admin/sparepart/search-ajax', [SparepartController::class, 'searchAjax'])->name('sparepart.search-ajax');
+

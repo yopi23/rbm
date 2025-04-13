@@ -14,4 +14,9 @@ class Supplier extends Model
        'no_telp_supplier',
        'kode_owner',
     ];
+
+    public function spareparts()
+{
+    return $this->hasMany(Sparepart::class, 'kode_spl', 'kode_spl');
+}
 }
