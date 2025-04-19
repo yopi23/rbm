@@ -81,6 +81,100 @@ class SalesApiController extends Controller
         ]);
     }
 
+    // public function createSale(Request $request)
+    // {
+    //     $totalPenjualan = 0;
+    //     $totalBayar = 0;
+
+    //     // Cek apakah transaksi hanya disimpan sebagai draft (status 2)
+    //     $statusPenjualan = ($request->simpan == 'simpan') ? '2' : '1';
+
+    //     // Buat data penjualan terlebih dahulu
+    //     $sale = Penjualan::create([
+    //         'kode_penjualan' => 'TRX' . date('Ymd') . auth()->user()->id . (Penjualan::count() + 1),
+    //         'tgl_penjualan' => date('Y-m-d'),
+    //         'kode_owner' => $this->getThisUser()->id_upline,
+    //         'nama_customer' => $request->nama_customer ?? '-',
+    //         'catatan_customer' => $request->catatan_customer ?? '',
+    //         'total_penjualan' => 0,
+    //         'total_bayar' => 0,
+    //         'user_input' => auth()->user()->id,
+    //         'status_penjualan' => $statusPenjualan, // Bisa 1 (langsung bayar) atau 2 (draft)
+    //         'created_at' => now(),
+    //         'updated_at' => now(),
+    //     ]);
+
+    //     foreach ($request->items as $item) {
+    //         $qtySparepart = $item['qty'];
+    //         $sparepartId = $item['sparepart_id'];
+
+    //         // Ambil data sparepart dari database
+    //         $sparepart = Sparepart::findOrFail($sparepartId);
+
+    //         $itemCustomerType = isset($item['customer_type']) &&
+    //                in_array($item['customer_type'], ['ecer', 'konter', 'glosir', 'jumbo'])
+    //                ? $item['customer_type']
+    //                : 'ecer';
+
+    //         // Sesuaikan harga jual berdasarkan tipe customer
+    //         $hargaJual = $this->adjustPriceBasedOnCustomerType($sparepart, $itemCustomerType);
+
+    //         // Periksa apakah stok mencukupi
+    //         if ($sparepart->stok_sparepart < $qtySparepart) {
+    //             return response()->json([
+    //                 'status' => 'error',
+    //                 'message' => 'Stok tidak mencukupi untuk sparepart ID: ' . $sparepartId,
+    //             ], 400);
+    //         }
+
+    //         // Kurangi stok sparepart hanya jika status bukan draft
+    //         if ($statusPenjualan == '1') {
+    //             $sparepart->update([
+    //                 'stok_sparepart' => $sparepart->stok_sparepart - $qtySparepart,
+    //             ]);
+    //         }
+
+    //         // Hitung total penjualan
+    //         $totalPenjualan += $hargaJual * $qtySparepart;
+    //         $totalBayar += $hargaJual * $qtySparepart;
+
+    //         // Catat detail penjualan
+    //         DetailSparepartPenjualan::create([
+    //             'kode_penjualan' => $sale->id,
+    //             'kode_sparepart' => $sparepartId,
+    //             'detail_harga_modal' => $sparepart->harga_beli,
+    //             'detail_harga_jual' => $hargaJual,
+    //             'qty_sparepart' => $qtySparepart,
+    //             'user_input' => auth()->user()->id,
+    //             'created_at' => now(),
+    //             'updated_at' => now(),
+    //         ]);
+    //     }
+
+    //     // Update total penjualan
+    //     $sale->update([
+    //         'total_penjualan' => $totalPenjualan,
+    //         'total_bayar' => ($statusPenjualan == '1') ? $totalBayar : 0, // Hanya update jika status bukan draft
+    //     ]);
+
+    //     // Jika status bukan draft (status 1), maka tambahkan ke laci
+    //     if ($statusPenjualan == '1') {
+    //         $this->recordLaciHistory(
+    //             $request->kategori_laci_id,
+    //             $totalBayar, // Uang masuk
+    //             null, // Tidak ada uang keluar
+    //             'Penjualan: ' . $sale->kode_penjualan . '- customer: ' . ($request->nama_customer ?? '-')
+    //         );
+    //     }
+
+    //     return response()->json([
+    //         'status' => 'success',
+    //         'message' => ($statusPenjualan == '2') ? 'Penjualan disimpan sebagai draft.' : 'Penjualan berhasil disimpan.',
+    //         'data' => $sale,
+    //     ]);
+    // }
+
+    // Perbaikan pada method createSale di SalesApiController.php
     public function createSale(Request $request)
     {
         $totalPenjualan = 0;
@@ -104,57 +198,70 @@ class SalesApiController extends Controller
             'updated_at' => now(),
         ]);
 
+        // Array untuk melacak error stok
+        $stockErrors = [];
+
         foreach ($request->items as $item) {
             $qtySparepart = $item['qty'];
             $sparepartId = $item['sparepart_id'];
 
-            // Ambil data sparepart dari database
-            $sparepart = Sparepart::findOrFail($sparepartId);
+            try {
+                // Ambil data sparepart dari database
+                $sparepart = Sparepart::findOrFail($sparepartId);
 
-            $itemCustomerType = isset($item['customer_type']) &&
-                   in_array($item['customer_type'], ['ecer', 'konter', 'glosir', 'jumbo'])
-                   ? $item['customer_type']
-                   : 'ecer';
+                // Sesuaikan harga jual berdasarkan tipe customer
+                $hargaJual = $this->adjustPriceBasedOnCustomerType($sparepart, $item['customer_type'] ?? 'ecer');
 
-            // Sesuaikan harga jual berdasarkan tipe customer
-            $hargaJual = $this->adjustPriceBasedOnCustomerType($sparepart, $itemCustomerType);
+                // PERBAIKAN: Periksa stok secara individu untuk masing-masing item
+                if ($sparepart->stok_sparepart < $qtySparepart) {
+                    $stockErrors[] = [
+                        'id' => $sparepartId,
+                        'name' => $sparepart->nama_sparepart,
+                        'requested' => $qtySparepart,
+                        'available' => $sparepart->stok_sparepart
+                    ];
+                    continue; // Lewati item ini tapi lanjutkan dengan yang lain
+                }
 
-            // Periksa apakah stok mencukupi
-            if ($sparepart->stok_sparepart < $qtySparepart) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Stok tidak mencukupi untuk sparepart ID: ' . $sparepartId,
-                ], 400);
-            }
+                 // Kurangi stok berdasarkan qty masing-masing item
+                // $sparepart->update([
+                //     'stok_sparepart' => $sparepart->stok_sparepart - $qtySparepart,
+                // ]);
 
-            // Kurangi stok sparepart hanya jika status bukan draft
-            if ($statusPenjualan == '1') {
-                $sparepart->update([
-                    'stok_sparepart' => $sparepart->stok_sparepart - $qtySparepart,
+                // \Log::info('Sparepart after update:', [
+                //     'id' => $sparepartId,
+                //     'name' => $sparepart->nama_sparepart,
+                //     'new_stock' => $sparepart->stok_sparepart,
+                //     'qty_stock' => $qtySparepart
+                // ]);
+
+                // Hitung total penjualan
+                $totalPenjualan += $hargaJual * $qtySparepart;
+                $totalBayar += $hargaJual * $qtySparepart;
+
+                // Catat detail penjualan
+                DetailSparepartPenjualan::create([
+                    'kode_penjualan' => $sale->id,
+                    'kode_sparepart' => $sparepartId,
+                    'detail_harga_modal' => $sparepart->harga_beli,
+                    'detail_harga_jual' => $hargaJual,
+                    'qty_sparepart' => $qtySparepart,
+                    'user_input' => auth()->user()->id,
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
+            } catch (\Exception $e) {
+                $stockErrors[] = [
+                    'id' => $sparepartId,
+                    'error' => $e->getMessage()
+                ];
             }
-
-            // Hitung total penjualan
-            $totalPenjualan += $hargaJual * $qtySparepart;
-            $totalBayar += $hargaJual * $qtySparepart;
-
-            // Catat detail penjualan
-            DetailSparepartPenjualan::create([
-                'kode_penjualan' => $sale->id,
-                'kode_sparepart' => $sparepartId,
-                'detail_harga_modal' => $sparepart->harga_beli,
-                'detail_harga_jual' => $hargaJual,
-                'qty_sparepart' => $qtySparepart,
-                'user_input' => auth()->user()->id,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
         }
 
         // Update total penjualan
         $sale->update([
             'total_penjualan' => $totalPenjualan,
-            'total_bayar' => ($statusPenjualan == '1') ? $totalBayar : 0, // Hanya update jika status bukan draft
+            'total_bayar' => ($statusPenjualan == '1') ? $totalBayar : 0, // Hanya update jika bukan draft
         ]);
 
         // Jika status bukan draft (status 1), maka tambahkan ke laci
@@ -168,10 +275,12 @@ class SalesApiController extends Controller
         }
 
         return response()->json([
-            'status' => 'success',
+            'status' => $stockErrors ? 'partial_success' : 'success',
             'message' => ($statusPenjualan == '2') ? 'Penjualan disimpan sebagai draft.' : 'Penjualan berhasil disimpan.',
             'data' => $sale,
+            'stock_errors' => $stockErrors
         ]);
+
     }
     public function updateSaleStatus(Request $request)
     {
@@ -351,5 +460,56 @@ class SalesApiController extends Controller
             'status' => 'success',
             'message' => 'Sale deleted successfully'
         ]);
+    }
+
+    // Tambahkan method baru ini di SalesApiController.php
+    public function cancelSale(Request $request, $id)
+    {
+        DB::beginTransaction();
+        try {
+            // Temukan penjualan
+            $sale = Penjualan::findOrFail($id);
+
+            // Hanya lanjutkan jika penjualan belum diproses/diselesaikan
+            if ($sale->status_penjualan == '1') {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Tidak dapat membatalkan penjualan yang sudah diproses'
+                ], 400);
+            }
+
+            // Dapatkan semua detail penjualan
+            $saleDetails = DetailSparepartPenjualan::where('kode_penjualan', $sale->id)->get();
+
+            // Kembalikan stok untuk setiap item
+            foreach ($saleDetails as $detail) {
+                $sparepart = Sparepart::find($detail->kode_sparepart);
+                if ($sparepart) {
+                    $sparepart->update([
+                        'stok_sparepart' => $sparepart->stok_sparepart + $detail->qty_sparepart
+                    ]);
+                }
+            }
+
+            // Hapus detail penjualan
+            DetailSparepartPenjualan::where('kode_penjualan', $sale->id)->delete();
+
+            // Hapus penjualan
+            $sale->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Penjualan berhasil dibatalkan dan stok dikembalikan'
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal membatalkan penjualan: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }
