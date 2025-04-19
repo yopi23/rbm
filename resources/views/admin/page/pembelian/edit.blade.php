@@ -278,7 +278,7 @@
                 <h3 class="card-title">Daftar Item</h3>
             </div>
             <div class="card-body">
-                <table class="table table-bordered">
+                <table class="table table-bordered" id="daftarItemTable">
                     <thead>
                         <tr>
                             <th style="width: 10px">#</th>
@@ -329,6 +329,31 @@
 </div>
 
 <script>
+    $(function() {
+        // Initialize DataTable
+        $('#daftarItemTable').DataTable({
+            "paging": true,
+            "lengthChange": true,
+            "searching": true,
+            "ordering": true,
+            "info": true,
+            "autoWidth": false,
+            "responsive": true,
+            "pageLength": 10,
+            "lengthMenu": [
+                [10, 25, 50, 100, -1],
+                [10, 25, 50, 100, "Semua"]
+            ],
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Indonesian.json"
+            },
+            // "columnDefs": [{
+            //         "orderable": false,
+            //         "targets": 9
+            //     } // Disable sorting on actions column
+            // ]
+        });
+    });
     // Fungsi untuk trigger update selisih dengan delay
     function triggerPriceDifferenceUpdate() {
         // Menggunakan setTimeout untuk memastikan nilai sudah terupdate
