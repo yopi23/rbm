@@ -59,6 +59,61 @@ class SalesApiController extends Controller
             ], 500);
         }
     }
+
+    public function cari(Request $request)
+    {
+        try {
+            // Validasi input
+            $request->validate(['search' => 'required|string|max:255']);
+
+
+
+            // Ekstrak keywords
+            $keywords = array_filter(explode(' ', strtolower(trim($request->input('search')))));
+
+            // Ambil owner_code dari request, dengan fallback ke user saat ini
+            $ownerCode = $request->input('owner_code');
+
+
+
+            // Buat query dasar
+            $query = DB::table('spareparts')
+                ->where('kode_owner', '=', $ownerCode);
+
+            // Gunakan subquery untuk each keyword
+            foreach ($keywords as $keyword) {
+                $query->where(function ($q) use ($keyword) {
+                    $q->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', '%' . $keyword . '%');
+                });
+            }
+
+            // Pilih kolom yang dibutuhkan
+            $data = $query->select([
+                'id',
+                'kode_sparepart',
+                'nama_sparepart',
+                'stok_sparepart',
+            ])->get();
+
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Data retrieved successfully',
+                'total_items' => $data->count(),
+                'data' => $data
+            ], 200);
+        } catch (\Exception $e) {
+            // Log error detail
+            // Log::error('Sparepart search error: ' . $e->getMessage());
+            // Log::error($e->getTraceAsString());
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to retrieve data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
     // Get sales history
     public function getSalesHistory()
     {

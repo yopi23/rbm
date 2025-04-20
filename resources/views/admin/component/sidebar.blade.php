@@ -263,6 +263,14 @@
                                  </p>
                              </a>
                          </li>
+                         <li class="nav-item">
+                             <a href="{{ route('customer.index') }}" class="nav-link @yield('customer.index')">
+                                 <i class="nav-icon fas fa-users"></i>
+                                 <p>
+                                     Customer
+                                 </p>
+                             </a>
+                         </li>
 
                          <li class="nav-header">TRANSAKSI</li>
                      @endif

@@ -32,6 +32,7 @@ use App\Http\Controllers\Admin\StockManagementController;
 use App\Http\Controllers\Admin\PembelianController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\StockOpnameController;
+use App\Http\Controllers\Admin\CustomerController;
 
 
 /*
@@ -342,6 +343,8 @@ Route::group(['middleware' => 'checkRole:0,1,2'], function () {
     });
 });
 Route::group(['middleware' => 'checkRole:0,1'], function () {
+
+    Route::resource('customer', CustomerController::class);
      // Routes untuk inventory management
      Route::prefix('admin/inventory')->name('admin.inventory.')->middleware(['auth'])->group(function () {
         // Dashboard dan laporan

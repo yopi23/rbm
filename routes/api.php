@@ -13,7 +13,7 @@ use App\Http\Controllers\Api\WhatsAppMessageController;
 use FontLib\Table\Type\name;
 use App\Http\Controllers\Api\OrderApiController;
 use App\Http\Controllers\Api\StockOpnameController;
-
+use App\Http\Controllers\Api\CustomerApiController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -77,6 +77,21 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/suppliers', [OrderApiController::class, 'getSuppliers']);
 
+    Route::prefix('customer')->group(function () {
+        Route::get('/', [CustomerApiController::class, 'index']);
+        Route::post('/', [CustomerApiController::class, 'store']);
+        Route::get('/{id}', [CustomerApiController::class, 'show']);
+        Route::put('/{id}', [CustomerApiController::class, 'update']);
+        Route::delete('/{id}', [CustomerApiController::class, 'destroy']);
+
+        // Additional API routes
+        Route::get('/status/{status}', [CustomerApiController::class, 'getByStatus']);
+        Route::post('/search', [CustomerApiController::class, 'search']);
+
+        // Get new kode toko for form
+        Route::get('/generate-kode', [CustomerApiController::class, 'getNewKodeToko']);
+    });
+
 });
 Route::prefix('orders')->middleware(['auth:sanctum'])->group(function () {
     // Mendapatkan data
@@ -125,6 +140,20 @@ Route::prefix('stock-opname')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/categories', [StockOpnameController::class, 'getCategories']);
     Route::get('/suppliers', [StockOpnameController::class, 'getSuppliers']);
 });
+Route::prefix('customer')->group(function () {
+    Route::get('/', [CustomerApiController::class, 'index']);
+    Route::post('/', [CustomerApiController::class, 'store']);
+    Route::get('/{id}', [CustomerApiController::class, 'show']);
+    Route::put('/{id}', [CustomerApiController::class, 'update']);
+    Route::delete('/{id}', [CustomerApiController::class, 'destroy']);
 
+    // Additional API routes
+    Route::get('/status/{status}', [CustomerApiController::class, 'getByStatus']);
+    Route::post('/search', [CustomerApiController::class, 'search']);
+
+    // Get new kode toko for form
+    Route::get('/generate-kode', [CustomerApiController::class, 'getNewKodeToko']);
+});
+Route::get('/spareparts/cari', [SalesApiController::class, 'cari']);
 Route::get('/cek-service', [ServiceApiController::class,'cekService']);
 Route::post('login', [AuthController::class, 'login']);

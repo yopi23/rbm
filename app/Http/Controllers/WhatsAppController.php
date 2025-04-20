@@ -32,9 +32,13 @@ class WhatsAppController extends Controller
 
         $apiKey = Str::random(32); // Generate unique API key
 
+        // Get the current user's ID to use as owner code
+        $ownerCode = $this->getThisUser()->id_upline;
+
         // Call the WhatsApp Gateway API to create a new session
         $response = Http::post("{$this->apiBaseUrl}/session/create", [
             'prefix' => 'wa',
+            'ownerCode' => $ownerCode,
         ]);
 
         if ($response->successful()) {
