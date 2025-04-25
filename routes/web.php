@@ -384,6 +384,18 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
         Route::put('/update-item/{itemId}', [OrderController::class, 'updateItem'])->name('update-item');
         Route::get('/remove-item/{itemId}', [OrderController::class, 'removeItem'])->name('remove-item');
 
+         // Bulk update status for multiple items in an order
+        Route::post('/bulk-update-status', [OrderController::class,'bulkUpdateItemStatus'])
+        ->name('bulk-update-status');
+
+        // Update status for a single item
+        Route::post('/update-item-status', [OrderController::class,'updateItemStatus'])
+            ->name('update-item-status');
+
+        // Transfer single or multiple items to a new order
+        Route::post('/transfer-items', [OrderController::class,'transferItemsToNewOrder'])
+            ->name('transfer-items');
+
         // Order status management
         Route::get('/{id}/finalize', [OrderController::class, 'finalize'])->name('finalize');
         Route::get('/{id}/convert-to-purchase', [OrderController::class, 'convertToPurchase'])->name('convert-to-purchase');

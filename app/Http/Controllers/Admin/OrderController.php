@@ -158,8 +158,10 @@ public function update(Request $request, $id)
         $page = 'Detail Pesanan';
 
         $order = Order::with(['listOrders', 'supplier'])->findOrFail($id);
+        // Ambil data supplier untuk dropdown di modal
+        $suppliers = Supplier::where('kode_owner', $this->getThisUser()->id_upline)->get();
 
-        $content = view('admin.page.order.show', compact('order'))->render();
+        $content = view('admin.page.order.show', compact('order','suppliers'))->render();
 
         return view('admin.layout.blank_page', compact('page', 'content'));
     }
@@ -490,5 +492,279 @@ public function update(Request $request, $id)
         }
 
         return $kode_order;
+    }
+
+    // Tambahkan method-method berikut ke OrderController
+
+    /**
+     * Memproses transfer item ke pesanan baru melalui modal
+     */
+    public function transferItemsToNewOrder(Request $request)
+    {
+        // Validasi input
+        $request->validate([
+            'selected_items' => 'required|array',
+            'selected_items.*' => 'exists:list_orders,id',
+            'kode_supplier' => 'required|exists:suppliers,id',
+            'catatan' => 'nullable|string',
+            'order_id' => 'required|exists:orders,id',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $sourceOrder = Order::findOrFail($request->order_id);
+
+            // Buat order baru untuk item yang ditransfer
+            $kode_order = $this->generateOrderCode();
+
+            $newOrder = Order::create([
+                'kode_order' => $kode_order,
+                'tanggal_order' => Carbon::now(),
+                'kode_supplier' => $request->kode_supplier,
+                'status_order' => 'draft', // Mulai sebagai draft
+                'catatan' => "Ditransfer dari pesanan #{$sourceOrder->kode_order}. " . $request->catatan,
+                'total_item' => 0,
+                'user_input' => $this->getThisUser()->id,
+                'kode_owner' => $this->getThisUser()->id_upline,
+            ]);
+
+            // Transfer item yang dipilih ke order baru
+            foreach ($request->selected_items as $itemId) {
+                $item = ListOrder::findOrFail($itemId);
+
+                // Buat salinan item di order baru
+                $newItem = $item->replicate();
+                $newItem->order_id = $newOrder->id;
+                $newItem->status_item = 'pending';
+                $newItem->catatan_item = ($item->catatan_item ? $item->catatan_item . '. ' : '') . 'Ditransfer dari pesanan sebelumnya.';
+                $newItem->save();
+
+                // Update status item asli
+                $item->update([
+                    'status_item' => 'ditransfer',
+                    'catatan_item' => ($item->catatan_item ? $item->catatan_item . '. ' : '') . "Ditransfer ke pesanan #{$newOrder->kode_order}"
+                ]);
+            }
+
+            // Update total item di pesanan baru
+            $newOrder->total_item = ListOrder::where('order_id', $newOrder->id)->count();
+            $newOrder->save();
+
+            DB::commit();
+
+            return redirect()->route('order.edit', $newOrder->id)
+                ->with('success', "Berhasil mentransfer " . count($request->selected_items) . " item ke pesanan baru #{$newOrder->kode_order}");
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Terjadi kesalahan: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Perbarui status item pesanan tunggal
+     */
+    public function updateItemStatus(Request $request)
+    {
+        // Validasi input
+        $request->validate([
+            'order_id' => 'required|exists:orders,id',
+            'item_id' => 'required|exists:list_orders,id',
+            'status_item' => 'required|in:pending,dikirim,diterima,tidak_tersedia,dibatalkan',
+            'catatan_item' => 'nullable|string',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+
+            // Ambil pesanan
+            $order = Order::findOrFail($request->order_id);
+
+            // Cek apakah pesanan masih bisa diubah
+            // if ($order->status_order == 'selesai' || $order->status_order == 'dibatalkan') {
+
+                \Log::warning('Attempted to update item in completed or canceled order', [
+                    'order_status' => $order->status_order,
+                    'order_id' => $order->id
+                ]);
+
+            //     return back()->withErrors(['error' => 'Pesanan sudah selesai atau dibatalkan dan tidak dapat diubah.']);
+            // }
+
+            // Ambil item pesanan
+            $item = ListOrder::findOrFail($request->item_id);
+            // Buat nilai catatan baru
+        $newCatatan = $request->has('catatan_item') && $request->catatan_item
+        ? (($item->catatan_item ? $item->catatan_item . '. ' : '') . $request->catatan_item)
+        : $item->catatan_item;
+       // Log detail sebelum update
+       \Log::info('Item details before update:', [
+        'current_status' => $item->status_item,
+        'current_catatan' => $item->catatan_item,
+        'new_status' => $request->status_item,
+        'new_catatan' => $newCatatan
+    ]);
+
+            // Update status item
+            $item->update([
+                'status_item' => $request->status_item,
+                'catatan_item' => $request->has('catatan_item') && $request->catatan_item
+                    ? (($item->catatan_item ? $item->catatan_item . '. ' : '') . $request->catatan_item)
+                    : $item->catatan_item
+            ]);
+
+
+
+            DB::commit();
+
+            return redirect()->route('order.show', $request->order_id)
+                ->with('success', "Status item '{$item->nama_item}' berhasil diperbarui.");
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Terjadi kesalahan: ' . $e->getMessage()]);
+        }
+    }
+    /**
+     * Mengubah status item secara massal
+     */
+    public function bulkUpdateItemStatus(Request $request)
+    {
+        // Validasi input
+        $request->validate([
+            'selected_items' => 'required|array',
+            'selected_items.*' => 'exists:list_orders,id',
+            'status_item' => 'required|in:pending,dikirim,diterima,tidak_tersedia,dibatalkan',
+            'catatan_item' => 'nullable|string',
+            'order_id' => 'required|exists:orders,id',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $order = Order::findOrFail($request->order_id);
+
+            // Update status semua item yang dipilih
+            foreach ($request->selected_items as $itemId) {
+                $item = ListOrder::findOrFail($itemId);
+                $item->update([
+                    'status_item' => $request->status_item,
+                    'catatan_item' => $request->has('catatan_item') && $request->catatan_item
+                        ? (($item->catatan_item ? $item->catatan_item . '. ' : '') . $request->catatan_item)
+                        : $item->catatan_item
+                ]);
+            }
+
+            DB::commit();
+
+            return redirect()->route('order.show', $request->order_id)
+                ->with('success', 'Status ' . count($request->selected_items) . ' item berhasil diperbarui');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Terjadi kesalahan: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Menangani item tidak tersedia pada pembelian melalui modal
+     */
+    public function handleUnavailableItemsModal(Request $request)
+    {
+        // Validasi input
+        $request->validate([
+            'selected_items' => 'required|array',
+            'selected_items.*' => 'exists:detail_pembelians,id',
+            'action_type' => 'required|in:remove,delay,keep',
+            'pembelian_id' => 'required|exists:pembelians,id',
+            'kode_supplier' => 'nullable|required_if:action_type,delay|exists:suppliers,id',
+            'catatan' => 'nullable|string',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            // Ambil data pembelian
+            $pembelian = DB::table('pembelians')->where('id', $request->pembelian_id)->first();
+
+            if (!$pembelian || $pembelian->status !== 'draft') {
+                return redirect()->route('pembelian.index')
+                    ->with('error', 'Pembelian tidak ditemukan atau sudah diproses.');
+            }
+
+            $action = $request->action_type;
+
+            if ($action === 'remove') {
+                // Hapus item dari pembelian
+                foreach ($request->selected_items as $itemId) {
+                    DB::table('detail_pembelians')->where('id', $itemId)->delete();
+                }
+                $message = 'Item berhasil dihapus dari pembelian.';
+            }
+            else if ($action === 'delay') {
+                // Buat pesanan baru dari item yang dipilih
+                $kode_order = $this->generateOrderCode();
+
+                $newOrder = Order::create([
+                    'kode_order' => $kode_order,
+                    'tanggal_order' => Carbon::now(),
+                    'kode_supplier' => $request->kode_supplier,
+                    'status_order' => 'draft',
+                    'catatan' => "Dibuat dari item tidak tersedia pada pembelian #{$pembelian->kode_pembelian}. " . $request->catatan,
+                    'total_item' => 0,
+                    'user_input' => $this->getThisUser()->id,
+                    'kode_owner' => $this->getThisUser()->id_upline,
+                ]);
+
+                foreach ($request->selected_items as $itemId) {
+                    $item = DB::table('detail_pembelians')->where('id', $itemId)->first();
+
+                    if ($item) {
+                        // Tambahkan ke list order baru
+                        ListOrder::create([
+                            'order_id' => $newOrder->id,
+                            'sparepart_id' => $item->sparepart_id,
+                            'nama_item' => $item->nama_item,
+                            'jumlah' => $item->jumlah,
+                            'status_item' => 'pending',
+                            'harga_perkiraan' => $item->harga_beli,
+                            'catatan_item' => "Item tidak tersedia dari pembelian #{$pembelian->kode_pembelian}",
+                            'kode_owner' => $this->getThisUser()->id_upline,
+                            'user_input' => auth()->user()->id,
+                        ]);
+
+                        // Hapus dari pembelian saat ini
+                        DB::table('detail_pembelians')->where('id', $itemId)->delete();
+                    }
+                }
+
+                // Update total item di pesanan baru
+                $newOrder->total_item = ListOrder::where('order_id', $newOrder->id)->count();
+                $newOrder->save();
+
+                $message = "Berhasil membuat pesanan baru #{$newOrder->kode_order} dari item yang tidak tersedia.";
+            }
+            // Jika keep, tidak perlu melakukan apa-apa
+            else {
+                $message = "Tidak ada perubahan pada item.";
+            }
+
+            // Hitung ulang total pembelian
+            $totalHarga = DB::table('detail_pembelians')
+                ->where('pembelian_id', $request->pembelian_id)
+                ->sum(DB::raw('jumlah * harga_beli'));
+
+            // Update total harga
+            DB::table('pembelians')
+                ->where('id', $request->pembelian_id)
+                ->update(['total_harga' => $totalHarga]);
+
+            DB::commit();
+
+            return redirect()->route('pembelian.edit', $request->pembelian_id)
+                ->with('success', $message);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Terjadi kesalahan: ' . $e->getMessage()]);
+        }
     }
 }

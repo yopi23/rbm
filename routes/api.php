@@ -131,6 +131,7 @@ Route::prefix('stock-opname')->middleware(['auth:sanctum'])->group(function () {
     // Penyesuaian Stok
     Route::get('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'getAdjustmentDetail']);
     Route::post('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'saveAdjustment']);
+    Route::post('/periods/{periodId}/add-new-item', [StockOpnameController::class, 'addNewItem']);
 
     // Laporan
     Route::get('/periods/{id}/report', [StockOpnameController::class, 'getReport']);

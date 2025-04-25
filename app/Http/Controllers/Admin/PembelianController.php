@@ -383,10 +383,14 @@ public function finalize($id)
 
         // Proses semua item pembelian untuk update atau insert sparepart
         foreach ($pembelian->detailPembelians as $detail) {
+            do {
+                $kode_sparepart = 'SP-' . date('Ymd') . '-' . rand(1000, 9999);
+            } while (Sparepart::where('kode_sparepart', $kode_sparepart)->exists());
+
             if ($detail->is_new_item) {
                 // Buat sparepart baru
                 $sparepartData = [
-                    'kode_sparepart' => 'SP-' . date('Ymd') . rand(1000, 9999),
+                    'kode_sparepart' => $kode_sparepart,
                     'kode_kategori' => $kategoriId,
                     'kode_spl' => $supplierId,
                     'nama_sparepart' => $detail->nama_item,

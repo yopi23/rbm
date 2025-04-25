@@ -175,6 +175,20 @@
                                          <p>Produk Terlaris</p>
                                      </a>
                                  </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('order.index') }}"
+                                         class="nav-link {{ request()->route()->getName() == 'admin.inventory.bestsellers' ? 'active' : '' }}">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>List Order</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('stock-opname.index') }}"
+                                         class="nav-link {{ request()->route()->getName() == 'admin.inventory.bestsellers' ? 'active' : '' }}">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Stock Opname</p>
+                                     </a>
+                                 </li>
                              </ul>
                          </li>
                      @endif
