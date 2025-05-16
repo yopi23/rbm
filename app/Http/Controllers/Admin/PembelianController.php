@@ -10,6 +10,7 @@ use App\Models\DetailPembelian;
 use App\Models\Sparepart;
 use App\Models\Supplier;
 use App\Models\KategoriSparepart;
+use App\Models\SubKategoriSparepart;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Models\StockHistory;
@@ -222,6 +223,8 @@ class PembelianController extends Controller
             'harga_pasang' => 'nullable|numeric|min:0',
             'is_new_item' => 'required|boolean',
             'sparepart_id' => 'nullable|exists:spareparts,id',
+            'item_kategori' => 'nullable|exists:kategori_spareparts,id', // Tambahkan validasi kategori per item
+            'item_sub_kategori' => 'nullable|exists:sub_kategori_spareparts,id',
         ]);
 
         DB::beginTransaction();
@@ -246,6 +249,8 @@ class PembelianController extends Controller
                 'harga_pasang' => $request->harga_pasang,
                 'total' => $request->jumlah * $request->harga_beli,
                 'is_new_item' => $request->is_new_item,
+                'item_kategori' => $request->item_kategori, // Simpan kategori per item
+                'item_sub_kategori' => $request->item_sub_kategori, // Simpan sub kategori per item
             ]);
 
             // Tambahkan harga lain jika ada
@@ -284,6 +289,8 @@ class PembelianController extends Controller
         'harga_jual' => 'nullable|numeric|min:0',
         'harga_ecer' => 'nullable|numeric|min:0',
         'harga_pasang' => 'nullable|numeric|min:0',
+        'item_kategori' => 'nullable|exists:kategori_spareparts,id', // Validasi kategori
+        'item_sub_kategori' => 'nullable|exists:sub_kategori_spareparts,id', // Validasi sub kategori
     ]);
 
     // Get the pembelian id from the detail
@@ -299,6 +306,8 @@ class PembelianController extends Controller
     $detail->harga_jual = $request->harga_jual;
     $detail->harga_ecer = $request->harga_ecer;
     $detail->harga_pasang = $request->harga_pasang;
+    $detail->item_kategori = $request->item_kategori;
+    $detail->item_sub_kategori = $request->item_sub_kategori;
 
     // Calculate new total
     $detail->total = $request->jumlah * $request->harga_beli;
@@ -368,10 +377,16 @@ public function finalize($id)
 
         $supplierId = request('supplier');
         $kategoriId = request('kategori');
+        $subKategoriId = request('sub_kategori');
 
         // Get the actual objects for their codes
         $supplier = Supplier::find($supplierId);
         $kategori = KategoriSparepart::find($kategoriId);
+        // Check if sub_kategori is provided and valid
+        $subKategori = null;
+        if ($subKategoriId) {
+            $subKategori = SubKategoriSparepart::find($subKategoriId);
+        }
 
         if (!$supplier || !$kategori) {
             return back()->withErrors(['error' => 'Supplier atau Kategori tidak valid. Mohon pilih supplier dan kategori terlebih dahulu.']);
@@ -383,6 +398,16 @@ public function finalize($id)
 
         // Proses semua item pembelian untuk update atau insert sparepart
         foreach ($pembelian->detailPembelians as $detail) {
+            // Gunakan kategori dan sub kategori dari item detail
+                $kategoriId = $detail->item_kategori;
+                $subKategoriId = $detail->item_sub_kategori;
+
+                // Validasi kategori
+                if (!$kategoriId) {
+                    DB::rollBack();
+                    return back()->withErrors(['error' => 'Kategori tidak valid untuk item: ' . $detail->nama_item]);
+                }
+
             do {
                 $kode_sparepart = 'SP-' . date('Ymd') . '-' . rand(1000, 9999);
             } while (Sparepart::where('kode_sparepart', $kode_sparepart)->exists());
@@ -392,6 +417,8 @@ public function finalize($id)
                 $sparepartData = [
                     'kode_sparepart' => $kode_sparepart,
                     'kode_kategori' => $kategoriId,
+                    'kode_sub_kategori' => $subKategoriId, // Gunakan sub kategori per item
+                    'kode_sub_kategori' => $subKategoriId,
                     'kode_spl' => $supplierId,
                     'nama_sparepart' => $detail->nama_item,
                     'stok_sparepart' => $detail->jumlah,
@@ -443,6 +470,13 @@ public function finalize($id)
                         if ($detail->nama_item != $sparepart->nama_sparepart ) {
                             $sparepart->nama_sparepart = $detail->nama_item;
                         }
+                         // Update kategori and sub-kategori if provided
+                         if ($kategoriId) {
+                            $sparepart->kode_kategori = $kategoriId;
+                        }
+                        if ($subKategoriId) {
+                            $sparepart->kode_sub_kategori = $subKategoriId;
+                        }
 
                         $sparepart->save();
 
@@ -474,6 +508,46 @@ public function finalize($id)
     } catch (\Exception $e) {
         DB::rollBack();
         return back()->withErrors(['error' => 'Terjadi kesalahan: ' . $e->getMessage()]);
+    }
+}
+
+public function getSubKategori($kategoriId)
+{
+    try {
+        // Validasi kategori ID
+        if (empty($kategoriId) || !is_numeric($kategoriId)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid category ID'
+            ], 400);
+        }
+
+        // Log untuk debugging
+        \Log::info('Fetching sub-categories for kategori ID: ' . $kategoriId);
+
+        // Ambil sub kategori dengan eager loading kategori
+        $subKategoris = SubKategoriSparepart::with('kategori')
+                            ->where('kategori_id', $kategoriId)
+                            ->where('kode_owner', $this->getThisUser()->id_upline)
+                            ->get();
+
+        // Log untuk debugging
+        \Log::info('Found ' . $subKategoris->count() . ' sub-categories');
+
+        return response()->json([
+            'success' => true,
+            'data' => $subKategoris,
+            'message' => 'Sub categories retrieved successfully'
+        ]);
+    } catch (\Exception $e) {
+        // Log error untuk debugging
+        \Log::error('Error in getSubKategori: ' . $e->getMessage());
+        \Log::error($e->getTraceAsString());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Error: ' . $e->getMessage()
+        ], 500);
     }
 }
 

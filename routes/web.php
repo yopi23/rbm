@@ -33,6 +33,9 @@ use App\Http\Controllers\Admin\PembelianController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\StockOpnameController;
 use App\Http\Controllers\Admin\CustomerController;
+use App\Http\Controllers\Admin\EmployeeManagementController;
+use App\Http\Controllers\Admin\HpController;
+
 
 
 /*
@@ -342,6 +345,7 @@ Route::group(['middleware' => 'checkRole:0,1,2'], function () {
         Route::get('/devices/{id}/refresh-status', [WhatsAppController::class, 'refreshDeviceStatus'])->name('whatsapp.devices.refresh-status');
     });
 });
+
 Route::group(['middleware' => 'checkRole:0,1'], function () {
 
     Route::resource('customer', CustomerController::class);
@@ -428,6 +432,72 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
         Route::get('/{id}/export-excel', [StockOpnameController::class, 'exportExcel'])->name('export-excel');
     });
 
+ // atur karyawan
+    // Attendance Routes
+    Route::prefix('admin/attendance')->group(function () {
+        Route::get('/', [EmployeeManagementController::class, 'attendanceIndex'])->name('admin.attendance.index');
+        Route::post('/check-in', [EmployeeManagementController::class, 'attendanceCheckIn'])->name('admin.attendance.check-in');
+        Route::post('/check-out', [EmployeeManagementController::class, 'attendanceCheckOut'])->name('admin.attendance.check-out');
+        Route::post('/set-outside', [EmployeeManagementController::class, 'setOutsideOffice'])->name('admin.attendance.set-outside');
+        Route::get('/reset-outside/{userId}', [EmployeeManagementController::class, 'resetOutsideOffice'])->name('admin.attendance.reset-outside');
+     // QR Code Attendance routes
+     Route::get('/generate-qrcode/{type?}', [EmployeeManagementController::class, 'generateQrCode'])->name('admin.attendance.generate-qrcode');
+     Route::get('/scan/{token}', [EmployeeManagementController::class, 'scanQrCode'])->name('admin.attendance.scan');
+     Route::post('/request-leave', [EmployeeManagementController::class, 'requestLeave'])->name('admin.attendance.request-leave');
+
+    });
+
+    // Salary Settings Routes
+    Route::prefix('salary')->group(function () {
+        Route::get('/', [EmployeeManagementController::class, 'salarySettingsIndex'])->name('admin.salary.index');
+        Route::post('/store', [EmployeeManagementController::class, 'salarySettingsStore'])->name('admin.salary.store');
+    });
+
+    // Violations Routes
+    Route::prefix('violations')->group(function () {
+        Route::get('/', [EmployeeManagementController::class, 'violationsIndex'])->name('admin.violations.index');
+        Route::post('/store', [EmployeeManagementController::class, 'violationsStore'])->name('admin.violations.store');
+        Route::post('/update-status', [EmployeeManagementController::class, 'violationsUpdateStatus'])->name('admin.violations.update-status');
+    });
+
+    // Employee Report Routes
+    Route::prefix('employee')->group(function () {
+        Route::get('/monthly-report', [EmployeeManagementController::class, 'monthlyReportIndex'])->name('admin.employee.monthly-report');
+        Route::post('/generate-report', [EmployeeManagementController::class, 'generateMonthlyReport'])->name('admin.employee.generate-report');
+        Route::post('/finalize-report', [EmployeeManagementController::class, 'finalizeReport'])->name('admin.employee.finalize-report');
+        Route::post('/mark-paid', [EmployeeManagementController::class, 'markAsPaid'])->name('admin.employee.mark-paid');
+        Route::get('/report-detail/{id}', [EmployeeManagementController::class, 'reportDetail'])->name('admin.employee.report-detail');
+        Route::get('/report-print/{id}', [EmployeeManagementController::class, 'reportPrint'])->name('admin.employee.report-print');
+    });
+
+    // Work Schedule Routes
+    Route::prefix('schedule')->group(function () {
+        Route::get('/', [EmployeeManagementController::class, 'scheduleIndex'])->name('admin.schedule.index');
+        Route::post('/store', [EmployeeManagementController::class, 'scheduleStore'])->name('admin.schedule.store');
+        Route::get('/get-user-schedule/{userId}', [EmployeeManagementController::class, 'getUserSchedule'])->name('admin.schedule.get-user');
+    });
+
+   //ujung atur karyawan
+
+    Route::prefix('admin')->group(function () {
+        // HP Data Routes
+        Route::get('hp', [HpController::class,'index'])->name('admin.tg.index');
+        Route::get('hp/create', [HpController::class,'create'])->name('admin.tg.create');
+        Route::post('hp', [HpController::class,'store'])->name('admin.tg.store');
+        Route::get('hp/{id}/edit', [HpController::class,'edit'])->name('admin.tg.edit');
+        Route::put('hp/{id}', [HpController::class,'update'])->name('admin.tg.update');
+        Route::delete('hp/{id}', [HpController::class,'destroy'])->name('admin.tg.destroy');
+        // Tambahkan route baru untuk CrossTableController di sini
+        Route::get('hp/cross-table', [HpController::class, 'cross'])->name('admin.tg.cross-table');
+
+        // Reference Data Routes (Brand, Screen Size, Camera Position)
+        Route::resource('brands', 'admin\BrandController');
+        Route::resource('screen-sizes', 'admin\ScreenSizeController');
+        Route::resource('camera-positions', 'admin\CameraPositionController');
+
+
+    });
+
 });
 Route::middleware(['auth'])->group(function () {
     // Dashboard Keuangan
@@ -459,7 +529,43 @@ Route::middleware(['auth'])->group(function () {
 
     // Integrasi dengan Service
     Route::get('/financial/service/{serviceId}', [App\Http\Controllers\Admin\FinancialController::class, 'createFromService'])->name('financial.create.from.service');
+
+
 });
+
+// Subcategory Routes
+Route::group(['middleware' => ['auth']], function () {
+    // View all subcategories
+    Route::get('/admin/sub-kategori-sparepart', [App\Http\Controllers\Admin\SparePartController::class, 'view_sub_kategori'])->name('sub_kategori_sparepart');
+
+    // View subcategories for a specific category
+    Route::get('/admin/sub-kategori-sparepart/kategori/{kategori_id}', [App\Http\Controllers\Admin\SparePartController::class, 'view_sub_kategori'])->name('sub_kategori_sparepart_by_kategori');
+
+    // Create subcategory form
+    Route::get('/admin/sub-kategori-sparepart/create', [App\Http\Controllers\Admin\SparePartController::class, 'create_sub_kategori'])->name('create_sub_kategori_sparepart');
+
+    // Create subcategory form with preselected category
+    Route::get('/admin/sub-kategori-sparepart/create/{kategori_id}', [App\Http\Controllers\Admin\SparePartController::class, 'create_sub_kategori'])->name('create_sub_kategori_sparepart_by_kategori');
+
+    // Store subcategory
+    Route::post('/admin/sub-kategori-sparepart', [App\Http\Controllers\Admin\SparePartController::class, 'store_sub_kategori_sparepart'])->name('StoreSubKategoriSparepart');
+
+    // Edit subcategory form
+    Route::get('/admin/sub-kategori-sparepart/{id}/edit', [App\Http\Controllers\Admin\SparePartController::class, 'edit_sub_kategori_sparepart'])->name('EditSubKategoriSparepart');
+
+    // Update subcategory
+    Route::put('/admin/sub-kategori-sparepart/{id}', [App\Http\Controllers\Admin\SparePartController::class, 'update_sub_kategori_sparepart'])->name('UpdateSubKategoriSparepart');
+
+    // Delete subcategory
+    Route::delete('/admin/sub-kategori-sparepart/{id}', [App\Http\Controllers\Admin\SparePartController::class, 'delete_sub_kategori_sparepart'])->name('DeleteSubKategoriSparepart');
+
+    // AJAX route to get subcategories by category id
+    Route::get('/admin/get-sub-kategori/{kategori_id}', [App\Http\Controllers\Admin\SparePartController::class, 'get_sub_kategori_by_kategori'])->name('GetSubKategoriByKategori');
+    Route::get('/admin/pembelian/get-sub-kategori/{kategoriId}', [PembelianController::class, 'getSubKategori']);
+});
+
+
+
 // Routes untuk pencarian sparepart via AJAX (jika belum ada)
 Route::get('admin/sparepart/search-ajax', [SparepartController::class, 'searchAjax'])->name('sparepart.search-ajax');
 

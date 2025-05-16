@@ -36,7 +36,8 @@
 
                     <dt class="col-sm-4">Kategori:</dt>
                     <dd class="col-sm-8">
-                        <select name="kategori" id="kategori" class="form-control" required>
+                        <select name="kategori" id="kategori" class="form-control" required
+                            onchange="loadSubKategori()">
                             <option value="" disabled selected style="color: #a9a9a9;">---
                                 Pilih ---</option>
                             @foreach ($kategori as $item)
@@ -46,6 +47,16 @@
                         </select>
                         <div class="invalid-feedback">
                             Pilih kategori.
+                        </div>
+                    </dd>
+
+                    <dt class="col-sm-4">Sub Kategori:</dt>
+                    <dd class="col-sm-8">
+                        <select name="sub_kategori" id="sub_kategori" class="form-control">
+                            <option value="">--- Pilih Kategori Dulu ---</option>
+                        </select>
+                        <div class="invalid-feedback">
+                            Pilih sub kategori.
                         </div>
                     </dd>
 
@@ -137,6 +148,7 @@
                     </div>
                 @endif
 
+                {{-- Form item dengan sub kategori per item --}}
                 <form action="{{ route('pembelian.add-item', $pembelian->id) }}" method="POST" id="formAddItem">
                     @csrf
                     <!-- Tambahkan input hidden untuk mode edit -->
@@ -161,6 +173,30 @@
                     <div class="form-group">
                         <label for="nama_item">Nama Item</label>
                         <input type="text" class="form-control" id="nama_item" name="nama_item" required>
+                    </div>
+
+                    <!-- Tambahkan field untuk kategori dan sub kategori pada form item -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="item_kategori">Kategori</label>
+                                <select name="item_kategori" id="item_kategori" class="form-control"
+                                    onchange="loadItemSubKategori()">
+                                    <option value="">--- Pilih Kategori ---</option>
+                                    @foreach ($kategori as $item)
+                                        <option value="{{ $item->id }}">{{ $item->nama_kategori }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="item_sub_kategori">Sub Kategori</label>
+                                <select name="item_sub_kategori" id="item_sub_kategori" class="form-control">
+                                    <option value="">--- Pilih Kategori Dulu ---</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="row">
@@ -273,6 +309,7 @@
             </div>
         </div>
 
+        {{-- Perbaikan tabel Daftar Item dengan kolom Sub Kategori --}}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Daftar Item</h3>
@@ -283,6 +320,8 @@
                         <tr>
                             <th style="width: 10px">#</th>
                             <th>Nama Item</th>
+                            <th>Kategori</th>
+                            <th>Sub Kategori</th>
                             <th>Jumlah</th>
                             <th>Harga Beli</th>
                             <th>Total</th>
@@ -294,13 +333,39 @@
                             <tr>
                                 <td>{{ $index + 1 }}</td>
                                 <td>{{ $detail->nama_item }}</td>
+                                <td>
+                                    @if ($detail->sparepart && $detail->sparepart->kode_kategori)
+                                        {{ \App\Models\KategoriSparepart::find($detail->sparepart->kode_kategori)->nama_kategori ?? '-' }}
+                                    @elseif($detail->item_kategori)
+                                        {{ \App\Models\KategoriSparepart::find($detail->item_kategori)->nama_kategori ?? '-' }}
+                                    @else
+                                        -
+                                    @endif
+                                </td>
+                                <td>
+                                    @if ($detail->sparepart && $detail->sparepart->kode_sub_kategori)
+                                        {{ \App\Models\SubKategoriSparepart::find($detail->sparepart->kode_sub_kategori)->nama_sub_kategori ?? '-' }}
+                                    @elseif($detail->item_sub_kategori)
+                                        {{ \App\Models\SubKategoriSparepart::find($detail->item_sub_kategori)->nama_sub_kategori ?? '-' }}
+                                    @else
+                                        -
+                                    @endif
+                                </td>
                                 <td>{{ $detail->jumlah }}</td>
                                 <td>Rp {{ number_format($detail->harga_beli, 0, ',', '.') }}</td>
                                 <td>Rp {{ number_format($detail->total, 0, ',', '.') }}</td>
                                 <td>
                                     <!-- Edit Button -->
                                     <button type="button" class="btn btn-primary btn-sm mr-1 my-2"
-                                        onclick="editItem({{ $detail->id }}, '{{ $detail->nama_item }}', {{ $detail->jumlah }}, {{ $detail->harga_beli }}, {{ $detail->harga_jual ?? 0 }}, {{ $detail->harga_ecer ?? 0 }}, {{ $detail->harga_pasang ?? 0 }})">
+                                        onclick="editItem({{ $detail->id }},
+                                '{{ $detail->nama_item }}',
+                                {{ $detail->jumlah }},
+                                {{ $detail->harga_beli }},
+                                {{ $detail->harga_jual ?? 0 }},
+                                {{ $detail->harga_ecer ?? 0 }},
+                                {{ $detail->harga_pasang ?? 0 }},
+                                {{ $detail->item_kategori ?? 'null' }},
+                                {{ $detail->item_sub_kategori ?? 'null' }})">
                                         <i class="fas fa-edit"></i>
                                     </button>
 
@@ -318,7 +383,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" class="text-center">Belum ada item</td>
+                                <td colspan="8" class="text-center">Belum ada item</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -354,6 +419,272 @@
             // ]
         });
     });
+
+    // Function to load sub-categories based on selected category
+    // Perbaikan fungsi loadSubKategori() pada edit.blade.php
+
+    function loadSubKategori() {
+        const kategoriId = document.getElementById('kategori').value;
+        const subKategoriSelect = document.getElementById('sub_kategori');
+
+        // Clear current options and show loading indicator
+        subKategoriSelect.innerHTML = '<option value="">--- Loading... ---</option>';
+
+        if (!kategoriId) {
+            subKategoriSelect.innerHTML = '<option value="">--- Pilih Kategori Dulu ---</option>';
+            return;
+        }
+
+        // Pastikan URL yang benar dengan menggunakan URL lengkap
+        const url = "{{ url('/admin/pembelian/get-sub-kategori') }}/" + kategoriId;
+
+        // Log untuk debugging
+        console.log("Fetching from: " + url);
+
+        // Buat headers dengan CSRF token
+        const headers = {
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        };
+
+        // Lakukan request AJAX dengan headers
+        fetch(url, {
+                method: 'GET',
+                headers: headers,
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                // Log status response untuk debugging
+                console.log("Response status:", response.status);
+
+                if (!response.ok) {
+                    throw new Error('Network response was not ok, status: ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Log data response untuk debugging
+                console.log("Data received:", data);
+
+                // Populate sub kategori dropdown
+                subKategoriSelect.innerHTML = '<option value="">--- Pilih Sub Kategori ---</option>';
+
+                if (data.success && data.data) {
+                    data.data.forEach(subKategori => {
+                        const option = document.createElement('option');
+                        option.value = subKategori.id;
+                        option.textContent = subKategori.nama_sub_kategori;
+                        subKategoriSelect.appendChild(option);
+                    });
+
+                    if (data.data.length === 0) {
+                        subKategoriSelect.innerHTML = '<option value="">--- Tidak Ada Sub Kategori ---</option>';
+                    }
+                } else {
+                    subKategoriSelect.innerHTML = '<option value="">--- Error Format Data ---</option>';
+                    console.error("Format data tidak sesuai:", data);
+                }
+            })
+            .catch(error => {
+                // Log error untuk debugging
+                console.error("Error fetching sub kategori:", error);
+                subKategoriSelect.innerHTML = '<option value="">--- Error Loading Sub Kategori ---</option>';
+
+                // Tampilkan sweet alert untuk error
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Gagal memuat sub kategori: ' + error.message,
+                    confirmButtonText: 'OK'
+                });
+            });
+    }
+
+    // Function to load sub-categories for item form
+    function loadItemSubKategori() {
+        const kategoriId = document.getElementById('item_kategori').value;
+        const subKategoriSelect = document.getElementById('item_sub_kategori');
+
+        // Clear current options and show loading indicator
+        subKategoriSelect.innerHTML = '<option value="">--- Loading... ---</option>';
+
+        if (!kategoriId) {
+            subKategoriSelect.innerHTML = '<option value="">--- Pilih Kategori Dulu ---</option>';
+            return;
+        }
+
+        // Gunakan URL lengkap dengan helper Laravel
+        const url = "{{ url('/admin/pembelian/get-sub-kategori') }}/" + kategoriId;
+
+        // Log untuk debugging
+        console.log("Fetching sub categories from: " + url);
+
+        fetch(url, {
+                method: 'GET',
+                headers: {
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok, status: ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log("Data received for item sub kategori:", data);
+
+                subKategoriSelect.innerHTML = '<option value="">--- Pilih Sub Kategori ---</option>';
+
+                if (data.success && data.data) {
+                    data.data.forEach(subKategori => {
+                        const option = document.createElement('option');
+                        option.value = subKategori.id;
+                        option.textContent = subKategori.nama_sub_kategori;
+                        subKategoriSelect.appendChild(option);
+                    });
+
+                    if (data.data.length === 0) {
+                        subKategoriSelect.innerHTML = '<option value="">--- Tidak Ada Sub Kategori ---</option>';
+                    }
+                } else {
+                    subKategoriSelect.innerHTML = '<option value="">--- Error Format Data ---</option>';
+                    console.error("Format data tidak sesuai:", data);
+                }
+            })
+            .catch(error => {
+                console.error("Error fetching sub kategori:", error);
+                subKategoriSelect.innerHTML = '<option value="">--- Error Loading Sub Kategori ---</option>';
+
+                // Tampilkan SweetAlert untuk error
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Gagal memuat sub kategori: ' + error.message,
+                    confirmButtonText: 'OK'
+                });
+            });
+    }
+
+    // Update the editItem function to include kategori and sub_kategori
+    function editItem(id, nama, jumlah, hargaBeli, hargaJual, hargaEcer, hargaPasang, kategoriId, subKategoriId) {
+        // Set form to edit mode
+        document.getElementById('edit_mode').value = '1';
+        document.getElementById('edit_detail_id').value = id;
+
+        // Fill the form with the item's data
+        document.getElementById('nama_item').value = nama;
+        document.getElementById('nama_item').readOnly = false;
+        document.getElementById('jumlah').value = jumlah;
+        document.getElementById('harga_beli').value = hargaBeli;
+
+        // Set other price fields if they exist
+        if (hargaJual) document.getElementById('harga_jual').value = hargaJual;
+        if (hargaEcer) document.getElementById('harga_ecer').value = hargaEcer;
+        if (hargaPasang) document.getElementById('harga_pasang').value = hargaPasang;
+
+        // Set kategori if exists
+        if (kategoriId && kategoriId !== 'null') {
+            document.getElementById('item_kategori').value = kategoriId;
+
+            // Load subcategories
+            loadItemSubKategori();
+
+            // We'll set sub kategori after a short delay to ensure subcategories are loaded
+            setTimeout(() => {
+                if (subKategoriId && subKategoriId !== 'null') {
+                    document.getElementById('item_sub_kategori').value = subKategoriId;
+                }
+            }, 500);
+        }
+
+        // Update total and price differences
+        hitungTotal();
+        triggerPriceDifferenceUpdate();
+
+        // Change button text
+        document.getElementById('submitButton').textContent = 'Perbarui Item';
+        document.getElementById('cancelButton').style.display = 'block';
+
+        // Scroll to form
+        document.getElementById('formAddItem').scrollIntoView({
+            behavior: 'smooth'
+        });
+    }
+
+    // Update the cancelEdit function to reset kategori and sub kategori
+    function cancelEdit() {
+        // Reset form to add mode
+        document.getElementById('edit_mode').value = '0';
+        document.getElementById('edit_detail_id').value = '';
+
+        // Clear the form
+        document.getElementById('formAddItem').reset();
+        document.getElementById('sparepart_id').value = '';
+
+        // Reset kategori and sub kategori
+        document.getElementById('item_kategori').value = '';
+        document.getElementById('item_sub_kategori').innerHTML =
+        '<option value="">--- Pilih Kategori Dulu ---</option>';
+
+        // Set restock radio button
+        document.getElementById('customRadio1').checked = true;
+        toggleNewItem(false);
+
+        // Reset button text
+        document.getElementById('submitButton').textContent = 'Tambah Item';
+        document.getElementById('cancelButton').style.display = 'none';
+    }
+
+    // Update selectSparepart function to set kategori and sub kategori
+    function selectSparepart(id, nama, harga, hargaJual, hargaEcer, hargaPasang, kategoriId, subKategoriId) {
+        document.getElementById('sparepart_id').value = id;
+        document.getElementById('nama_item').value = nama;
+        document.getElementById('harga_beli').value = harga;
+
+        // Set harga lainnya jika tersedia
+        if (hargaJual) document.getElementById('harga_jual').value = hargaJual;
+        if (hargaEcer) document.getElementById('harga_ecer').value = hargaEcer;
+        if (hargaPasang) document.getElementById('harga_pasang').value = hargaPasang;
+
+        // Set kategori dan sub kategori jika tersedia
+        if (kategoriId) {
+            document.getElementById('item_kategori').value = kategoriId;
+            loadItemSubKategori();
+
+            // Set sub kategori after subcategories are loaded
+            if (subKategoriId) {
+                setTimeout(() => {
+                    document.getElementById('item_sub_kategori').value = subKategoriId;
+                }, 500);
+            }
+        }
+
+        document.getElementById('nama_item').readOnly = false;
+        document.getElementById('customRadio1').checked = true; // Set sebagai restock
+        hitungTotal();
+        triggerPriceDifferenceUpdate();
+
+        // Sembunyikan hasil pencarian
+        document.getElementById('search_results').style.display = 'none';
+
+        // Scroll ke form
+        document.getElementById('formAddItem').scrollIntoView({
+            behavior: 'smooth'
+        });
+    }
+
+    // Document ready
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add event listener for item kategori change
+        document.getElementById('item_kategori').addEventListener('change', loadItemSubKategori);
+    });
+
+
     // Fungsi untuk trigger update selisih dengan delay
     function triggerPriceDifferenceUpdate() {
         // Menggunakan setTimeout untuk memastikan nilai sudah terupdate

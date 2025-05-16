@@ -14,6 +14,8 @@ use FontLib\Table\Type\name;
 use App\Http\Controllers\Api\OrderApiController;
 use App\Http\Controllers\Api\StockOpnameController;
 use App\Http\Controllers\Api\CustomerApiController;
+use App\Http\Controllers\Admin\HpController;
+use App\Http\Controllers\Api\HpApiController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -26,6 +28,13 @@ use App\Http\Controllers\Api\CustomerApiController;
 */
 
 Route::middleware('auth:sanctum')->group(function () {
+
+    // Attendance routes
+    Route::post('/attendance/scan', [Api\AttendanceController::class, 'scanQrCode']);
+    Route::post('/attendance/request-leave', [Api\AttendanceController::class, 'requestLeave']);
+    Route::get('/attendance/status', [Api\AttendanceController::class, 'getStatus']);
+
+
     Route::post('/create-service', [DashboardController::class, 'create_service_api']);
     Route::post('/pending-services', [DashboardController::class, 'get_pending_services']);
     Route::get('/services/completed-today', [ServiceApiController::class, 'getCompletedToday']);
@@ -77,6 +86,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/suppliers', [OrderApiController::class, 'getSuppliers']);
 
+
+
     Route::prefix('customer')->group(function () {
         Route::get('/', [CustomerApiController::class, 'index']);
         Route::post('/', [CustomerApiController::class, 'store']);
@@ -91,6 +102,24 @@ Route::middleware('auth:sanctum')->group(function () {
         // Get new kode toko for form
         Route::get('/generate-kode', [CustomerApiController::class, 'getNewKodeToko']);
     });
+
+    //TG
+    Route::get('/hp', [HpController::class, 'api']);
+    Route::post('/hp/suggest', [HpController::class, 'apiSuggest']);
+
+    // API untuk pencarian data HP
+    Route::get('/hp/search', [HpApiController::class, 'search']);
+    // Alias dengan parameter query lebih eksplisit
+    Route::get('/hp', [HpApiController::class, 'search']);
+
+    // Pencarian khusus berdasarkan tipe HP
+    Route::get('/hp/type', [HpApiController::class, 'searchByType']);
+
+    // Dapatkan data filter untuk pencarian
+    Route::get('/hp/filters', [HpApiController::class, 'filters']);
+
+    // Dapatkan data detail HP berdasarkan ID
+    Route::get('/hp/{id}', [HpApiController::class, 'detail']);
 
 });
 Route::prefix('orders')->middleware(['auth:sanctum'])->group(function () {

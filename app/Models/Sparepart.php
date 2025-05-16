@@ -11,6 +11,7 @@ class Sparepart extends Model
     protected $fillable = [
         'kode_sparepart',
         'kode_kategori',
+        'kode_sub_kategori',
         'foto_sparepart',
         'nama_sparepart',
         'desc_sparepart',
@@ -99,6 +100,11 @@ class Sparepart extends Model
     public function kategori()
     {
         return $this->belongsTo(KategoriSparepart::class, 'kode_kategori');
+    }
+
+    public function subKategori()
+    {
+        return $this->belongsTo(SubKategoriSparepart::class, 'kode_sub_kategori');
     }
 
     public function supplier()

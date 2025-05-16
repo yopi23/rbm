@@ -15,7 +15,11 @@ class KategoriSparepart extends Model
     ];
 
     public function spareparts()
-{
-    return $this->hasMany(Sparepart::class, 'kode_kategori', 'kode_kategori');
-}
+    {
+        return $this->hasMany(Sparepart::class, 'kode_kategori', 'kode_kategori');
+    }
+    public function subKategori()
+    {
+        return $this->hasMany(SubKategoriSparepart::class, 'kategori_id');
+    }
 }

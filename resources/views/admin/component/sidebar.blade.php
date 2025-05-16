@@ -133,6 +133,7 @@
                                          <p>Kategori</p>
                                      </a>
                                  </li>
+
                                  <li class="nav-item">
                                      <a href="{{ route('financial.reports') }}"
                                          class="nav-link {{ request()->is('financial/reports') ? 'active' : '' }}">
@@ -191,6 +192,14 @@
                                  </li>
                              </ul>
                          </li>
+                         <li class="nav-item">
+                             <a href="{{ route('admin.tg.index') }}" class="nav-link">
+                                 <i class="nav-icon fas fa-box"></i>
+                                 <p>
+                                     Daftar TG
+                                 </p>
+                             </a>
+                         </li>
                      @endif
                      <li class="nav-item ">
                          <a href="#" class="nav-link ">
@@ -244,6 +253,13 @@
                                      <a href="{{ route('kategori_sparepart') }}" class="nav-link">
                                          <i class="far fa-circle nav-icon"></i>
                                          <p>Kategori</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('sub_kategori_sparepart') }}"
+                                         class="nav-link {{ Request::routeIs('sub_kategori_sparepart*') ? 'active' : '' }}">
+                                         <i class="nav-icon fas fa-tags"></i>
+                                         <p>Sub Kategori Sparepart</p>
                                      </a>
                                  </li>
                                  <li class="nav-item">
@@ -396,6 +412,51 @@
                                      <a href="{{ route('presentase') }}" class="nav-link @yield('persentase')">
                                          <i class="far fa-circle nav-icon"></i>
                                          <p>Persentase</p>
+                                     </a>
+                                 </li>
+                             </ul>
+                         </li>
+                         <li class="nav-item has-treeview @yield('employee_management')">
+                             <a href="#" class="nav-link @yield('employee_management')">
+                                 <i class="nav-icon fas fa-users-cog"></i>
+                                 <p>
+                                     Manajemen Karyawan
+                                     <i class="right fas fa-angle-left"></i>
+                                 </p>
+                             </a>
+                             <ul class="nav nav-treeview">
+                                 <li class="nav-item">
+                                     <a href="{{ route('admin.attendance.index') }}"
+                                         class="nav-link @yield('attendance')">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Absensi</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('admin.salary.index') }}" class="nav-link @yield('salary_settings')">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Pengaturan Gaji</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('admin.violations.index') }}"
+                                         class="nav-link @yield('violations')">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Pelanggaran</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('admin.employee.monthly-report') }}"
+                                         class="nav-link @yield('monthly_report')">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Laporan Bulanan</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('admin.schedule.index') }}"
+                                         class="nav-link @yield('schedule')">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Jadwal Kerja</p>
                                      </a>
                                  </li>
                              </ul>

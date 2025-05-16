@@ -18,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Milon\Barcode\Facades\DNS1DFacade;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Models\SubKategoriSparepart;
 
 class SparePartController extends Controller
 {
@@ -43,9 +44,9 @@ class SparePartController extends Controller
         $page = "Data Sparepart";
         $link_tambah = route('create_sparepart');
         $thead = '<th width="5%">No</th>
-                    <th>Image</th>
                     <th>Kode Sparepart</th>
                     <th>Nama Sparepart</th>
+                    <th>Sub Kategori</th>
                     <th>Harga Beli</th>
                     <th>Harga Jual</th>
                     <th>Harga Pasang</th>
@@ -61,12 +62,25 @@ class SparePartController extends Controller
             if ($item->foto_sparepart != '-') {
                 $foto =  '<img src="' . asset('public/uploads/' . $item->foto_sparepart) . '" class="img" width="100%" height="100%">';
             }
+
+            // Get category name
+            $kategori_name = KategoriSparepart::find($item->kode_kategori)->nama_kategori ?? '-';
+
+            // Get subcategory name
+            $sub_kategori_name = '-';
+            if ($item->kode_sub_kategori) {
+                $sub_kategori = SubKategoriSparepart::find($item->kode_sub_kategori);
+                if ($sub_kategori) {
+                    $sub_kategori_name = $sub_kategori->nama_sub_kategori;
+                }
+            }
+
             $qr = DNS1DFacade::getBarcodeHTML($item->kode_sparepart, "C39", 1, 100);
             $tbody .= '<tr>
                             <td>' . $no++ . '</td>
-                            <td>' . $foto . '</td>
                             <td>' . $item->kode_sparepart . '</td>
                             <td>' . $item->nama_sparepart . '</td>
+                            <td>' . $sub_kategori_name . '</td>
                             <td>Rp.' . number_format($item->harga_beli) . '</td>
                             <td>Rp.' . number_format($item->harga_jual) . '</td>
                             <td>Rp.' . number_format($item->harga_pasang) . '</td>
@@ -177,13 +191,24 @@ class SparePartController extends Controller
     {
         $page = "Tambah Sparepart";
         $kategori = KategoriSparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
-        return view('admin.forms.sparepart', compact(['page', 'kategori']));
+        $sub_kategori = collect(); // Empty collection by default
+        return view('admin.forms.sparepart', compact(['page', 'kategori','sub_kategori']));
     }
     public function create_kategori(Request $request)
     {
         $page = "Tambah Kategori Sparepart";
         return view('admin.forms.kategori_sparepart', compact(['page']));
     }
+
+     // Function to get subcategories by category ID (for AJAX)
+     public function get_sub_kategori_by_kategori($kategori_id)
+     {
+         $sub_kategori = SubKategoriSparepart::where('kategori_id', $kategori_id)
+                                 ->where('kode_owner', $this->getThisUser()->id_upline)
+                                 ->get();
+
+         return response()->json($sub_kategori);
+     }
 
     // Store Functions
     public function store_sparepart(Request $request)
@@ -210,6 +235,7 @@ class SparePartController extends Controller
                 'nama_sparepart' => $request->nama_sparepart,
                 'desc_sparepart' => $request->desc_sparepart,
                 'kode_kategori' => $request->kode_kategori,
+                'kode_sub_kategori' => $request->kode_sub_kategori,//sub kaegori
                 'stok_sparepart' => $request->stok_sparepart,
                 'harga_beli' => $request->harga_beli,
                 'harga_jual' => $request->harga_jual,
@@ -261,7 +287,13 @@ class SparePartController extends Controller
         $page = "Edit Sparepart";
         $kategori = KategoriSparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
         $data = Sparepart::findOrFail($id);
-        return view('admin.forms.sparepart', compact(['page', 'data', 'kategori']));
+
+        // Get subcategories for the selected category
+        $sub_kategori = SubKategoriSparepart::where('kategori_id', $data->kode_kategori)
+                              ->where('kode_owner', $this->getThisUser()->id_upline)
+                              ->get();
+
+        return view('admin.forms.sparepart', compact(['page', 'data', 'kategori','sub_kategori']));
     }
     public function edit_kategori_sparepart(Request $request, $id)
     {
@@ -293,6 +325,7 @@ class SparePartController extends Controller
                 'nama_sparepart' => $request->nama_sparepart,
                 'desc_sparepart' => $request->desc_sparepart,
                 'kode_kategori' => $request->kode_kategori,
+                'kode_sub_kategori' => $request->kode_sub_kategori,
                 'stok_sparepart' => $request->stok_sparepart,
                 'harga_beli' => $request->harga_beli,
                 'harga_jual' => $request->harga_jual,
@@ -1100,5 +1133,172 @@ class SparePartController extends Controller
 
         // Mengembalikan hasil setelah konversi
         return $hasil_final;
+    }
+
+    //sub kategori
+    public function view_sub_kategori(Request $request, $kategori_id = null)
+    {
+        $page = "Data Sub Kategori Sparepart";
+
+        // Filter by kategori_id if provided
+        if ($kategori_id) {
+            $kategori = KategoriSparepart::findOrFail($kategori_id);
+            $page .= " - " . $kategori->nama_kategori;
+            $link_tambah = route('create_sub_kategori_sparepart', $kategori_id);
+            $sub_kategori = SubKategoriSparepart::where('kategori_id', $kategori_id)
+                                    ->where('kode_owner', $this->getThisUser()->id_upline)
+                                    ->latest()
+                                    ->get();
+        } else {
+            $link_tambah = route('create_sub_kategori_sparepart');
+            $sub_kategori = SubKategoriSparepart::where('kode_owner', $this->getThisUser()->id_upline)
+                                     ->latest()
+                                     ->get();
+        }
+
+        $thead = '<th width="5%">No</th>
+                 <th width="15%">Image</th>
+                 <th width="20%">Kategori</th>
+                 <th width="40%">Nama Sub Kategori</th>
+                 <th width="20%">Aksi</th>';
+
+        $tbody = '';
+        $no = 1;
+
+        foreach ($sub_kategori as $item) {
+            $edit = Request::create(route('EditSubKategoriSparepart', $item->id));
+            $delete = Request::create(route('DeleteSubKategoriSparepart', $item->id));
+
+            $foto = '<img src="' . asset('public/img/no_image.png') . '" width="100%" height="100%" class="img" id="view-img">';
+            if ($item->foto_sub_kategori != '-') {
+                $foto =  '<img src="' . asset('public/uploads/' . $item->foto_sub_kategori) . '" class="img" width="100%" height="100%">';
+            }
+
+            $tbody .= '<tr>
+                        <td>' . $no++ . '</td>
+                        <td>' . $foto . '</td>
+                        <td>' . $item->kategori->nama_kategori . '</td>
+                        <td>' . $item->nama_sub_kategori . '</td>
+                        <td>
+                            <form action="' . $delete->url() . '" onsubmit="' . "return confirm('Apakah Anda yakin ?')" . '" method="POST">
+                                ' . $this->getHiddenItemForm('DELETE') . '
+                                <a href="' . $edit->url() . '" class="btn btn-warning"><i class="fas fa-edit"></i></a>
+                                <button type="submit" class="btn btn-danger"><i class="fas fa-trash"></i></button>
+                            </form>
+                        </td>
+                      </tr>';
+        }
+
+        $data = $this->getTable($thead, $tbody);
+
+        return view('admin.layout.card_layout', compact(['page', 'data', 'link_tambah']));
+    }
+
+    public function create_sub_kategori(Request $request, $kategori_id = null)
+    {
+        $page = "Tambah Sub Kategori Sparepart";
+        $kategori = KategoriSparepart::where('kode_owner', $this->getThisUser()->id_upline)->latest()->get();
+        $selected_kategori = $kategori_id ? KategoriSparepart::findOrFail($kategori_id) : null;
+
+        return view('admin.forms.sub_kategori_sparepart', compact(['page', 'kategori', 'selected_kategori']));
+    }
+
+    public function store_sub_kategori_sparepart(Request $request)
+    {
+        $validate = $request->validate([
+            'kategori_id' => ['required'],
+            'nama_sub_kategori' => ['required'],
+        ]);
+
+        if ($validate) {
+            $file = $request->file('foto_sub_kategori');
+            $foto = $file != null ? date('Ymdhis') . $file->getClientOriginalName() : '-';
+
+            if ($file != null) {
+                $file->move('public/uploads/', $foto);
+            }
+
+            $create = SubKategoriSparepart::create([
+                'kategori_id' => $request->kategori_id,
+                'foto_sub_kategori' => $foto,
+                'nama_sub_kategori' => $request->nama_sub_kategori,
+                'kode_owner' => $this->getThisUser()->id_upline
+            ]);
+
+            if ($create) {
+                return redirect()->route('sub_kategori_sparepart')
+                    ->with([
+                        'success' => 'Sub Kategori Sparepart Berhasil Ditambahkan'
+                    ]);
+            }
+
+            return redirect()->back()->with('error', "Oops, Something Went Wrong");
+        } else {
+            return redirect()->back()->with('error', "Validating Error, Please Fill Required Field");
+        }
+    }
+
+    public function edit_sub_kategori_sparepart(Request $request, $id)
+    {
+        $page = "Edit Sub Kategori Sparepart";
+        $data = SubKategoriSparepart::findOrFail($id);
+        $kategori = KategoriSparepart::where('kode_owner', $this->getThisUser()->id_upline)->latest()->get();
+
+        return view('admin.forms.sub_kategori_sparepart', compact(['page', 'data', 'kategori']));
+    }
+
+    public function update_sub_kategori_sparepart(Request $request, $id)
+    {
+        $validate = $request->validate([
+            'kategori_id' => ['required'],
+            'nama_sub_kategori' => ['required'],
+        ]);
+
+        if ($validate) {
+            $data_sub_kategori = SubKategoriSparepart::findOrFail($id);
+            $file = $request->file('foto_sub_kategori');
+            $foto = $file != null ? date('Ymdhis') . $file->getClientOriginalName() : $data_sub_kategori->foto_sub_kategori;
+
+            if ($file != null) {
+                $file->move('public/uploads/', $foto);
+            }
+
+            $data_sub_kategori->update([
+                'kategori_id' => $request->kategori_id,
+                'foto_sub_kategori' => $foto,
+                'nama_sub_kategori' => $request->nama_sub_kategori
+            ]);
+
+            if ($data_sub_kategori) {
+                return redirect()->route('sub_kategori_sparepart')
+                    ->with([
+                        'success' => 'Sub Kategori Sparepart Berhasil DiUpdate'
+                    ]);
+            }
+
+            return redirect()->back()->with('error', "Oops, Something Went Wrong");
+        } else {
+            return redirect()->back()->with('error', "Validating Error, Please Fill Required Field");
+        }
+    }
+
+    public function delete_sub_kategori_sparepart($id)
+    {
+        $data = SubKategoriSparepart::findOrFail($id);
+
+        if ($data->foto_sub_kategori != '-') {
+            File::delete(public_path('uploads/' . $data->foto_sub_kategori));
+        }
+
+        $data->delete();
+
+        if ($data) {
+            return redirect()->route('sub_kategori_sparepart')
+                ->with([
+                    'success' => 'Sub Kategori Sparepart Berhasil Dihapus'
+                ]);
+        }
+
+        return redirect()->route('sub_kategori_sparepart')->with('error', "Oops, Something Went Wrong");
     }
 }

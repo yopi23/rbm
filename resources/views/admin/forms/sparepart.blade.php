@@ -96,6 +96,26 @@
                                                 @endforelse
                                             </select>
                                         </div>
+                                        <!-- Add this new field for subcategory -->
+                                        <div class="form-group">
+                                            <label for="kode_sub_kategori">Sub Kategori Sparepart</label>
+                                            <select name="kode_sub_kategori" id="kode_sub_kategori"
+                                                class="form-control @error('kode_sub_kategori') is-invalid @enderror">
+                                                <option value="">Pilih Sub Kategori</option>
+                                                @if (isset($sub_kategori) && count($sub_kategori) > 0)
+                                                    @foreach ($sub_kategori as $item)
+                                                        <option value="{{ $item->id }}"
+                                                            @if (isset($data) && $data->kode_sub_kategori == $item->id) selected @endif>
+                                                            {{ $item->nama_sub_kategori }}</option>
+                                                    @endforeach
+                                                @endif
+                                            </select>
+                                            @error('kode_sub_kategori')
+                                                <div class="invalid-feedback">
+                                                    {{ $message }}
+                                                </div>
+                                            @enderror
+                                        </div>
                                         <div class="form-group">
                                             <label>Deskripsi</label>
                                             <textarea name="desc_sparepart" id="desc_sparepart" placeholder="Deskripsi Sparepart" id="desc_barang" cols="30"
@@ -127,8 +147,9 @@
                                                         value="{{ isset($data) != null ? $data->harga_jual : '0' }}"
                                                         placeholder="Harga Jual" id="harga_jual" class="form-control"
                                                         hidden>
-                                                    <input type="text" name="in_harga_jual" placeholder="Harga Jual"
-                                                        id="in_harga_jual" class="form-control">
+                                                    <input type="text" name="in_harga_jual"
+                                                        placeholder="Harga Jual" id="in_harga_jual"
+                                                        class="form-control">
                                                 </div>
                                             </div>
                                             <div class="col-md-4">
@@ -183,7 +204,7 @@
             }
 
             rupiah = split[1] != undefined ? rupiah + ',' + split[1] :
-            rupiah; // Tambahkan kondisi untuk menghilangkan angka 0 di depan jika tidak ada koma
+                rupiah; // Tambahkan kondisi untuk menghilangkan angka 0 di depan jika tidak ada koma
             return prefix == undefined ? rupiah : (rupiah ? 'Rp. ' + rupiah : '');
         }
 
@@ -226,5 +247,46 @@
             Hphidden.value = numericValue;
         });
     </script>
-@endsection
-@include('admin.component.footer')
+
+
+    <!-- Add this script to your @push('scripts') section -->
+
+        <script>
+            $(document).ready(function() {
+                // When category changes, load subcategories
+                $('#kode_kategori').change(function() {
+                    var kategoriId = $(this).val();
+                    var subKategoriSelect = $('#kode_sub_kategori');
+
+                    // Clear current options
+                    subKategoriSelect.empty();
+                    subKategoriSelect.append('<option value="">Pilih Sub Kategori</option>');
+
+                    if (kategoriId) {
+                        // Get subcategories via AJAX
+                        $.ajax({
+                            url: '{{ url('/admin/get-sub-kategori') }}/' + kategoriId,
+                            type: 'GET',
+                            dataType: 'json',
+                            success: function(data) {
+                                if (data.length > 0) {
+                                    // Add options
+                                    $.each(data, function(key, value) {
+                                        subKategoriSelect.append('<option value="' + value
+                                            .id + '">' + value.nama_sub_kategori +
+                                            '</option>');
+                                    });
+                                }
+                            }
+                        });
+                    }
+                });
+
+                // Trigger change on page load if editing
+                @if (isset($data) && $data->kode_kategori)
+                    $('#kode_kategori').trigger('change');
+                @endif
+            });
+        </script>
+    @endsection
+    @include('admin.component.footer')

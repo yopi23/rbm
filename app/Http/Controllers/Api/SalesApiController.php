@@ -9,6 +9,8 @@ use App\Models\DetailSparepartPenjualan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use App\Traits\KategoriLaciTrait;
+use App\Models\SubKategoriSparepart;
+use App\Models\KategoriSparepart;
 use App\Models\PemasukkanLain;
 use Illuminate\Support\Facades\DB;
 
@@ -16,14 +18,73 @@ use Illuminate\Support\Facades\DB;
 class SalesApiController extends Controller
 {
     use KategoriLaciTrait;
+    public function getCategories()
+    {
+        try {
+            $categories = KategoriSparepart::where('kode_owner', $this->getThisUser()->id_upline)
+                ->with(['subKategoris' => function($query) {
+                    $query->where('kode_owner', $this->getThisUser()->id_upline);
+                }])
+                ->get();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Categories retrieved successfully',
+                'data' => $categories
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to retrieve categories',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get subcategories by category ID
+     */
+    public function getSubCategories($categoryId)
+    {
+        try {
+            $subCategories = SubKategoriSparepart::where('kategori_id', $categoryId)
+                ->where('kode_owner', $this->getThisUser()->id_upline)
+                ->get();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Subcategories retrieved successfully',
+                'data' => $subCategories
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to retrieve subcategories',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function search(Request $request)
     {
         try {
             $request->validate(['search' => 'required|string|max:255']);
             $keywords = array_filter(explode(' ', strtolower(trim($request->input('search')))));
+             $categoryId = $request->input('category_id');
+            $subcategoryId = $request->input('subcategory_id');
 
             $query = DB::table('spareparts')
                 ->where('kode_owner', '=', $this->getThisUser()->id_upline);
+
+                    // Filter by category if provided
+            if ($categoryId) {
+                $query->where('kode_kategori', $categoryId);
+            }
+
+            // Filter by subcategory if provided
+            if ($subcategoryId) {
+                $query->where('kode_sub_kategori', $subcategoryId);
+            }
 
             // Gunakan subquery untuk each keyword
             foreach ($keywords as $keyword) {
@@ -36,6 +97,8 @@ class SalesApiController extends Controller
                 'id',
                 'kode_sparepart',
                 'nama_sparepart',
+                'kode_kategori',
+                'kode_sub_kategori',
                 'harga_beli',
                 'harga_jual',
                 'harga_ecer',
@@ -45,11 +108,22 @@ class SalesApiController extends Controller
                 'updated_at'
             ])->get();
 
+            // Enhance data with category and subcategory names
+            $enhancedData = $data->map(function($item) {
+                $category = KategoriSparepart::find($item->kode_kategori);
+                $subcategory = SubKategoriSparepart::find($item->kode_sub_kategori);
+
+                $item->kategori_nama = $category ? $category->nama_kategori : null;
+                $item->sub_kategori_nama = $subcategory ? $subcategory->nama_sub_kategori : null;
+
+                return $item;
+            });
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Data retrieved successfully',
                 'total_items' => $data->count(),
-                'data' => $data
+                'data' => $enhancedData
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
@@ -70,6 +144,8 @@ class SalesApiController extends Controller
 
             // Ekstrak keywords
             $keywords = array_filter(explode(' ', strtolower(trim($request->input('search')))));
+             $categoryId = $request->input('category_id');
+            $subcategoryId = $request->input('subcategory_id');
 
             // Ambil owner_code dari request, dengan fallback ke user saat ini
             $ownerCode = $request->input('owner_code');
@@ -79,6 +155,16 @@ class SalesApiController extends Controller
             // Buat query dasar
             $query = DB::table('spareparts')
                 ->where('kode_owner', '=', $ownerCode);
+
+                // Filter by category if provided
+            if ($categoryId) {
+                $query->where('kode_kategori', $categoryId);
+            }
+
+            // Filter by subcategory if provided
+            if ($subcategoryId) {
+                $query->where('kode_sub_kategori', $subcategoryId);
+            }
 
             // Gunakan subquery untuk each keyword
             foreach ($keywords as $keyword) {
@@ -91,16 +177,30 @@ class SalesApiController extends Controller
             $data = $query->select([
                 'id',
                 'kode_sparepart',
+                'kode_kategori',
+                'kode_sub_kategori',
                 'nama_sparepart',
                 'stok_sparepart',
             ])->get();
+
+            // Enhance data with category and subcategory names
+            $enhancedData = $data->map(function($item) {
+                $category = KategoriSparepart::find($item->kode_kategori);
+                $subcategory = SubKategoriSparepart::find($item->kode_sub_kategori);
+
+                $item->kategori_nama = $category ? $category->nama_kategori : null;
+                $item->sub_kategori_nama = $subcategory ? $subcategory->nama_sub_kategori : null;
+
+                return $item;
+            });
 
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Data retrieved successfully',
                 'total_items' => $data->count(),
-                'data' => $data
+                // 'data' => $data
+                'data' => $enhancedData
             ], 200);
         } catch (\Exception $e) {
             // Log error detail

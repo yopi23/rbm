@@ -19,6 +19,8 @@ class DetailPembelian extends Model
         'harga_pasang',
         'total',
         'is_new_item',
+        'item_kategori',
+       'item_sub_kategori',
     ];
 
     public function pembelian()
@@ -30,4 +32,13 @@ class DetailPembelian extends Model
     {
         return $this->belongsTo(Sparepart::class);
     }
+    public function kategori()
+   {
+       return $this->belongsTo(KategoriSparepart::class, 'item_kategori');
+   }
+
+   public function subKategori()
+   {
+       return $this->belongsTo(SubKategoriSparepart::class, 'item_sub_kategori');
+   }
 }
