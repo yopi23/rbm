@@ -8,11 +8,11 @@ return new class extends Migration {
     {
         Schema::create('hp_datas', function (Blueprint $table) {
             $table->id();
-            $table->string('brand_id')->nullable();
-            $table->string('screen_size_id')->nullable();
+            $table->foreignId('brand_id')->nullable()->constrained();
+            $table->foreignId('screen_size_id')->nullable()->constrained();
             $table->string('type')->nullable();
             $table->string('screen_size')->nullable();
-            $table->string('camera_position_id')->nullable();
+            $table->foreignId('camera_position_id')->nullable()->constrained();
             $table->timestamps();
         });
     }
