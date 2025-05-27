@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\StockOpnameController;
 use App\Http\Controllers\Api\CustomerApiController;
 use App\Http\Controllers\Admin\HpController;
 use App\Http\Controllers\Api\HpApiController;
+use App\Http\Controllers\Admin\EmployeeManagementController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -121,7 +122,39 @@ Route::middleware('auth:sanctum')->group(function () {
     // Dapatkan data detail HP berdasarkan ID
     Route::get('/hp/{id}', [HpApiController::class, 'detail']);
 
+    //absen
+    Route::prefix('attendance')->group(function () {
+        // QR Code Generation untuk karyawan
+        Route::post('/generate-employee-qr', [EmployeeManagementController::class, 'generateEmployeeQrCode']);
+
+        // Scan QR Code karyawan oleh admin
+        Route::post('/scan-employee-qr', [EmployeeManagementController::class, 'scanEmployeeQrCode']);
+
+        // Legacy QR Code scan (untuk compatibility jika masih ada yang pakai sistem lama)
+        Route::post('/scan/{token}', [EmployeeManagementController::class, 'scanQrCode']);
+
+        // Request leave dari mobile
+        Route::post('/request-leave', [EmployeeManagementController::class, 'requestLeave']);
+
+        // Get attendance history for mobile
+        Route::get('/history/{userId}', [EmployeeManagementController::class, 'getAttendanceHistory']);
+
+        // Get current attendance status
+        Route::get('/status/{userId}', [EmployeeManagementController::class, 'getCurrentAttendanceStatus']);
+    });
+
+    // Employee API Routes
+    Route::prefix('employee')->group(function () {
+        // Get user schedule for mobile
+        Route::get('/schedule/{userId}', [EmployeeManagementController::class, 'getUserScheduleAPI']);
+
+        // Get salary info for mobile
+        Route::get('/salary/{userId}', [EmployeeManagementController::class, 'getSalaryInfo']);
+    });
+
 });
+
+
 Route::prefix('orders')->middleware(['auth:sanctum'])->group(function () {
     // Mendapatkan data
     Route::get('/', [OrderApiController::class, 'getOrders']);

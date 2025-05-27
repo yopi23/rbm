@@ -432,7 +432,7 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
         Route::get('/{id}/export-excel', [StockOpnameController::class, 'exportExcel'])->name('export-excel');
     });
 
- // atur karyawan
+ // absen karyawan
     // Attendance Routes
     Route::prefix('admin/attendance')->group(function () {
         Route::get('/', [EmployeeManagementController::class, 'attendanceIndex'])->name('admin.attendance.index');
@@ -440,10 +440,7 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
         Route::post('/check-out', [EmployeeManagementController::class, 'attendanceCheckOut'])->name('admin.attendance.check-out');
         Route::post('/set-outside', [EmployeeManagementController::class, 'setOutsideOffice'])->name('admin.attendance.set-outside');
         Route::get('/reset-outside/{userId}', [EmployeeManagementController::class, 'resetOutsideOffice'])->name('admin.attendance.reset-outside');
-     // QR Code Attendance routes
-     Route::get('/generate-qrcode/{type?}', [EmployeeManagementController::class, 'generateQrCode'])->name('admin.attendance.generate-qrcode');
-     Route::get('/scan/{token}', [EmployeeManagementController::class, 'scanQrCode'])->name('admin.attendance.scan');
-     Route::post('/request-leave', [EmployeeManagementController::class, 'requestLeave'])->name('admin.attendance.request-leave');
+        Route::post('/request-leave', [EmployeeManagementController::class, 'requestLeave'])->name('admin.attendance.request-leave');
 
     });
 
@@ -477,7 +474,7 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
         Route::get('/get-user-schedule/{userId}', [EmployeeManagementController::class, 'getUserSchedule'])->name('admin.schedule.get-user');
     });
 
-   //ujung atur karyawan
+   //ujung absen karyawan
 
     Route::prefix('admin')->group(function () {
         // HP Data Routes
@@ -563,7 +560,6 @@ Route::group(['middleware' => ['auth']], function () {
     Route::get('/admin/get-sub-kategori/{kategori_id}', [App\Http\Controllers\Admin\SparePartController::class, 'get_sub_kategori_by_kategori'])->name('GetSubKategoriByKategori');
     Route::get('/admin/pembelian/get-sub-kategori/{kategoriId}', [PembelianController::class, 'getSubKategori']);
 });
-
 
 
 // Routes untuk pencarian sparepart via AJAX (jika belum ada)
