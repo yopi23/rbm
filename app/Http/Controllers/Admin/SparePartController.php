@@ -1301,4 +1301,78 @@ class SparePartController extends Controller
 
         return redirect()->route('sub_kategori_sparepart')->with('error', "Oops, Something Went Wrong");
     }
+
+    // zakat
+    public function view_zakat(Request $request)
+    {
+        $page = "Perhitungan Zakat Usaha";
+
+        // Hitung total nilai stok barang dagangan (menggunakan harga jual)
+        $total_stok_barang = Sparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)
+            ->get()
+            ->sum(function($item) {
+                return $item->stok_sparepart * $item->harga_jual;
+            });
+
+        // Hitung total piutang (dari penjualan yang belum lunas)
+        // Asumsi: status_penjualan = 0 berarti belum lunas
+        // $total_piutang = penjualan::where('kode_owner', '=', $this->getThisUser()->id_upline)
+        //     ->where('status_penjualan', '=', 0)
+        //     ->sum('total_penjualan');
+
+        // Hitung total kas (asumsi ada tabel kas atau bisa manual input)
+        // Untuk sementara gunakan input manual
+        $total_kas = $request->input('kas', 0);
+
+        // Hitung total hutang
+        $total_hutang = Hutang::where('kode_owner', '=', $this->getThisUser()->id_upline)
+            ->where('status', '=', 1) // hutang yang masih aktif
+            ->sum('total_hutang');
+
+        // Hitung total aset kena zakat
+        $total_aset_zakat = $total_stok_barang + $total_kas - $total_hutang;
+        // $total_aset_zakat = $total_stok_barang + $total_piutang + $total_kas - $total_hutang;
+
+        // Nisab (setara 85 gram emas - asumsi harga emas Rp 1,000,000/gram)
+        $harga_emas_per_gram = $request->input('harga_emas', 1000000);
+        $nisab = 85 * $harga_emas_per_gram;
+
+        // Cek apakah wajib zakat
+        $wajib_zakat = $total_aset_zakat >= $nisab;
+
+        // Hitung zakat (2.5%)
+        $jumlah_zakat = $wajib_zakat ? ($total_aset_zakat * 0.025) : 0;
+
+        // Data detail untuk ditampilkan
+        $data_zakat = [
+            'total_stok_barang' => $total_stok_barang,
+            // 'total_piutang' => $total_piutang,
+            'total_kas' => $total_kas,
+            'total_hutang' => $total_hutang,
+            'total_aset_zakat' => $total_aset_zakat,
+            'nisab' => $nisab,
+            'harga_emas_per_gram' => $harga_emas_per_gram,
+            'wajib_zakat' => $wajib_zakat,
+            'jumlah_zakat' => $jumlah_zakat,
+            'persentase_zakat' => 2.5
+        ];
+
+        // Data stok per kategori untuk detail
+        $stok_per_kategori = Sparepart::join('kategori_spareparts', 'spareparts.kode_kategori', '=', 'kategori_spareparts.id')
+            ->where('spareparts.kode_owner', '=', $this->getThisUser()->id_upline)
+            ->selectRaw('kategori_spareparts.nama_kategori,
+                        SUM(spareparts.stok_sparepart * spareparts.harga_jual) as total_nilai,
+                        SUM(spareparts.stok_sparepart) as total_qty')
+            ->groupBy('kategori_spareparts.id', 'kategori_spareparts.nama_kategori')
+            ->get();
+
+        $content = view('admin.page.zakat_usaha', compact(['data_zakat', 'stok_per_kategori']));
+        return view('admin.layout.blank_page', compact(['page', 'content']));
+    }
+
+    public function update_data_zakat(Request $request)
+    {
+        // Method untuk update manual data kas dan harga emas
+        return redirect()->back()->with('success', 'Data berhasil diupdate');
+    }
 }

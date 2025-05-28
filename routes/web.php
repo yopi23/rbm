@@ -151,6 +151,10 @@ Route::group(['middleware' => ['auth']], function () {
         Route::put('update_all_penarikan_statuses', [UserController::class, 'updateAllStatuses'])->name('update_all_penarikan_statuses');
         Route::post('/update_stok_sparepart', [SparePartController::class, 'update_stok_sparepart'])->name('update_stok_sparepart');
         Route::post('/pindah_komisi', [ServiceController::class, 'pindahKomisi'])->name('pindahKomisi');
+
+        //zakat
+        Route::get('/admin/zakat-usaha', [SparePartController::class, 'view_zakat'])->name('zakat_usaha');
+        Route::post('/admin/zakat-usaha/update', [SparePartController::class, 'update_data_zakat'])->name('update_zakat');
     });
 
 

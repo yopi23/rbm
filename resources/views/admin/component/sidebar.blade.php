@@ -106,6 +106,13 @@
                              </a>
                              <ul class="nav nav-treeview">
                                  <li class="nav-item">
+                                     <a href="{{ route('zakat_usaha') }}"
+                                         class="nav-link {{ request()->is('zakat') ? 'active' : '' }}">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Zakat</p>
+                                     </a>
+                                 </li>
+                                 {{-- <li class="nav-item">
                                      <a href="{{ route('financial.index') }}"
                                          class="nav-link {{ request()->is('financial') ? 'active' : '' }}">
                                          <i class="far fa-circle nav-icon"></i>
@@ -140,7 +147,7 @@
                                          <i class="far fa-circle nav-icon"></i>
                                          <p>Laporan</p>
                                      </a>
-                                 </li>
+                                 </li> --}}
                              </ul>
                          </li>
                          <!-- Menu Inventory Management -->

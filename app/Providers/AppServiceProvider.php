@@ -12,6 +12,7 @@ use Illuminate\Support\ServiceProvider;
 use PDO;
 use App\Observers\SparepartSaleObserver;  // Perhatikan namespace yang benar
 use App\Observers\PartServiceObserver;
+use Illuminate\Support\Facades\Blade;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -41,6 +42,22 @@ class AppServiceProvider extends ServiceProvider
         date_default_timezone_set('Asia/Jakarta');
         DetailSparepartPenjualan::observe(SparepartSaleObserver::class);
         DetailPartServices::observe(PartServiceObserver::class);
+
+
+        Blade::directive('lateFormat', function ($minutes) {
+            return "<?php
+                \$mins = $minutes;
+                if (\$mins <= 0) {
+                    echo 'Tepat waktu';
+                } elseif (\$mins < 60) {
+                    echo \$mins . ' menit';
+                } else {
+                    \$hours = floor(\$mins / 60);
+                    \$remainingMins = \$mins % 60;
+                    echo \$remainingMins == 0 ? \$hours . ' jam' : \$hours . ' jam ' . \$remainingMins . ' menit';
+                }
+            ?>";
+        });
 
     }
 }
