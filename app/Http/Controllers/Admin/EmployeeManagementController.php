@@ -19,11 +19,18 @@ use Illuminate\Support\Facades\Storage;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Log;
 
 class EmployeeManagementController extends Controller
 {
     public function scanEmployeeQrCode(Request $request)
     {
+            // Log request untuk debugging
+    Log::info('QR Scan Request:', [
+        'qr_data' => $request->qr_data,
+        'admin_id' => auth()->id(),
+        'timestamp' => now()
+    ]);
         $request->validate([
             'qr_data' => 'required|string',
         ]);
@@ -33,7 +40,7 @@ class EmployeeManagementController extends Controller
         $admin = User::find($adminId);
         $adminDetail = UserDetail::where('kode_user', $adminId)->first();
 
-        if (!$adminDetail || !in_array($adminDetail->jabatan, [1, 2])) {
+        if (!$adminDetail || !in_array($adminDetail->jabatan, [1,0])) {
             return response()->json([
                 'success' => false,
                 'message' => 'Hanya admin yang dapat melakukan scan'
@@ -111,7 +118,7 @@ class EmployeeManagementController extends Controller
                 $lateMinutes = 0;
                 if ($schedule && $schedule->is_working_day) {
                     $checkInTime = Carbon::now();
-                    $scheduleStartTime = Carbon::parse($todayDate->format('Y-m-d') . ' ' . $schedule->start_time);
+                    $scheduleStartTime = Carbon::parse($schedule->start_time);
 
                     if ($checkInTime->gt($scheduleStartTime)) {
                         $lateMinutes = $checkInTime->diffInMinutes($scheduleStartTime);
@@ -318,7 +325,7 @@ class EmployeeManagementController extends Controller
 
         // Calculate late minutes
         $checkInTime = Carbon::now();
-        $scheduleStartTime = Carbon::parse($today->format('Y-m-d') . ' ' . $schedule->start_time);
+        $scheduleStartTime = Carbon::parse( $schedule->start_time);
         $lateMinutes = 0;
 
         if ($checkInTime->gt($scheduleStartTime)) {
@@ -453,47 +460,93 @@ class EmployeeManagementController extends Controller
 
     public function salarySettingsStore(Request $request)
     {
-        $request->validate([
+        // Debug: Log semua data yang diterima
+        \Log::info('Salary Settings Store - Request Data:', $request->all());
+
+        // Validasi berdasarkan compensation_type
+        $rules = [
             'user_id' => 'required|exists:users,id',
             'compensation_type' => 'required|in:fixed,percentage',
-            'basic_salary' => 'required_if:compensation_type,fixed|numeric|min:0',
-            'service_percentage' => 'required_if:compensation_type,fixed|integer|min:0|max:100',
-            'target_bonus' => 'required_if:compensation_type,fixed|numeric|min:0',
-            'monthly_target' => 'required_if:compensation_type,fixed|integer|min:0',
-            'percentage_value' => 'required_if:compensation_type,percentage|numeric|min:0|max:100',
-        ]);
+        ];
+
+        // Tambahkan validasi kondisional berdasarkan tipe kompensasi
+        if ($request->compensation_type === 'fixed') {
+            $rules['basic_salary'] = 'required|numeric|min:0';
+            $rules['service_percentage'] = 'required|integer|min:0|max:100';
+            $rules['target_bonus'] = 'required|numeric|min:0';
+            $rules['monthly_target'] = 'required|integer|min:0';
+        } elseif ($request->compensation_type === 'percentage') {
+            $rules['percentage_value'] = 'required|numeric|min:0|max:100';
+        }
+
+        $request->validate($rules);
 
         try {
             DB::beginTransaction();
 
             $data = [
+                'user_id' => $request->user_id,
                 'compensation_type' => $request->compensation_type,
                 'created_by' => auth()->id(),
+                'updated_at' => now(),
             ];
 
             if ($request->compensation_type == 'fixed') {
-                $data['basic_salary'] = $request->basic_salary;
-                $data['service_percentage'] = $request->service_percentage;
-                $data['target_bonus'] = $request->target_bonus;
-                $data['monthly_target'] = $request->monthly_target;
+                $data['basic_salary'] = (float) $request->basic_salary;
+                $data['service_percentage'] = (int) $request->service_percentage;
+                $data['target_bonus'] = (float) $request->target_bonus;
+                $data['monthly_target'] = (int) $request->monthly_target;
                 $data['percentage_value'] = 0;
             } else {
-                $data['percentage_value'] = $request->percentage_value;
+                // Untuk tipe percentage, set field fixed salary ke 0
+                $data['percentage_value'] = (float) $request->percentage_value;
                 $data['basic_salary'] = 0;
                 $data['service_percentage'] = 0;
                 $data['target_bonus'] = 0;
                 $data['monthly_target'] = 0;
             }
 
-            SalarySetting::updateOrCreate(
+            // Debug: Log data yang akan disimpan
+            \Log::info('Salary Settings Store - Data to be saved:', $data);
+
+            $salarySetting = SalarySetting::updateOrCreate(
                 ['user_id' => $request->user_id],
                 $data
             );
 
+            // Debug: Log hasil penyimpanan
+            \Log::info('Salary Settings Store - Saved Record:', $salarySetting->toArray());
+
             DB::commit();
+
+            // Return JSON response untuk AJAX
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Pengaturan kompensasi berhasil disimpan',
+                    'data' => $salarySetting
+                ]);
+            }
+
             return redirect()->back()->with('success', 'Pengaturan kompensasi berhasil disimpan');
+
         } catch (\Exception $e) {
             DB::rollBack();
+
+            // Debug: Log error
+            \Log::error('Salary Settings Store Error:', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
+            ]);
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal menyimpan pengaturan: ' . $e->getMessage()
+                ], 500);
+            }
+
             return redirect()->back()->with('error', 'Gagal menyimpan pengaturan: '.$e->getMessage());
         }
     }
@@ -1007,5 +1060,362 @@ class EmployeeManagementController extends Controller
             'can_check_in' => !$attendance || !$attendance->check_in,
             'can_check_out' => $attendance && $attendance->check_in && !$attendance->check_out
         ]);
+    }
+
+    /**
+     * Attendance History Index - Riwayat Absensi Karyawan
+     */
+    public function attendanceHistoryIndex(Request $request)
+    {
+        $page = "Riwayat Absensi Karyawan";
+
+        // Get filter parameters
+        $selectedEmployee = $request->employee_id;
+        $selectedMonth = $request->month ?? date('m');
+        $selectedYear = $request->year ?? date('Y');
+        $viewType = $request->view_type ?? 'monthly'; // daily atau monthly
+        $selectedDate = $request->date ?? date('Y-m-d');
+
+        // Get employees for filter
+        $employees = User::join('user_details', 'users.id', '=', 'user_details.kode_user')
+            ->where('user_details.id_upline', $this->getThisUser()->id_upline)
+            ->whereIn('user_details.jabatan', [2, 3]) // Kasir dan Teknisi
+            ->get(['users.*', 'user_details.*', 'users.id as id_user']);
+
+        // Base query untuk attendance
+        $attendanceQuery = Attendance::with(['user', 'user.userDetail']);
+
+        // Apply filters
+        if ($selectedEmployee) {
+            $attendanceQuery->where('user_id', $selectedEmployee);
+        } else {
+            // Hanya tampilkan karyawan dari upline yang sama
+            $employeeIds = $employees->pluck('id_user')->toArray();
+            $attendanceQuery->whereIn('user_id', $employeeIds);
+        }
+
+        if ($viewType == 'daily') {
+            // Filter untuk view harian
+            $attendanceQuery->whereDate('attendance_date', $selectedDate);
+        } else {
+            // Filter untuk view bulanan
+            $attendanceQuery->whereYear('attendance_date', $selectedYear)
+                            ->whereMonth('attendance_date', $selectedMonth);
+        }
+
+        // Get attendances
+        $attendances = $attendanceQuery->orderBy('attendance_date', 'desc')
+                                    ->orderBy('user_id')
+                                    ->paginate(50);
+
+        // Get statistics untuk summary
+        $stats = $this->getAttendanceStats($selectedEmployee, $selectedYear, $selectedMonth, $viewType, $selectedDate);
+
+        $content = view('admin.page.attendance-history', compact(
+            'page', 'attendances', 'employees', 'selectedEmployee',
+            'selectedMonth', 'selectedYear', 'viewType', 'selectedDate', 'stats'
+        ))->render();
+
+        return view('admin.layout.blank_page', compact('page', 'content'));
+    }
+
+    /**
+     * Get Attendance Statistics
+     */
+    private function getAttendanceStats($employeeId, $year, $month, $viewType, $date)
+    {
+        $query = Attendance::query();
+
+        if ($employeeId) {
+            $query->where('user_id', $employeeId);
+        } else {
+            $employees = User::join('user_details', 'users.id', '=', 'user_details.kode_user')
+                ->where('user_details.id_upline', $this->getThisUser()->id_upline)
+                ->whereIn('user_details.jabatan', [2, 3])
+                ->get(['users.id as id_user']);
+            $employeeIds = $employees->pluck('id_user')->toArray();
+            $query->whereIn('user_id', $employeeIds);
+        }
+
+        if ($viewType == 'daily') {
+            $query->whereDate('attendance_date', $date);
+        } else {
+            $query->whereYear('attendance_date', $year)
+                ->whereMonth('attendance_date', $month);
+        }
+
+        $totalAttendance = $query->count();
+        $presentCount = $query->where('status', 'hadir')->count();
+        $absentCount = $query->whereIn('status', ['alpha', 'izin', 'sakit', 'cuti'])->count();
+        $lateCount = $query->where('late_minutes', '>', 0)->count();
+        $avgLateMinutes = $query->where('late_minutes', '>', 0)->avg('late_minutes') ?? 0;
+
+        return [
+            'total_attendance' => $totalAttendance,
+            'present_count' => $presentCount,
+            'absent_count' => $absentCount,
+            'late_count' => $lateCount,
+            'avg_late_minutes' => round($avgLateMinutes, 2),
+            'attendance_rate' => $totalAttendance > 0 ? round(($presentCount / $totalAttendance) * 100, 2) : 0
+        ];
+    }
+
+    /**
+     * Export Attendance History to Excel
+     */
+    public function exportAttendanceHistory(Request $request)
+    {
+        $selectedEmployee = $request->employee_id;
+        $selectedMonth = $request->month ?? date('m');
+        $selectedYear = $request->year ?? date('Y');
+        $viewType = $request->view_type ?? 'monthly';
+        $selectedDate = $request->date ?? date('Y-m-d');
+
+        // Get employees for filter
+        $employees = User::join('user_details', 'users.id', '=', 'user_details.kode_user')
+            ->where('user_details.id_upline', $this->getThisUser()->id_upline)
+            ->whereIn('user_details.jabatan', [2, 3])
+            ->get(['users.*', 'user_details.*', 'users.id as id_user']);
+
+        // Base query untuk attendance
+        $attendanceQuery = Attendance::with(['user', 'user.userDetail']);
+
+        // Apply filters
+        if ($selectedEmployee) {
+            $attendanceQuery->where('user_id', $selectedEmployee);
+        } else {
+            $employeeIds = $employees->pluck('id_user')->toArray();
+            $attendanceQuery->whereIn('user_id', $employeeIds);
+        }
+
+        if ($viewType == 'daily') {
+            $attendanceQuery->whereDate('attendance_date', $selectedDate);
+        } else {
+            $attendanceQuery->whereYear('attendance_date', $selectedYear)
+                            ->whereMonth('attendance_date', $selectedMonth);
+        }
+
+        $attendances = $attendanceQuery->orderBy('attendance_date', 'desc')
+                                    ->orderBy('user_id')
+                                    ->get();
+
+        // Generate filename
+        $filename = 'riwayat_absensi_' . ($viewType == 'daily' ? $selectedDate : $selectedYear . '_' . $selectedMonth) . '.csv';
+
+        // Create CSV content
+        $csvContent = "Nama,Tanggal,Check In,Check Out,Status,Keterlambatan (menit),Lokasi,Keterangan\n";
+
+        foreach ($attendances as $attendance) {
+            $csvContent .= '"' . $attendance->user->name . '",';
+            $csvContent .= '"' . Carbon::parse($attendance->attendance_date)->format('d/m/Y') . '",';
+            $csvContent .= '"' . ($attendance->check_in ? Carbon::parse($attendance->check_in)->format('H:i') : '-') . '",';
+            $csvContent .= '"' . ($attendance->check_out ? Carbon::parse($attendance->check_out)->format('H:i') : '-') . '",';
+            $csvContent .= '"' . ucfirst($attendance->status) . '",';
+            $csvContent .= '"' . ($attendance->late_minutes ?? 0) . '",';
+            $csvContent .= '"' . ($attendance->location ?? '-') . '",';
+            $csvContent .= '"' . ($attendance->note ?? '-') . '"';
+            $csvContent .= "\n";
+        }
+
+        return response($csvContent)
+            ->header('Content-Type', 'text/csv')
+            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+    }
+
+    /**
+     * Attendance Detail - Detail record absensi tertentu
+     */
+    public function attendanceDetail($id)
+    {
+        $page = "Detail Absensi";
+
+        $attendance = Attendance::with(['user', 'user.userDetail'])
+            ->findOrFail($id);
+
+        // Get work schedule for that day
+        $schedule = WorkSchedule::where('user_id', $attendance->user_id)
+            ->where('day_of_week', Carbon::parse($attendance->attendance_date)->format('l'))
+            ->first();
+
+        // Get violations for that day
+        $violations = Violation::where('user_id', $attendance->user_id)
+            ->whereDate('violation_date', $attendance->attendance_date)
+            ->get();
+
+        // Calculate work duration if both check in and check out exist
+        $workDuration = null;
+        if ($attendance->check_in && $attendance->check_out) {
+            $checkIn = Carbon::parse($attendance->check_in);
+            $checkOut = Carbon::parse($attendance->check_out);
+            $workDuration = $checkIn->diff($checkOut);
+        }
+
+        // Get previous and next attendance for navigation
+        $previousAttendance = Attendance::where('user_id', $attendance->user_id)
+            ->where('attendance_date', '<', $attendance->attendance_date)
+            ->orderBy('attendance_date', 'desc')
+            ->first();
+
+        $nextAttendance = Attendance::where('user_id', $attendance->user_id)
+            ->where('attendance_date', '>', $attendance->attendance_date)
+            ->orderBy('attendance_date', 'asc')
+            ->first();
+
+        $content = view('admin.page.attendance-detail', compact(
+            'page', 'attendance', 'schedule', 'violations', 'workDuration',
+            'previousAttendance', 'nextAttendance'
+        ))->render();
+
+        return view('admin.layout.blank_page', compact('page', 'content'));
+    }
+
+    /**
+     * Delete Attendance Record
+     */
+    public function deleteAttendance(Request $request)
+    {
+        $request->validate([
+            'attendance_id' => 'required|exists:attendances,id',
+            'reason' => 'required|string|min:10'
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            $attendance = Attendance::findOrFail($request->attendance_id);
+
+            // Log the deletion
+            Log::info('Attendance deleted', [
+                'attendance_id' => $attendance->id,
+                'user_id' => $attendance->user_id,
+                'user_name' => $attendance->user->name,
+                'attendance_date' => $attendance->attendance_date,
+                'deleted_by' => auth()->id(),
+                'reason' => $request->reason
+            ]);
+
+            // Delete photos if exist
+            if ($attendance->photo_in && Storage::disk('public')->exists($attendance->photo_in)) {
+                Storage::disk('public')->delete($attendance->photo_in);
+            }
+            if ($attendance->photo_out && Storage::disk('public')->exists($attendance->photo_out)) {
+                Storage::disk('public')->delete($attendance->photo_out);
+            }
+
+            $attendance->delete();
+
+            DB::commit();
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Record absensi berhasil dihapus'
+                ]);
+            }
+
+            return redirect()->route('admin.attendance.history')
+                ->with('success', 'Record absensi berhasil dihapus');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error deleting attendance: ' . $e->getMessage());
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal menghapus record: ' . $e->getMessage()
+                ], 500);
+            }
+
+            return redirect()->back()
+                ->with('error', 'Gagal menghapus record: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Edit/Update Attendance Record
+     */
+    public function updateAttendance(Request $request)
+    {
+        $request->validate([
+            'attendance_id' => 'required|exists:attendances,id',
+            'check_in' => 'nullable|date_format:H:i',
+            'check_out' => 'nullable|date_format:H:i',
+            'status' => 'required|in:hadir,izin,sakit,alpha,cuti',
+            'note' => 'nullable|string',
+            'reason' => 'required|string|min:10'
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            $attendance = Attendance::findOrFail($request->attendance_id);
+            $oldData = $attendance->toArray();
+
+            // Calculate new late minutes if check_in is changed
+            $lateMinutes = 0;
+            if ($request->check_in && $request->status == 'hadir') {
+                $schedule = WorkSchedule::where('user_id', $attendance->user_id)
+                    ->where('day_of_week', Carbon::parse($attendance->attendance_date)->format('l'))
+                    ->first();
+
+                if ($schedule) {
+                    $checkInTime = Carbon::parse($attendance->attendance_date . ' ' . $request->check_in);
+                    $scheduleStartTime = Carbon::parse($attendance->attendance_date . ' ' . $schedule->start_time);
+
+                    if ($checkInTime->gt($scheduleStartTime)) {
+                        $lateMinutes = $checkInTime->diffInMinutes($scheduleStartTime);
+                    }
+                }
+            }
+
+            // Update attendance
+            $attendance->update([
+                'check_in' => $request->check_in ? Carbon::parse($attendance->attendance_date . ' ' . $request->check_in) : null,
+                'check_out' => $request->check_out ? Carbon::parse($attendance->attendance_date . ' ' . $request->check_out) : null,
+                'status' => $request->status,
+                'note' => $request->note,
+                'late_minutes' => $lateMinutes,
+                'updated_at' => now()
+            ]);
+
+            // Log the update
+            Log::info('Attendance updated', [
+                'attendance_id' => $attendance->id,
+                'user_id' => $attendance->user_id,
+                'user_name' => $attendance->user->name,
+                'old_data' => $oldData,
+                'new_data' => $attendance->fresh()->toArray(),
+                'updated_by' => auth()->id(),
+                'reason' => $request->reason
+            ]);
+
+            DB::commit();
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Record absensi berhasil diupdate',
+                    'data' => $attendance->fresh()
+                ]);
+            }
+
+            return redirect()->back()
+                ->with('success', 'Record absensi berhasil diupdate');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error updating attendance: ' . $e->getMessage());
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal mengupdate record: ' . $e->getMessage()
+                ], 500);
+            }
+
+            return redirect()->back()
+                ->with('error', 'Gagal mengupdate record: ' . $e->getMessage());
+        }
     }
 }

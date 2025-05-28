@@ -416,6 +416,42 @@
                                  </li>
                              </ul>
                          </li>
+                         {{-- absen --}}
+                         <li class="nav-item has-treeview @yield('attendance_menu')">
+                             <a href="#" class="nav-link @yield('attendance_link')">
+                                 <i class="nav-icon fas fa-calendar-check"></i>
+                                 <p>
+                                     Manajemen Absensi
+                                     <i class="right fas fa-arrow-left"></i>
+                                 </p>
+                             </a>
+                             <ul class="nav nav-treeview">
+                                 <li class="nav-item">
+                                     <a href="{{ route('admin.attendance.index') }}"
+                                         class="nav-link @yield('attendance')">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Absensi Hari Ini</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('admin.attendance.history') }}"
+                                         class="nav-link @yield('attendance_history')">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Riwayat Absensi</p>
+                                     </a>
+                                 </li>
+                             </ul>
+                         </li>
+
+                         <!-- Atau jika ingin menu terpisah -->
+                         <li class="nav-item">
+                             <a href="{{ route('admin.attendance.history') }}" class="nav-link @yield('attendance_history')">
+                                 <i class="nav-icon fas fa-history"></i>
+                                 <p>Riwayat Absensi</p>
+                                 <span class="badge badge-info right">New</span>
+                             </a>
+                         </li>
+                         {{-- absen --}}
                          <li class="nav-item has-treeview @yield('employee_management')">
                              <a href="#" class="nav-link @yield('employee_management')">
                                  <i class="nav-icon fas fa-users-cog"></i>

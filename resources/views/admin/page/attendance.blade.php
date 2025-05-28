@@ -10,10 +10,84 @@
                 <div class="card-title">
                     Absensi Karyawan - {{ \Carbon\Carbon::today()->format('d F Y') }}
                 </div>
+                <!-- Tambahkan ini ke dalam attendance.blade.php di bagian card-tools -->
+
                 <div class="card-tools">
-                    <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#modalAbsensi">
+                    <div class="btn-group mr-2">
+                        <!-- Link ke Riwayat Absensi -->
+                        <a href="{{ route('admin.attendance.history') }}" class="btn btn-info btn-sm">
+                            <i class="fas fa-history"></i> Riwayat Absensi
+                        </a>
+
+                        <!-- Export Hari Ini -->
+                        <a href="{{ route('admin.attendance.export', ['view_type' => 'daily', 'date' => date('Y-m-d')]) }}"
+                            class="btn btn-success btn-sm">
+                            <i class="fas fa-download"></i> Export Hari Ini
+                        </a>
+                    </div>
+
+                    <button type="button" class="btn btn-primary btn-sm" data-toggle="modal"
+                        data-target="#modalAbsensi">
                         <i class="fas fa-plus"></i> Absen Manual
                     </button>
+                </div>
+
+                <!-- Atau tambahkan statistik quick di atas tabel attendance.blade.php -->
+                <div class="row mb-3">
+                    <div class="col-md-3">
+                        <div class="info-box">
+                            <span class="info-box-icon bg-success">
+                                <i class="fas fa-user-check"></i>
+                            </span>
+                            <div class="info-box-content">
+                                <span class="info-box-text">Hadir Hari Ini</span>
+                                <span
+                                    class="info-box-number">{{ $attendances->where('status', 'hadir')->count() }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <div class="info-box">
+                            <span class="info-box-icon bg-warning">
+                                <i class="fas fa-clock"></i>
+                            </span>
+                            <div class="info-box-content">
+                                <span class="info-box-text">Terlambat</span>
+                                <span
+                                    class="info-box-number">{{ $attendances->where('late_minutes', '>', 0)->count() }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <div class="info-box">
+                            <span class="info-box-icon bg-danger">
+                                <i class="fas fa-user-times"></i>
+                            </span>
+                            <div class="info-box-content">
+                                <span class="info-box-text">Belum Absen</span>
+                                <span class="info-box-number">{{ $employees->count() - $attendances->count() }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <div class="info-box">
+                            <span class="info-box-icon bg-info">
+                                <i class="fas fa-history"></i>
+                            </span>
+                            <div class="info-box-content">
+                                <span class="info-box-text">Total Karyawan</span>
+                                <span class="info-box-number">{{ $employees->count() }}</span>
+                                <span class="info-box-more">
+                                    <a href="{{ route('admin.attendance.history') }}" class="text-white">
+                                        Lihat Riwayat <i class="fas fa-arrow-circle-right"></i>
+                                    </a>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="card-body">
@@ -124,8 +198,8 @@
                                     </td>
                                     <td>
                                         @if ($attendance && $attendance->late_minutes > 0)
-                                            <span class="badge badge-danger">{{ $attendance->late_minutes }}
-                                                menit</span>
+                                            <span class="badge badge-danger">@lateFormat($attendance->late_minutes)
+                                            </span>
                                         @else
                                             -
                                         @endif
@@ -166,15 +240,7 @@
     </div>
 </div>
 <div class="card-tools">
-    <div class="btn-group mr-2">
-        <a href="{{ route('admin.attendance.generate-qrcode', ['type' => 'check_in']) }}" class="btn btn-info btn-sm">
-            <i class="fas fa-qrcode"></i> QR Absen Masuk
-        </a>
-        <a href="{{ route('admin.attendance.generate-qrcode', ['type' => 'check_out']) }}"
-            class="btn btn-warning btn-sm">
-            <i class="fas fa-qrcode"></i> QR Absen Pulang
-        </a>
-    </div>
+
     <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#modalAbsensi">
         <i class="fas fa-plus"></i> Absen Manual
     </button>
@@ -193,11 +259,7 @@
                 @csrf
                 <div class="modal-body">
                     <input type="hidden" name="user_id" id="user_id_check_in">
-                    <div class="form-group">
-                        <label>Foto</label>
-                        <input type="file" name="photo" class="form-control-file" accept="image/*" capture="camera"
-                            required>
-                    </div>
+
                     <div class="form-group">
                         <label>Lokasi</label>
                         <input type="text" name="location" id="location_check_in" class="form-control" readonly

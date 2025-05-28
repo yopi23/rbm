@@ -9,23 +9,30 @@ class SalarySetting extends Model
 {
     use HasFactory;
 
+    protected $table = 'salary_settings';
+
     protected $fillable = [
         'user_id',
+        'compensation_type',
         'basic_salary',
         'service_percentage',
         'target_bonus',
         'monthly_target',
-        'is_active',
-        'created_by'
+        'percentage_value',
+        'created_by',
+        'is_active'
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
         'basic_salary' => 'decimal:2',
+        'service_percentage' => 'integer',
         'target_bonus' => 'decimal:2',
+        'monthly_target' => 'integer',
+        'percentage_value' => 'decimal:2',
+        'is_active' => 'boolean'
     ];
 
-    // app/Models/SalarySetting.php
+    // Relationships
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id');
@@ -35,5 +42,4 @@ class SalarySetting extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
-
 }

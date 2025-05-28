@@ -33,19 +33,17 @@ return new class extends Migration
         // Table for Salary Settings
         Schema::create('salary_settings', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('user_id');
-            $table->enum('compensation_type', ['fixed', 'percentage'])->default('fixed')->change();
-            $table->decimal('basic_salary', 15, 2)->default(0);
-            $table->integer('service_percentage')->default(40); // Persentase dari jasa service
-            $table->decimal('percentage_value', 5, 2)->nullable();
-            $table->decimal('target_bonus', 15, 2)->default(0);
-            $table->integer('monthly_target')->default(30); // Target unit per bulan
-            // $table->boolean('is_active')->default(true);
-            $table->unsignedBigInteger('created_by');
+            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->enum('compensation_type', ['fixed', 'percentage'])->default('fixed');
+            $table->decimal('basic_salary', 12, 2)->default(0);
+            $table->integer('service_percentage')->default(0);
+            $table->decimal('target_bonus', 12, 2)->default(0);
+            $table->integer('monthly_target')->default(0);
+            $table->decimal('percentage_value', 5, 2)->default(0);
+            $table->foreignId('created_by')->constrained('users')->onDelete('restrict');
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
 
-            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
-            $table->foreign('created_by')->references('id')->on('users')->onDelete('restrict');
         });
 
         // Table for Violations

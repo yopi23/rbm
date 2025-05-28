@@ -436,11 +436,16 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
     // Attendance Routes
     Route::prefix('admin/attendance')->group(function () {
         Route::get('/', [EmployeeManagementController::class, 'attendanceIndex'])->name('admin.attendance.index');
+
+        Route::get('/history', [EmployeeManagementController::class, 'attendanceHistoryIndex'])->name('admin.attendance.history');
+        Route::get('/export', [EmployeeManagementController::class, 'exportAttendanceHistory'])->name('admin.attendance.export');
+
         Route::post('/check-in', [EmployeeManagementController::class, 'attendanceCheckIn'])->name('admin.attendance.check-in');
         Route::post('/check-out', [EmployeeManagementController::class, 'attendanceCheckOut'])->name('admin.attendance.check-out');
         Route::post('/set-outside', [EmployeeManagementController::class, 'setOutsideOffice'])->name('admin.attendance.set-outside');
         Route::get('/reset-outside/{userId}', [EmployeeManagementController::class, 'resetOutsideOffice'])->name('admin.attendance.reset-outside');
         Route::post('/request-leave', [EmployeeManagementController::class, 'requestLeave'])->name('admin.attendance.request-leave');
+
 
     });
 
