@@ -22,7 +22,7 @@ class AuthController extends Controller
             ]);
 
             // Cek versi aplikasi terlebih dahulu
-            // $clientVersion = '2025.04.06';
+            // $clientVersion = '2025.06.02';
             $clientVersion = $request->input('version');
             $minVersion = '2025.06.02'; // versi minimum yang diizinkan
 
@@ -38,7 +38,7 @@ class AuthController extends Controller
             if (!Auth::attempt($request->only('email', 'password'))) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Invalid credentials',
+                    'message' => 'Data Tidak Cocok',
                 ], 401);
             }
 
@@ -67,7 +67,7 @@ class AuthController extends Controller
     {
         try {
             // Ambil versi dari request
-            // $clientVersion = '2025.04.06';
+            // $clientVersion = '2025.06.02';
             $clientVersion = $request->input('version');
             $minVersion = '2025.06.02'; // versi minimum yang diizinkan
 
