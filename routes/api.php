@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\StockOpnameController;
 use App\Http\Controllers\Api\CustomerApiController;
 use App\Http\Controllers\Admin\HpController;
 use App\Http\Controllers\Api\HpApiController;
+use App\Http\Controllers\Api\CommissionController;
 use App\Http\Controllers\Admin\EmployeeManagementController;
 /*
 |--------------------------------------------------------------------------
@@ -151,6 +152,11 @@ Route::middleware('auth:sanctum')->group(function () {
         // Get salary info for mobile
         Route::get('/salary/{userId}', [EmployeeManagementController::class, 'getSalaryInfo']);
     });
+
+
+    Route::get('/commissions/today', [CommissionController::class, 'getTodayCommissions']);
+    Route::get('/commissions/my-today', [CommissionController::class, 'getMyTodayCommission']);
+
 
 });
 

@@ -79,8 +79,19 @@ Route::post('/checkout/submit', [FrontControllerPesananController::class, 'buat_
 Route::get('search_kode_invite', [AjaxRequestController::class, 'search_kode_invite'])->name('search_kode_invite');
 
 // Route untuk form pengisian laci
+// Route::get('/laci/form', [LaciController::class, 'form'])->name('laci.form');
+// Route::post('/laci/store', [LaciController::class, 'store'])->name('laci.store');
+
 Route::get('/laci/form', [LaciController::class, 'form'])->name('laci.form');
 Route::post('/laci/store', [LaciController::class, 'store'])->name('laci.store');
+Route::post('/laci/updatereal', [LaciController::class, 'updatereal'])->name('laci.updatereal');
+Route::post('/laci/kategori', [LaciController::class, 'kategori_laci'])->name('kategori_laci');
+Route::delete('/laci/kategori', [LaciController::class, 'deleteKategoriLaci'])->name('delete_kategori_laci');
+
+// New DataTable routes
+Route::get('/laci/riwayat/data', [LaciController::class, 'getRiwayatData'])->name('laci.riwayat.data');
+Route::get('/laci/komisi/data', [LaciController::class, 'getKomisiData'])->name('laci.komisi.data');
+Route::get('/laci/penarikan/data', [LaciController::class, 'getPenarikanData'])->name('laci.penarikan.data');
 
 //admin
 Route::group(['middleware' => ['auth']], function () {
@@ -322,13 +333,13 @@ Route::group(['middleware' => ['auth']], function () {
         ->name('pembelian.search-spareparts-ajax');
 }); //admin
 
-Route::get('/laci/form', [LaciController::class, 'form'])->name('laci.form');
-Route::post('/laci/store', [LaciController::class, 'store'])->name('laci.store');
+// Route::get('/laci/form', [LaciController::class, 'form'])->name('laci.form');
+// Route::post('/laci/store', [LaciController::class, 'store'])->name('laci.store');
 Route::post('/laci/real', [LaciController::class, 'updatereal'])->name('laci.real');
 
-Route::delete('/kategori-laci', [LaciController::class, 'deleteKategoriLaci'])->name('delete_kategori_laci');
+// Route::delete('/kategori-laci', [LaciController::class, 'deleteKategoriLaci'])->name('delete_kategori_laci');
 
-Route::post('/kategori-laci', [LaciController::class, 'kategori_laci'])->name('kategori_laci');
+// Route::post('/kategori-laci', [LaciController::class, 'kategori_laci'])->name('kategori_laci');
 
 // baru di tambahkan
 Route::group(['middleware' => 'checkRole:0,1,2'], function () {
@@ -450,6 +461,29 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
         Route::get('/reset-outside/{userId}', [EmployeeManagementController::class, 'resetOutsideOffice'])->name('admin.attendance.reset-outside');
         Route::post('/request-leave', [EmployeeManagementController::class, 'requestLeave'])->name('admin.attendance.request-leave');
 
+        // Outside Office Management Routes
+    Route::group(['prefix' => 'outside-office'], function () {
+        Route::get('/history', [EmployeeManagementController::class, 'outsideOfficeHistoryIndex'])->name('admin.outside-office.history');
+
+        Route::get('/history-ajax', [EmployeeManagementController::class, 'outsideOfficeHistoryAjax'])->name('admin.outside-office.history-ajax');
+
+        Route::post('/mark-return', [EmployeeManagementController::class, 'markReturnFromOutside'])->name('admin.attendance.outside-office.mark-return');
+
+        Route::post('/mark-return-by-log', [EmployeeManagementController::class, 'markReturnByLog'])->name('admin.attendance.outside-office.mark-return-by-log');
+
+        Route::post('/violate-log', [EmployeeManagementController::class, 'violateLog'])->name('admin.attendance.outside-office.violate-log');
+
+        Route::get('/detail/{id}', [EmployeeManagementController::class, 'outsideOfficeDetail'])->name('admin.attendance.outside-office.detail');
+
+        Route::get('/export', [EmployeeManagementController::class, 'exportOutsideOfficeHistory'])->name('admin.attendance.outside-office.export');
+    });
+
+    // Update existing attendance routes
+    // Route::post('/attendance/set-outside', [EmployeeManagementController::class, 'setOutsideOffice'])
+    //     ->name('admin.attendance.set-outside');
+
+    // Route::get('/attendance/reset-outside/{userId}', [EmployeeManagementController::class, 'resetOutsideOffice'])
+    //     ->name('admin.attendance.reset-outside');
 
     });
 

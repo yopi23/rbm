@@ -18,13 +18,13 @@ class AuthController extends Controller
             $request->validate([
                 'email' => 'required|email',
                 'password' => 'required',
-                'version' => 'required', // Tambahkan validasi untuk versi
+                // 'version' => 'required', // Tambahkan validasi untuk versi
             ]);
 
             // Cek versi aplikasi terlebih dahulu
             // $clientVersion = '2025.04.06';
             $clientVersion = $request->input('version');
-            $minVersion = '2025.04.06'; // versi minimum yang diizinkan
+            $minVersion = '2025.06.02'; // versi minimum yang diizinkan
 
             if (version_compare($clientVersion, $minVersion, '<')) {
                 return response()->json([
@@ -67,9 +67,9 @@ class AuthController extends Controller
     {
         try {
             // Ambil versi dari request
+            // $clientVersion = '2025.04.06';
             $clientVersion = $request->input('version');
-            // $clientVersion = $request->input('version');
-            $minVersion = '2025.04.06'; // versi minimum yang diizinkan
+            $minVersion = '2025.06.02'; // versi minimum yang diizinkan
 
             // Cek versi aplikasi terlebih dahulu, terlepas dari token
             if (version_compare($clientVersion, $minVersion, '<')) {

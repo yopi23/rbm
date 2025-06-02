@@ -7,6 +7,7 @@ use App\Models\Attendance;
 use App\Models\SalarySetting;
 use App\Models\Violation;
 use App\Models\EmployeeMonthlyReport;
+use App\Models\OutsideOfficeLog;
 use App\Models\WorkSchedule;
 use App\Models\User;
 use App\Models\UserDetail;
@@ -681,7 +682,7 @@ class EmployeeManagementController extends Controller
         $totalServiceAmount = $services->sum('total_biaya');
         $totalPartCost = $services->sum('harga_sp');
 
-        // Hitung kompensasi berdasarkan tipe
+        // === HITUNG KOMPENSASI BERDASARKAN TIPE ===
         $totalCommission = 0;
         $totalBonus = 0;
         $basicSalary = 0;
@@ -711,7 +712,7 @@ class EmployeeManagementController extends Controller
             $totalCommission = $totalCommission * $attendanceRate;
         }
 
-        // Hitung penalties
+        // === HITUNG PENALTIES DARI VIOLATIONS BIASA ===
         $violations = Violation::where('user_id', $userId)
             ->where('status', 'processed')
             ->whereBetween('violation_date', [$startDate, $endDate])
@@ -719,7 +720,7 @@ class EmployeeManagementController extends Controller
 
         $totalPenalties = $violations->sum('penalty_amount');
 
-        // Tambahkan penalty dari persentase
+        // Tambahkan penalty dari persentase violations biasa
         foreach ($violations as $violation) {
             if ($violation->penalty_percentage) {
                 $penaltyAmount = ($totalCommission * $violation->penalty_percentage) / 100;
@@ -727,10 +728,41 @@ class EmployeeManagementController extends Controller
             }
         }
 
-        // Hitung gaji final
+        // === HITUNG PELANGGARAN IZIN KELUAR KANTOR ===
+        $outsideOfficeViolations = OutsideOfficeLog::where('user_id', $userId)
+            ->where('status', 'violated')
+            ->whereYear('log_date', $year)
+            ->whereMonth('log_date', $month)
+            ->get();
+
+        $outsideOfficePenalties = 0;
+        $outsideOfficeSummary = [];
+
+        foreach ($outsideOfficeViolations as $violation) {
+            if ($violation->late_return_minutes > 15) {
+                // Penalty berdasarkan keterlambatan
+                $penaltyPercentage = $this->calculateOutsideOfficePenalty($violation->late_return_minutes);
+                $penaltyAmount = ($totalCommission * $penaltyPercentage) / 100;
+                $outsideOfficePenalties += $penaltyAmount;
+
+                // Simpan detail untuk summary
+                $outsideOfficeSummary[] = [
+                    'date' => $violation->log_date->format('d/m/Y'),
+                    'late_minutes' => $violation->late_return_minutes,
+                    'penalty_percentage' => $penaltyPercentage,
+                    'penalty_amount' => $penaltyAmount,
+                    'reason' => $violation->reason
+                ];
+            }
+        }
+
+        // Tambahkan ke total penalties
+        $totalPenalties += $outsideOfficePenalties;
+
+        // === HITUNG GAJI FINAL ===
         $finalSalary = $basicSalary + $totalCommission + $totalBonus - $totalPenalties;
 
-        // Simpan laporan
+        // === SIMPAN LAPORAN ===
         EmployeeMonthlyReport::updateOrCreate(
             [
                 'user_id' => $userId,
@@ -751,6 +783,9 @@ class EmployeeManagementController extends Controller
                 'total_present_days' => $totalPresentDays,
                 'total_absent_days' => $totalAbsentDays,
                 'total_late_minutes' => $totalLateMinutes,
+                'outside_office_violations' => $outsideOfficeViolations->count(),
+                'outside_office_penalties' => $outsideOfficePenalties,
+                'outside_office_summary' => json_encode($outsideOfficeSummary),
                 'status' => 'draft',
                 'processed_by' => auth()->id(),
                 'percentage_used' => $salarySetting->compensation_type == 'percentage'
@@ -760,53 +795,713 @@ class EmployeeManagementController extends Controller
         );
     }
 
+    /**
+     * Helper method untuk calculate outside office penalty percentage
+     */
+    private function calculateOutsideOfficePenalty(int $lateMinutes): int
+    {
+        // Penalty bertingkat berdasarkan keterlambatan kembali
+        if ($lateMinutes <= 30) return 2;      // 2% untuk 15-30 menit
+        if ($lateMinutes <= 60) return 5;      // 5% untuk 30-60 menit
+        if ($lateMinutes <= 120) return 10;    // 10% untuk 1-2 jam
+        return 15;                             // 15% untuk lebih dari 2 jam
+    }
+
     // ===================================================================
     // OUTSIDE OFFICE MANAGEMENT
     // ===================================================================
 
     public function setOutsideOffice(Request $request)
-    {
+{
+    // Log request awal
+    Log::info('=== SET OUTSIDE OFFICE REQUEST START ===', [
+        'request_data' => $request->all(),
+        'user_agent' => $request->userAgent(),
+        'ip_address' => $request->ip(),
+        'auth_user_id' => auth()->id(),
+        'timestamp' => now()
+    ]);
+
+    try {
+        // Validasi request
+        Log::info('Starting validation for outside office request');
+
         $request->validate([
             'user_id' => 'required|exists:users,id',
-            'note' => 'required|string',
+            'reason' => 'required|string',
             'start_time' => 'required|date',
-            'end_time' => 'nullable|date|after:start_time',
+            'end_time' => 'required|date|after:start_time',
+            'duration_hours' => 'nullable|integer|min:1|max:8', // Maksimal 8 jam
+        ]);
+
+        Log::info('Validation passed for outside office request');
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        Log::error('Validation failed for outside office request', [
+            'errors' => $e->errors(),
+            'request_data' => $request->all()
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data tidak valid',
+                'errors' => $e->errors()
+            ], 422);
+        }
+
+        return redirect()->back()->withErrors($e->errors())->withInput();
+    }
+
+    try {
+        Log::info('Starting database transaction for outside office');
+        DB::beginTransaction();
+
+        // Parse tanggal dan waktu
+        Log::info('Parsing start and end time', [
+            'start_time_raw' => $request->start_time,
+            'end_time_raw' => $request->end_time
+        ]);
+
+        $startTime = Carbon::parse($request->start_time);
+        $endTime = Carbon::parse($request->end_time);
+        $logDate = $startTime->toDateString();
+
+        Log::info('Parsed times successfully', [
+            'start_time_parsed' => $startTime->toDateTimeString(),
+            'end_time_parsed' => $endTime->toDateTimeString(),
+            'log_date' => $logDate,
+            'duration_hours' => $endTime->diffInHours($startTime)
+        ]);
+
+        // Validasi durasi maksimal (8 jam)
+        $durationHours = $endTime->diffInHours($startTime);
+        if ($durationHours > 8) {
+            Log::warning('Duration exceeds maximum limit', [
+                'duration_hours' => $durationHours,
+                'max_allowed' => 8
+            ]);
+
+            DB::rollBack();
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Durasi izin keluar maksimal 8 jam'
+                ], 400);
+            }
+
+            return redirect()->back()->with('error', 'Durasi izin keluar maksimal 8 jam');
+        }
+
+        // Cek apakah sudah ada izin aktif hari ini
+        Log::info('Checking for existing active outside office log', [
+            'user_id' => $request->user_id,
+            'log_date' => $logDate
+        ]);
+
+        $existingLog = OutsideOfficeLog::where('user_id', $request->user_id)
+            ->whereDate('log_date', $logDate)
+            ->where('status', 'active')
+            ->first();
+
+        if ($existingLog) {
+            Log::warning('User already has active outside office log today', [
+                'user_id' => $request->user_id,
+                'existing_log_id' => $existingLog->id,
+                'existing_log_data' => $existingLog->toArray()
+            ]);
+
+            DB::rollBack();
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Karyawan sudah memiliki izin keluar aktif hari ini'
+                ], 400);
+            }
+
+            return redirect()->back()->with('error', 'Karyawan sudah memiliki izin keluar aktif hari ini');
+        }
+
+        Log::info('No existing active log found, proceeding to create new log');
+
+        // Buat log izin keluar
+        $logData = [
+            'user_id' => $request->user_id,
+            'log_date' => $logDate,
+            'start_time' => $startTime,
+            'end_time' => $endTime,
+            'reason' => $request->reason,
+            'status' => 'active',
+            'approval_status' => 'approved', // Auto approve untuk admin
+            'approved_by' => auth()->id(),
+            'created_by' => auth()->id()
+        ];
+
+        Log::info('Creating outside office log with data', [
+            'log_data' => $logData
+        ]);
+
+        $outsideLog = OutsideOfficeLog::create($logData);
+
+        Log::info('Outside office log created successfully', [
+            'log_id' => $outsideLog->id,
+            'created_log_data' => $outsideLog->toArray()
+        ]);
+
+        // Update status di user_details untuk tracking real-time
+        Log::info('Updating user details for real-time tracking', [
+            'user_id' => $request->user_id
         ]);
 
         $userDetail = UserDetail::where('kode_user', $request->user_id)->first();
 
         if (!$userDetail) {
-            return redirect()->back()->with('error', 'User detail tidak ditemukan');
+            Log::warning('User detail not found', [
+                'user_id' => $request->user_id
+            ]);
+        } else {
+            Log::info('Found user detail, updating status', [
+                'user_detail_id' => $userDetail->id,
+                'current_status' => [
+                    'is_outside_office' => $userDetail->is_outside_office,
+                    'outside_note' => $userDetail->outside_note,
+                    'current_outside_log_id' => $userDetail->current_outside_log_id ?? null
+                ]
+            ]);
+
+            $userDetail->update([
+                'is_outside_office' => true,
+                'outside_note' => $request->reason,
+                'current_outside_log_id' => $outsideLog->id
+            ]);
+
+            Log::info('User detail updated successfully', [
+                'updated_status' => [
+                    'is_outside_office' => true,
+                    'outside_note' => $request->reason,
+                    'current_outside_log_id' => $outsideLog->id
+                ]
+            ]);
         }
 
-        $userDetail->update([
-            'is_outside_office' => true,
-            'outside_note' => $request->note,
-            'outside_start_time' => $request->start_time,
-            'outside_end_time' => $request->end_time,
+        Log::info('Committing database transaction');
+        DB::commit();
+
+        Log::info('=== SET OUTSIDE OFFICE SUCCESS ===', [
+            'log_id' => $outsideLog->id,
+            'user_id' => $request->user_id,
+            'duration_hours' => $durationHours
         ]);
 
-        return redirect()->back()->with('success', 'Status keluar kantor berhasil diupdate');
-    }
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Izin keluar berhasil dicatat',
+                'data' => $outsideLog
+            ]);
+        }
 
-    public function resetOutsideOffice($userId)
-    {
+        return redirect()->back()->with('success', 'Izin keluar berhasil dicatat');
+
+    } catch (\Exception $e) {
+        Log::error('=== SET OUTSIDE OFFICE ERROR ===', [
+            'error_message' => $e->getMessage(),
+            'error_file' => $e->getFile(),
+            'error_line' => $e->getLine(),
+            'error_trace' => $e->getTraceAsString(),
+            'request_data' => $request->all(),
+            'auth_user_id' => auth()->id()
+        ]);
+
+        DB::rollBack();
+        Log::info('Database transaction rolled back due to error');
+
+        $errorMessage = 'Gagal mencatat izin keluar: ' . $e->getMessage();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => false,
+                'message' => $errorMessage,
+                'debug_info' => config('app.debug') ? [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'trace' => $e->getTraceAsString()
+                ] : null
+            ], 500);
+        }
+
+        return redirect()->back()->with('error', $errorMessage);
+    }
+}
+
+/**
+ * Mark Return from Outside Office
+ */
+public function markReturnFromOutside(Request $request)
+{
+    $request->validate([
+        'user_id' => 'required|exists:users,id',
+        'actual_return_time' => 'nullable|date',
+        'return_note' => 'nullable|string'
+    ]);
+
+    try {
+        DB::beginTransaction();
+
+        $userDetail = UserDetail::where('kode_user', $request->user_id)->first();
+
+        if (!$userDetail || !$userDetail->is_outside_office) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Karyawan tidak sedang dalam status keluar kantor'
+            ], 400);
+        }
+
+        // Cari log aktif
+        $activeLog = OutsideOfficeLog::where('user_id', $request->user_id)
+            ->where('status', 'active')
+            ->latest()
+            ->first();
+
+        if (!$activeLog) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tidak ditemukan log izin keluar yang aktif'
+            ], 404);
+        }
+
+        // Mark as returned
+        $activeLog->markAsReturned();
+
+        // Update user_details
+        $userDetail->update([
+            'is_outside_office' => false,
+            'outside_note' => null,
+            'current_outside_log_id' => null
+        ]);
+
+        DB::commit();
+
+        $message = 'Kembali dari izin keluar berhasil dicatat';
+        if ($activeLog->late_return_minutes > 0) {
+            $message .= " (Terlambat {$activeLog->late_return_minutes} menit)";
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'data' => $activeLog->fresh()
+            ]);
+        }
+
+        return redirect()->back()->with('success', $message);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Error marking return from outside: ' . $e->getMessage());
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mencatat kembali: ' . $e->getMessage()
+            ], 500);
+        }
+
+        return redirect()->back()->with('error', 'Gagal mencatat kembali: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Reset Outside Office Status (Emergency)
+ */
+public function resetOutsideOffice($userId)
+{
+    try {
+        DB::beginTransaction();
+
         $userDetail = UserDetail::where('kode_user', $userId)->first();
 
         if (!$userDetail) {
             return redirect()->back()->with('error', 'User detail tidak ditemukan');
         }
 
+        // Reset semua log aktif
+        OutsideOfficeLog::where('user_id', $userId)
+            ->where('status', 'active')
+            ->update([
+                'status' => 'violated',
+                'violation_note' => 'Reset oleh admin: ' . auth()->user()->name,
+                'actual_return_time' => Carbon::now()
+            ]);
+
+        // Reset user detail
         $userDetail->update([
             'is_outside_office' => false,
             'outside_note' => null,
-            'outside_start_time' => null,
-            'outside_end_time' => null,
+            'current_outside_log_id' => null
         ]);
 
+        DB::commit();
+
         return redirect()->back()->with('success', 'Status keluar kantor berhasil direset');
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Error resetting outside office: ' . $e->getMessage());
+        return redirect()->back()->with('error', 'Gagal mereset status: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Outside Office History Index
+ */
+public function outsideOfficeHistoryIndex(Request $request)
+{
+    $page = "Riwayat Izin Keluar Kantor";
+
+    $selectedEmployee = $request->employee_id;
+    $selectedMonth = $request->month ?? date('m');
+    $selectedYear = $request->year ?? date('Y');
+    $status = $request->status; // active, completed, violated
+
+    // Get employees
+    $employees = User::join('user_details', 'users.id', '=', 'user_details.kode_user')
+        ->where('user_details.id_upline', $this->getThisUser()->id_upline)
+        ->whereIn('user_details.jabatan', [2, 3])
+        ->get(['users.*', 'user_details.*', 'users.id as id_user']);
+
+    // Build query
+    $logsQuery = OutsideOfficeLog::with(['user', 'approvedBy', 'createdBy']);
+
+    if ($selectedEmployee) {
+        $logsQuery->where('user_id', $selectedEmployee);
+    } else {
+        $employeeIds = $employees->pluck('id_user')->toArray();
+        $logsQuery->whereIn('user_id', $employeeIds);
     }
 
+    $logsQuery->whereYear('log_date', $selectedYear)
+             ->whereMonth('log_date', $selectedMonth);
+
+    if ($status) {
+        $logsQuery->where('status', $status);
+    }
+
+    $outsideLogs = $logsQuery->orderBy('log_date', 'desc')
+                            ->orderBy('start_time', 'desc')
+                            ->paginate(50);
+
+    // Get statistics
+    $stats = $this->getOutsideOfficeStats($selectedEmployee, $selectedYear, $selectedMonth);
+
+    $content = view('admin.page.outside-office-history', compact(
+        'page', 'outsideLogs', 'employees', 'selectedEmployee',
+        'selectedMonth', 'selectedYear', 'status', 'stats'
+    ))->render();
+
+    return view('admin.layout.blank_page', compact('page', 'content'));
+}
+
+private function getOutsideOfficeStats($employeeId, $year, $month)
+{
+    $query = OutsideOfficeLog::query();
+
+    if ($employeeId) {
+        $query->where('user_id', $employeeId);
+    } else {
+        $employees = User::join('user_details', 'users.id', '=', 'user_details.kode_user')
+            ->where('user_details.id_upline', $this->getThisUser()->id_upline)
+            ->whereIn('user_details.jabatan', [2, 3])
+            ->get(['users.id as id_user']);
+        $employeeIds = $employees->pluck('id_user')->toArray();
+        $query->whereIn('user_id', $employeeIds);
+    }
+
+    $query->whereYear('log_date', $year)
+          ->whereMonth('log_date', $month);
+
+    return [
+        'total_requests' => $query->count(),
+        'active_requests' => $query->where('status', 'active')->count(),
+        'completed_requests' => $query->where('status', 'completed')->count(),
+        'violated_requests' => $query->where('status', 'violated')->count(),
+        'avg_duration_hours' => round($query->whereNotNull('end_time')->avg(DB::raw('TIMESTAMPDIFF(MINUTE, start_time, end_time) / 60')), 2),
+        'total_late_minutes' => $query->sum('late_return_minutes')
+    ];
+}
+/**
+ * Outside Office Detail
+ */
+public function outsideOfficeDetail($id)
+{
+    try {
+        $log = OutsideOfficeLog::with(['user', 'user.userDetail', 'approvedBy', 'createdBy'])->findOrFail($id);
+
+        $html = view('admin.partials.outside-office-detail', compact('log'))->render();
+
+        return response()->json([
+            'success' => true,
+            'html' => $html
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Error fetching outside office detail: ' . $e->getMessage());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal memuat detail: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * Mark Return by Log ID
+ */
+public function markReturnByLog(Request $request)
+{
+    $request->validate([
+        'log_id' => 'required|exists:outside_office_logs,id'
+    ]);
+
+    try {
+        DB::beginTransaction();
+
+        $log = OutsideOfficeLog::with('user')->findOrFail($request->log_id);
+
+        if ($log->status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Log ini sudah tidak aktif'
+            ], 400);
+        }
+
+        // Calculate late return minutes
+        $now = Carbon::now();
+        $expectedReturnTime = Carbon::parse($log->end_time);
+        $lateMinutes = 0;
+
+        if ($now->gt($expectedReturnTime)) {
+            $lateMinutes = $now->diffInMinutes($expectedReturnTime);
+        }
+
+        // Determine status based on late minutes
+        $status = 'completed';
+        if ($lateMinutes > 15) {
+            $status = 'violated';
+        }
+
+        // Update log
+        $log->update([
+            'actual_return_time' => $now,
+            'late_return_minutes' => $lateMinutes,
+            'status' => $status,
+            'updated_at' => $now
+        ]);
+
+        // Update user detail
+        $userDetail = UserDetail::where('kode_user', $log->user_id)->first();
+        if ($userDetail) {
+            $userDetail->update([
+                'is_outside_office' => false,
+                'outside_note' => null,
+                'current_outside_log_id' => null
+            ]);
+        }
+
+        DB::commit();
+
+        $message = "Kembali dari izin keluar berhasil dicatat untuk {$log->user->name}";
+        if ($lateMinutes > 0) {
+            $message .= " (Terlambat {$lateMinutes} menit)";
+            if ($status === 'violated') {
+                $message .= " - Ditandai sebagai pelanggaran";
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'data' => [
+                'log_id' => $log->id,
+                'status' => $status,
+                'late_minutes' => $lateMinutes,
+                'actual_return_time' => $now->format('Y-m-d H:i:s')
+            ]
+        ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Error marking return by log: ' . $e->getMessage());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal mencatat kembali: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * Violate Log (Reset as violation)
+ */
+public function violateLog(Request $request)
+{
+    $request->validate([
+        'log_id' => 'required|exists:outside_office_logs,id',
+        'reason' => 'required|string|min:5'
+    ]);
+
+    try {
+        DB::beginTransaction();
+
+        $log = OutsideOfficeLog::with('user')->findOrFail($request->log_id);
+
+        if ($log->status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Log ini sudah tidak aktif'
+            ], 400);
+        }
+
+        // Calculate late minutes from expected return time
+        $now = Carbon::now();
+        $expectedReturnTime = Carbon::parse($log->end_time);
+        $lateMinutes = $now->gt($expectedReturnTime) ? $now->diffInMinutes($expectedReturnTime) : 0;
+
+        $log->update([
+            'status' => 'violated',
+            'violation_note' => "Reset oleh admin: {$request->reason}",
+            'actual_return_time' => $now,
+            'late_return_minutes' => $lateMinutes,
+            'updated_at' => $now
+        ]);
+
+        // Update user detail
+        $userDetail = UserDetail::where('kode_user', $log->user_id)->first();
+        if ($userDetail) {
+            $userDetail->update([
+                'is_outside_office' => false,
+                'outside_note' => null,
+                'current_outside_log_id' => null
+            ]);
+        }
+
+        DB::commit();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Log {$log->user->name} berhasil direset sebagai pelanggaran",
+            'data' => [
+                'log_id' => $log->id,
+                'status' => 'violated',
+                'violation_note' => $log->violation_note
+            ]
+        ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Error violating log: ' . $e->getMessage());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal mereset log: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * Export Outside Office History
+ */
+public function exportOutsideOfficeHistory(Request $request)
+{
+    $selectedEmployee = $request->employee_id;
+    $selectedMonth = $request->month ?? date('m');
+    $selectedYear = $request->year ?? date('Y');
+    $status = $request->status;
+
+    // Get employees for filter
+    $employees = User::join('user_details', 'users.id', '=', 'user_details.kode_user')
+        ->where('user_details.id_upline', $this->getThisUser()->id_upline)
+        ->whereIn('user_details.jabatan', [2, 3])
+        ->get(['users.*', 'user_details.*', 'users.id as id_user']);
+
+    // Build query
+    $logsQuery = OutsideOfficeLog::with(['user', 'user.userDetail']);
+
+    if ($selectedEmployee) {
+        $logsQuery->where('user_id', $selectedEmployee);
+    } else {
+        $employeeIds = $employees->pluck('id_user')->toArray();
+        $logsQuery->whereIn('user_id', $employeeIds);
+    }
+
+    $logsQuery->whereYear('log_date', $selectedYear)
+             ->whereMonth('log_date', $selectedMonth);
+
+    if ($status) {
+        $logsQuery->where('status', $status);
+    }
+
+    $outsideLogs = $logsQuery->orderBy('log_date', 'desc')
+                            ->orderBy('start_time', 'desc')
+                            ->get();
+
+    // Generate filename
+    $filename = 'riwayat_izin_keluar_' . $selectedYear . '_' . $selectedMonth;
+    if ($selectedEmployee) {
+        $employeeName = $employees->where('id_user', $selectedEmployee)->first()->name ?? 'karyawan';
+        $filename .= '_' . str_replace(' ', '_', strtolower($employeeName));
+    }
+    $filename .= '.csv';
+
+    // Create CSV content
+    $csvContent = "Nama,Jabatan,Tanggal,Waktu Keluar,Waktu Kembali (Rencana),Waktu Kembali (Aktual),Durasi,Status,Keterlambatan (menit),Alasan,Catatan Pelanggaran\n";
+
+    foreach ($outsideLogs as $log) {
+        $jabatan = '';
+        if ($log->user->userDetail) {
+            $jabatan = $log->user->userDetail->jabatan == 2 ? 'Kasir' : 'Teknisi';
+        }
+
+        $duration = '';
+        if ($log->actual_return_time) {
+            $start = Carbon::parse($log->start_time);
+            $end = Carbon::parse($log->actual_return_time);
+            $duration = $start->diff($end)->format('%H:%I');
+        } elseif ($log->end_time) {
+            $start = Carbon::parse($log->start_time);
+            $end = Carbon::parse($log->end_time);
+            $duration = $start->diff($end)->format('%H:%I') . ' (rencana)';
+        }
+
+        $csvContent .= '"' . $log->user->name . '",';
+        $csvContent .= '"' . $jabatan . '",';
+        $csvContent .= '"' . Carbon::parse($log->log_date)->format('d/m/Y') . '",';
+        $csvContent .= '"' . Carbon::parse($log->start_time)->format('H:i') . '",';
+        $csvContent .= '"' . ($log->end_time ? Carbon::parse($log->end_time)->format('H:i') : '-') . '",';
+        $csvContent .= '"' . ($log->actual_return_time ? Carbon::parse($log->actual_return_time)->format('H:i') : '-') . '",';
+        $csvContent .= '"' . $duration . '",';
+        $csvContent .= '"' . ucfirst($log->status) . '",';
+        $csvContent .= '"' . ($log->late_return_minutes ?? 0) . '",';
+        $csvContent .= '"' . str_replace('"', '""', $log->reason) . '",';
+        $csvContent .= '"' . str_replace('"', '""', $log->violation_note ?? '') . '"';
+        $csvContent .= "\n";
+    }
+
+    return response($csvContent)
+        ->header('Content-Type', 'text/csv')
+        ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+}
+
+/**
+ * Get This User Helper
+ */
+public function getThisUser()
+{
+    return UserDetail::where('kode_user', auth()->id())->first();
+}
     // ===================================================================
     // MONTHLY REPORT VIEWS AND ACTIONS
     // ===================================================================

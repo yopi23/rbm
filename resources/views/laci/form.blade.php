@@ -119,8 +119,8 @@
                 @endif
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover ">
-                            <div class="thead">
+                        <table class="table table-striped table-hover" id="laciTable">
+                            <thead>
                                 <tr>
                                     <th>#</th>
                                     <th>Laci</th>
@@ -129,13 +129,13 @@
                                     <th>Keterangan</th>
                                     <th>Tanggal</th>
                                 </tr>
-                            </div>
-                            <div class="tbody">
+                            </thead>
+                            <tbody>
                                 @php
                                     $totalmasuk = 0;
                                     $totalkeluar = 0;
                                 @endphp
-                                @foreach ($riwayat as $index => $rincian)
+                                @foreach ($riwayatData as $index => $rincian)
                                     <tr>
                                         <td>{{ $index + 1 }}</td>
                                         <td>{{ $rincian->name_laci }}</td>
@@ -164,16 +164,16 @@
                                         $totalkeluar += $rincian->keluar;
                                     @endphp
                                 @endforeach
-                            </div>
-                            <tr class="table-success  font-weight-bold">
-                                <td colspan="2"><strong>Total</strong></td>
-                                <td>Rp.{{ number_format($totalmasuk) }},-</td>
-                                <td>
-                                    Rp.{{ number_format($totalkeluar) }},-
-                                </td>
-                                <td>Rp.{{ number_format($totalmasuk - $totalkeluar) }},-</td>
-                                <td colspan="3"></td>
-                            </tr>
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-success font-weight-bold">
+                                    <td colspan="2"><strong>Total</strong></td>
+                                    <td>Rp.{{ number_format($totalmasuk) }},-</td>
+                                    <td>Rp.{{ number_format($totalkeluar) }},-</td>
+                                    <td>Rp.{{ number_format($totalmasuk - $totalkeluar) }},-</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
@@ -186,27 +186,27 @@
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover ">
-                            <div class="thead">
+                        <table class="table table-striped table-hover" id="komisiTable">
+                            <thead>
                                 <tr>
                                     <th>#</th>
                                     <th>Teknisi</th>
                                     <th>Komisi</th>
                                     <th>Saldo</th>
                                     <th>Sparepart</th>
+                                    <th>Biaya</th>
                                     <th>Unit</th>
                                     <th>Pelanggan</th>
                                     <th>Keterangan</th>
                                     <th>Status</th>
-                                    <th>Tanggal</th>
                                 </tr>
-                            </div>
-                            <div class="tbody">
+                            </thead>
+                            <tbody>
                                 @php
                                     $totalkomisi = 0;
                                     $totalsp = 0;
                                 @endphp
-                                @foreach ($komisi as $index => $rincian)
+                                @foreach ($komisiData as $index => $rincian)
                                     <tr>
                                         <td>{{ $index + 1 }}</td>
                                         <td>{{ $rincian->fullname }}</td>
@@ -221,6 +221,9 @@
 
                                         <td>
                                             {{ number_format($rincian->harga_sp) }}
+                                        </td>
+                                        <td>
+                                            {{ number_format($rincian->total_biaya) }}
                                         </td>
                                         <td>
                                             {{ $rincian->type_unit }}
@@ -243,14 +246,16 @@
 
                                                 @default
                                             @endswitch
+                                            <br>{{ $rincian->updated_at }}
                                         </td>
-                                        <td>{{ $rincian->updated_at }}</td>
                                     </tr>
                                     @php
                                         $totalkomisi += $rincian->profit;
                                         $totalsp += $rincian->harga_sp;
                                     @endphp
                                 @endforeach
+                            </tbody>
+                            <tfoot>
                                 <tr class="table-primary font-weight-bold">
                                     <td colspan="2"><strong>Total</strong></td>
                                     <td colspan="2">Rp.{{ number_format($totalkomisi) }},-</td>
@@ -258,7 +263,7 @@
                                     <td>Rp.{{ number_format($totalsp) }},-</td> <!-- Column 4 total -->
                                     <td colspan="5"></td> <!-- Empty cells for other columns -->
                                 </tr>
-                            </div>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
@@ -272,8 +277,8 @@
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover ">
-                            <div class="thead">
+                        <table class="table table-striped table-hover" id="penarikanTable">
+                            <thead>
                                 <tr>
                                     <th>#</th>
                                     <th>Teknisi</th>
@@ -282,8 +287,8 @@
                                     <th>Keterangan</th>
                                     <th>Tanggal</th>
                                 </tr>
-                            </div>
-                            <div class="tbody">
+                            </thead>
+                            <tbody>
                                 @php
                                     $totalbon = 0;
 
@@ -308,12 +313,14 @@
 
                                     @endphp
                                 @endforeach
+                            </tbody>
+                            <tfoot>
                                 <tr class="table-danger font-weight-bold">
                                     <td colspan="2"><strong>Total</strong></td>
                                     <td>Rp.{{ number_format($totalbon) }},-</td>
-                                    <td colspan="5"></td> <!-- Empty cells for other columns -->
+                                    <td colspan="3"></td> <!-- Empty cells for other columns -->
                                 </tr>
-                            </div>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
@@ -352,25 +359,20 @@
         {{-- modal kategori --}}
     </div>
 </div>
+
+
 <script type="text/javascript">
     $(function() {
-        // const start = moment().subtract(29, 'days');
-        // const end = moment();
-        const start = moment($('#tgl_awal').val() || moment().startOf(
-            'day')); // Mengambil nilai tanggal awal yang sudah di-submit
-        const end = moment($('#tgl_akhir').val() ||
-            moment()); // Mengambil nilai tanggal akhir yang sudah di-submit
+        // Date Range Picker
+        const start = moment($('#tgl_awal').val() || moment().startOf('day'));
+        const end = moment($('#tgl_akhir').val() || moment());
 
         function cb(start, end) {
             $('#reportrange span').html(start.format('DD MMMM, YYYY') + ' - ' + end.format('DD MMMM, YYYY'));
-
-            // Kirim nilai tanggal awal dan tanggal akhir ke rute 'laporan'
             const startDate = start.format('YYYY-MM-DD');
             const endDate = end.format('YYYY-MM-DD');
-
             $('#tgl_awal').val(startDate);
             $('#tgl_akhir').val(endDate);
-
         }
 
         $('#reportrange').daterangepicker({
@@ -388,6 +390,105 @@
         }, cb);
 
         cb(start, end);
+
+        // DataTables Configuration
+        const dataTableConfig = {
+            "responsive": true,
+            "lengthChange": true,
+            "autoWidth": false,
+            "ordering": true,
+            "info": true,
+            "paging": true,
+            "searching": true,
+            "pageLength": 25,
+            "lengthMenu": [
+                [10, 25, 50, 100, -1],
+                [10, 25, 50, 100, "Semua"]
+            ],
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json"
+            },
+            "buttons": [{
+                    extend: 'copy',
+                    text: 'Salin',
+                    className: 'btn btn-secondary btn-sm'
+                },
+                {
+                    extend: 'csv',
+                    text: 'CSV',
+                    className: 'btn btn-success btn-sm'
+                },
+                {
+                    extend: 'excel',
+                    text: 'Excel',
+                    className: 'btn btn-success btn-sm'
+                },
+                {
+                    extend: 'pdf',
+                    text: 'PDF',
+                    className: 'btn btn-danger btn-sm'
+                },
+                {
+                    extend: 'print',
+                    text: 'Print',
+                    className: 'btn btn-info btn-sm'
+                }
+            ]
+        };
+
+        // Initialize DataTables
+        $("#laciTable").DataTable({
+            ...dataTableConfig,
+
+            "columnDefs": [{
+                    "orderable": false,
+                    "targets": [0]
+                }, // Disable ordering on # column
+                {
+                    "className": "text-center",
+                    "targets": [0]
+                }, // Center align # column
+                {
+                    "className": "text-right",
+                    "targets": [2, 3]
+                } // Right align money columns
+            ]
+        }).buttons().container().appendTo('#laciTable_wrapper .col-md-6:eq(0)');
+
+        $("#komisiTable").DataTable({
+            ...dataTableConfig,
+            "columnDefs": [{
+                    "orderable": false,
+                    "targets": [0]
+                }, // Disable ordering on # column
+                {
+                    "className": "text-center",
+                    "targets": [0, 8]
+                }, // Center align # and status columns
+                {
+                    "className": "text-right",
+                    "targets": [2, 3, 4]
+                } // Right align money columns
+            ]
+        }).buttons().container().appendTo('#komisiTable_wrapper .col-md-6:eq(0)');
+
+        $("#penarikanTable").DataTable({
+            ...dataTableConfig,
+
+            "columnDefs": [{
+                    "orderable": false,
+                    "targets": [0]
+                }, // Disable ordering on # column
+                {
+                    "className": "text-center",
+                    "targets": [0]
+                }, // Center align # column
+                {
+                    "className": "text-right",
+                    "targets": [2, 3]
+                } // Right align money columns
+            ]
+        }).buttons().container().appendTo('#penarikanTable_wrapper .col-md-6:eq(0)');
     });
 </script>
 @endsection

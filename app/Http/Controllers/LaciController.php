@@ -44,7 +44,7 @@ class LaciController extends Controller
                 ->groupBy('kategori_lacis.id', 'kategori_lacis.name_laci')
                 ->get();
 
-            $riwayat = HistoryLaci::join('kategori_lacis', 'history_laci.id_kategori', '=', 'kategori_lacis.id')
+            $riwayatData = HistoryLaci::join('kategori_lacis', 'history_laci.id_kategori', '=', 'kategori_lacis.id')
                 ->select(
                     'history_laci.*',
                     'kategori_lacis.name_laci'
@@ -67,7 +67,7 @@ class LaciController extends Controller
                 )
                 ->get();
 
-            $komisi = DB::table('profit_presentases')
+            $komisiData = DB::table('profit_presentases')
                 ->join('sevices', 'sevices.id', '=', 'profit_presentases.kode_service') // Menggabungkan tabel sevices dan profit_presentases
                 ->join('user_details', 'sevices.id_teknisi', '=', 'user_details.kode_user')
                 ->select(
@@ -82,6 +82,7 @@ class LaciController extends Controller
                     ['profit_presentases.updated_at', '<=', $request->tgl_akhir . ' 23:59:59']
                 ])
                 ->get();
+                
             $penarikan = DB::table('penarikans')
                 ->join('users', 'users.id', '=', 'penarikans.kode_user')
                 ->join('user_details', 'user_details.kode_user', '=', 'penarikans.kode_user')
@@ -112,7 +113,7 @@ class LaciController extends Controller
                 ->groupBy('kategori_lacis.id', 'kategori_lacis.name_laci')
                 ->get();
 
-            $riwayat = HistoryLaci::join('kategori_lacis', 'history_laci.id_kategori', '=', 'kategori_lacis.id')
+            $riwayatData = HistoryLaci::join('kategori_lacis', 'history_laci.id_kategori', '=', 'kategori_lacis.id')
                 ->select(
                     'history_laci.*',
                     'kategori_lacis.name_laci'
@@ -134,7 +135,7 @@ class LaciController extends Controller
                     'kategori_lacis.name_laci'
                 )
                 ->get();
-            $komisi = DB::table('profit_presentases')
+            $komisiData = DB::table('profit_presentases')
                 ->join('sevices', 'sevices.id', '=', 'profit_presentases.kode_service') // Menggabungkan tabel sevices dan profit_presentases
                 ->join('user_details', 'sevices.id_teknisi', '=', 'user_details.kode_user')
                 ->select(
@@ -183,7 +184,7 @@ class LaciController extends Controller
             $listLaci = $listLaci->toArray();
         }
 
-        return view('laci.form', compact('page', 'listLaci', 'allLaci', 'riwayat', 'komisi', 'penarikan'));
+        return view('laci.form', compact('page', 'listLaci', 'allLaci', 'riwayatData', 'komisiData', 'penarikan'));
     }
 
 
