@@ -35,6 +35,7 @@ use App\Http\Controllers\Admin\StockOpnameController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\EmployeeManagementController;
 use App\Http\Controllers\Admin\HpController;
+use App\Http\Controllers\Admin\PenaltyRulesController;
 
 
 
@@ -448,73 +449,108 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
     });
 
  // absen karyawan
-    // Attendance Routes
-    Route::prefix('admin/attendance')->group(function () {
-        Route::get('/', [EmployeeManagementController::class, 'attendanceIndex'])->name('admin.attendance.index');
+    Route::group(['prefix' => 'admin', 'middleware' => ['auth']], function () {
 
-        Route::get('/history', [EmployeeManagementController::class, 'attendanceHistoryIndex'])->name('admin.attendance.history');
-        Route::get('/export', [EmployeeManagementController::class, 'exportAttendanceHistory'])->name('admin.attendance.export');
+        // Attendance Management
+        Route::prefix('attendance')->group(function () {
+            Route::get('/', [EmployeeManagementController::class, 'attendanceIndex'])->name('admin.attendance.index');
+            Route::get('/history', [EmployeeManagementController::class, 'attendanceHistoryIndex'])->name('admin.attendance.history');
+            Route::get('/detail/{id}', [EmployeeManagementController::class, 'attendanceDetail'])->name('admin.attendance.detail');
+            Route::get('/export', [EmployeeManagementController::class, 'exportAttendanceHistory'])->name('admin.attendance.export');
 
-        Route::post('/check-in', [EmployeeManagementController::class, 'attendanceCheckIn'])->name('admin.attendance.check-in');
-        Route::post('/check-out', [EmployeeManagementController::class, 'attendanceCheckOut'])->name('admin.attendance.check-out');
-        Route::post('/set-outside', [EmployeeManagementController::class, 'setOutsideOffice'])->name('admin.attendance.set-outside');
-        Route::get('/reset-outside/{userId}', [EmployeeManagementController::class, 'resetOutsideOffice'])->name('admin.attendance.reset-outside');
-        Route::post('/request-leave', [EmployeeManagementController::class, 'requestLeave'])->name('admin.attendance.request-leave');
+            Route::post('/check-in', [EmployeeManagementController::class, 'attendanceCheckIn'])->name('admin.attendance.check-in');
+            Route::post('/check-out', [EmployeeManagementController::class, 'attendanceCheckOut'])->name('admin.attendance.check-out');
+            Route::post('/update', [EmployeeManagementController::class, 'updateAttendance'])->name('admin.attendance.update');
+            Route::delete('/delete', [EmployeeManagementController::class, 'deleteAttendance'])->name('admin.attendance.delete');
+            Route::post('/request-leave', [EmployeeManagementController::class, 'requestLeave'])->name('admin.attendance.request-leave');
+            Route::post('/set-outside', [EmployeeManagementController::class, 'setOutsideOffice'])->name('admin.attendance.set-outside');
+            Route::get('/reset-outside/{userId}', [EmployeeManagementController::class, 'resetOutsideOffice'])->name('admin.attendance.reset-outside');
 
-        // Outside Office Management Routes
-    Route::group(['prefix' => 'outside-office'], function () {
-        Route::get('/history', [EmployeeManagementController::class, 'outsideOfficeHistoryIndex'])->name('admin.outside-office.history');
+            // Outside Office Management
+            Route::prefix('outside-office')->group(function () {
+                Route::get('/history', [EmployeeManagementController::class, 'outsideOfficeHistoryIndex'])->name('admin.outside-office.history');
+                Route::get('/history-ajax', [EmployeeManagementController::class, 'getOutsideOfficeHistoryAjax'])->name('admin.outside-office.history-ajax');
+                Route::get('/detail/{id}', [EmployeeManagementController::class, 'outsideOfficeDetail'])->name('admin.outside-office.detail');
+                Route::get('/export', [EmployeeManagementController::class, 'exportOutsideOfficeHistory'])->name('admin.outside-office.export');
+                Route::post('/mark-return', [EmployeeManagementController::class, 'markReturnFromOutside'])->name('admin.attendance.outside-office.mark-return');
+                Route::post('/mark-return-by-log', [EmployeeManagementController::class, 'markReturnByLog'])->name('admin.outside-office.mark-return-by-log');
+                Route::post('/violate-log', [EmployeeManagementController::class, 'violateLog'])->name('admin.outside-office.violate-log');
+            });
+        });
 
-        Route::get('/history-ajax', [EmployeeManagementController::class, 'outsideOfficeHistoryAjax'])->name('admin.outside-office.history-ajax');
+        // Salary Settings Management
+        Route::prefix('salary-settings')->group(function () {
+            Route::get('/', [EmployeeManagementController::class, 'salarySettingsIndex'])->name('admin.salary-settings.index');
+            Route::post('/store', [EmployeeManagementController::class, 'salarySettingsStore'])->name('admin.salary-settings.store');
+        });
 
-        Route::post('/mark-return', [EmployeeManagementController::class, 'markReturnFromOutside'])->name('admin.attendance.outside-office.mark-return');
+        // Violations Management
+        Route::prefix('violations')->group(function () {
+            Route::get('/', [EmployeeManagementController::class, 'violationsIndex'])->name('admin.violations.index');
+            Route::get('/{id}', [EmployeeManagementController::class, 'getViolationDetail'])->name('admin.violations.detail');
+            Route::post('/store', [EmployeeManagementController::class, 'violationsStore'])->name('admin.violations.store');
+            Route::post('/update-status', [EmployeeManagementController::class, 'violationsUpdateStatus'])->name('admin.violations.update-status');
+            Route::post('/reverse-penalty', [EmployeeManagementController::class, 'reversePenalty'])->name('admin.violations.reverse-penalty');
+            Route::post('/calculate-penalty-preview', [EmployeeManagementController::class, 'calculatePenaltyPreview'])->name('admin.violations.calculate-penalty-preview');
+            Route::get('/penalty-history/{userId}', [EmployeeManagementController::class, 'getPenaltyHistory'])->name('admin.violations.penalty-history');
+        });
 
-        Route::post('/mark-return-by-log', [EmployeeManagementController::class, 'markReturnByLog'])->name('admin.attendance.outside-office.mark-return-by-log');
+        // Employee Report Management
+        Route::prefix('employee')->group(function () {
+            Route::get('/monthly-report', [EmployeeManagementController::class, 'monthlyReportIndex'])->name('admin.employee.monthly-report');
+            Route::get('/report-detail/{id}', [EmployeeManagementController::class, 'reportDetail'])->name('admin.employee.report-detail');
+            Route::get('/report-print/{id}', [EmployeeManagementController::class, 'reportPrint'])->name('admin.employee.report-print');
+            Route::get('/balance-info/{userId}', [EmployeeManagementController::class, 'getEmployeeBalanceInfo'])->name('admin.employees.balance-info');
+            Route::post('/generate-monthly-report/{year}/{month}', [EmployeeManagementController::class, 'generateMonthlyReport'])->name('admin.employee.generate-monthly-report');
+            Route::post('/finalize-report', [EmployeeManagementController::class, 'finalizeReport'])->name('admin.employee.finalize-report');
+            Route::post('/mark-paid', [EmployeeManagementController::class, 'markAsPaid'])->name('admin.employee.mark-paid');
+        });
 
-        Route::post('/violate-log', [EmployeeManagementController::class, 'violateLog'])->name('admin.attendance.outside-office.violate-log');
+        // Work Schedule Management
+        Route::prefix('work-schedule')->group(function () {
+            Route::get('/', [EmployeeManagementController::class, 'scheduleIndex'])->name('admin.work-schedule.index');
+            Route::post('/store', [EmployeeManagementController::class, 'scheduleStore'])->name('admin.work-schedule.store');
+            Route::get('/user/{userId}', [EmployeeManagementController::class, 'getUserSchedule'])->name('admin.work-schedule.user');
+        });
 
-        Route::get('/detail/{id}', [EmployeeManagementController::class, 'outsideOfficeDetail'])->name('admin.attendance.outside-office.detail');
+        // QR Code Management
+        Route::prefix('qr')->group(function () {
+            Route::post('/scan-employee', [EmployeeManagementController::class, 'scanEmployeeQrCode'])->name('admin.qr.scan-employee');
+            Route::post('/generate-employee', [EmployeeManagementController::class, 'generateEmployeeQrCode'])->name('admin.qr.generate-employee');
+        });
 
-        Route::get('/export', [EmployeeManagementController::class, 'exportOutsideOfficeHistory'])->name('admin.attendance.outside-office.export');
-    });
+        // Penalty Rules Management Routes
+        Route::prefix('penalty-rules')->group (function () {
 
-    // Update existing attendance routes
-    // Route::post('/attendance/set-outside', [EmployeeManagementController::class, 'setOutsideOffice'])
-    //     ->name('admin.attendance.set-outside');
+            // Main page
+            Route::get('/', [PenaltyRulesController::class, 'index'])
+                ->name('admin.penalty-rules.index');
 
-    // Route::get('/attendance/reset-outside/{userId}', [EmployeeManagementController::class, 'resetOutsideOffice'])
-    //     ->name('admin.attendance.reset-outside');
+            // API endpoints for AJAX
+            Route::get('/list', [PenaltyRulesController::class, 'list'])
+                ->name('admin.penalty-rules.list');
 
-    });
+            // CRUD operations
+            Route::post('/', [PenaltyRulesController::class, 'store'])
+                ->name('admin.penalty-rules.store');
 
-    // Salary Settings Routes
-    Route::prefix('salary')->group(function () {
-        Route::get('/', [EmployeeManagementController::class, 'salarySettingsIndex'])->name('admin.salary.index');
-        Route::post('/store', [EmployeeManagementController::class, 'salarySettingsStore'])->name('admin.salary.store');
-    });
+            Route::get('/{id}', [PenaltyRulesController::class, 'show'])
+                ->name('admin.penalty-rules.show');
 
-    // Violations Routes
-    Route::prefix('violations')->group(function () {
-        Route::get('/', [EmployeeManagementController::class, 'violationsIndex'])->name('admin.violations.index');
-        Route::post('/store', [EmployeeManagementController::class, 'violationsStore'])->name('admin.violations.store');
-        Route::post('/update-status', [EmployeeManagementController::class, 'violationsUpdateStatus'])->name('admin.violations.update-status');
-    });
+            Route::put('/{id}', [PenaltyRulesController::class, 'update'])
+                ->name('admin.penalty-rules.update');
 
-    // Employee Report Routes
-    Route::prefix('employee')->group(function () {
-        Route::get('/monthly-report', [EmployeeManagementController::class, 'monthlyReportIndex'])->name('admin.employee.monthly-report');
-        Route::post('/generate-report', [EmployeeManagementController::class, 'generateMonthlyReport'])->name('admin.employee.generate-report');
-        Route::post('/finalize-report', [EmployeeManagementController::class, 'finalizeReport'])->name('admin.employee.finalize-report');
-        Route::post('/mark-paid', [EmployeeManagementController::class, 'markAsPaid'])->name('admin.employee.mark-paid');
-        Route::get('/report-detail/{id}', [EmployeeManagementController::class, 'reportDetail'])->name('admin.employee.report-detail');
-        Route::get('/report-print/{id}', [EmployeeManagementController::class, 'reportPrint'])->name('admin.employee.report-print');
-    });
+            Route::delete('/{id}', [PenaltyRulesController::class, 'destroy'])
+                ->name('admin.penalty-rules.destroy');
 
-    // Work Schedule Routes
-    Route::prefix('schedule')->group(function () {
-        Route::get('/', [EmployeeManagementController::class, 'scheduleIndex'])->name('admin.schedule.index');
-        Route::post('/store', [EmployeeManagementController::class, 'scheduleStore'])->name('admin.schedule.store');
-        Route::get('/get-user-schedule/{userId}', [EmployeeManagementController::class, 'getUserSchedule'])->name('admin.schedule.get-user');
+            // Special actions
+            Route::post('/seed', [PenaltyRulesController::class, 'seed'])
+                ->name('admin.penalty-rules.seed');
+
+            Route::get('/export/csv', [PenaltyRulesController::class, 'export'])
+                ->name('admin.penalty-rules.export');
+        });
+
     });
 
    //ujung absen karyawan
@@ -608,3 +644,17 @@ Route::group(['middleware' => ['auth']], function () {
 // Routes untuk pencarian sparepart via AJAX (jika belum ada)
 Route::get('admin/sparepart/search-ajax', [SparepartController::class, 'searchAjax'])->name('sparepart.search-ajax');
 
+Route::prefix('admin/cron')->group(function () {
+
+    // Auto check absent employees - Run at 9:00 AM
+    Route::get('/check-absent', [AttendanceCronController::class, 'checkAbsent'])
+        ->name('admin.cron.check-absent');
+
+    // Auto checkout employees - Run at 5:00 PM
+    Route::get('/auto-checkout', [AttendanceCronController::class, 'autoCheckout'])
+        ->name('admin.cron.auto-checkout');
+
+    // Status monitoring
+    Route::get('/status', [AttendanceCronController::class, 'status'])
+        ->name('admin.cron.status');
+});

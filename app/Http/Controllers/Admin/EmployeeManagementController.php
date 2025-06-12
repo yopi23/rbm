@@ -21,9 +21,12 @@ use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Log;
+use App\Traits\HasOwnerScope;
 
 class EmployeeManagementController extends Controller
 {
+     use HasOwnerScope; // TAMBAHAN
+
     public function scanEmployeeQrCode(Request $request)
     {
             // Log request untuk debugging
@@ -107,23 +110,47 @@ class EmployeeManagementController extends Controller
                 ->first();
 
             // Tentukan aksi berdasarkan status attendance saat ini
-            if (!$attendance || !$attendance->check_in) {
-                // CASE: Check-in (belum ada attendance atau belum check-in)
+                if (!$attendance || !$attendance->check_in) {
+                // CASE: Check-in
 
-                // Get work schedule untuk calculate late
                 $schedule = WorkSchedule::where('user_id', $userId)
                     ->where('day_of_week', $todayDate->format('l'))
                     ->first();
+
+                // Get salary setting
+                $salarySetting = SalarySetting::where('user_id', $userId)->first();
+                $compensationType = $salarySetting ? $salarySetting->compensation_type : 'fixed';
 
                 // Calculate late minutes
                 $lateMinutes = 0;
                 if ($schedule && $schedule->is_working_day) {
                     $checkInTime = Carbon::now();
-                    $scheduleStartTime = Carbon::parse($schedule->start_time);
+                    dd($schedule->start_time);
+
+                    $scheduleStartTime = Carbon::createFromFormat('Y-m-d H:i:s',
+                        $todayDate->format('Y-m-d') . ' ' . $schedule->start_time);
 
                     if ($checkInTime->gt($scheduleStartTime)) {
                         $lateMinutes = $checkInTime->diffInMinutes($scheduleStartTime);
                     }
+                }
+
+                // UPDATED: Gunakan penalty rules dari database
+                $penaltyInfo = $this->calculateAttendanceLatePenalty($lateMinutes, $compensationType);
+
+                if (!$penaltyInfo['success']) {
+                    Log::error('Failed to calculate penalty for QR scan', [
+                        'user_id' => $userId,
+                        'late_minutes' => $lateMinutes,
+                        'compensation_type' => $compensationType
+                    ]);
+                    // Fallback
+                    $penaltyInfo = [
+                        'penalty_amount' => 0,
+                        'penalty_percentage' => 0,
+                        'should_create_violation' => false,
+                        'penalty_description' => 'Error dalam menentukan penalty'
+                    ];
                 }
 
                 // Create or update attendance record
@@ -141,22 +168,44 @@ class EmployeeManagementController extends Controller
                     ]
                 );
 
-                // Create violation jika terlambat lebih dari 30 menit
-                if ($lateMinutes > 30) {
-                    Violation::create([
+                // Create violation berdasarkan penalty info
+                if ($penaltyInfo['should_create_violation']) {
+                    $violation = Violation::create([
                         'user_id' => $userId,
                         'violation_date' => $todayDate,
                         'type' => 'telat',
-                        'description' => "Terlambat $lateMinutes menit",
-                        'penalty_percentage' => 5,
+                        'description' => "Terlambat {$lateMinutes} menit - {$penaltyInfo['penalty_description']} (QR Scan)",
+                        'penalty_amount' => $penaltyInfo['penalty_amount'],
+                        'penalty_percentage' => $penaltyInfo['penalty_percentage'],
                         'status' => 'pending',
                         'created_by' => $adminId,
+                        'metadata' => json_encode([
+                            'rule_id' => $penaltyInfo['rule_id'] ?? null,
+                            'compensation_type' => $compensationType,
+                            'calculated_at' => now()->toISOString(),
+                            'scan_method' => 'qr_code'
+                        ])
+                    ]);
+
+                    Log::info('QR scan violation created using database rules', [
+                        'violation_id' => $violation->id,
+                        'user_id' => $userId,
+                        'late_minutes' => $lateMinutes,
+                        'compensation_type' => $compensationType,
+                        'rule_id' => $penaltyInfo['rule_id']
                     ]);
                 }
 
                 $message = "Check-in berhasil untuk {$user->name}";
                 if ($lateMinutes > 0) {
                     $message .= " (Terlambat $lateMinutes menit)";
+                    if ($penaltyInfo['should_create_violation']) {
+                        if ($penaltyInfo['penalty_amount'] > 0) {
+                            $message .= " - Denda Rp " . number_format($penaltyInfo['penalty_amount'], 0, ',', '.');
+                        } else {
+                            $message .= " - Penalty {$penaltyInfo['penalty_percentage']}%";
+                        }
+                    }
                 }
 
                 return response()->json([
@@ -166,8 +215,14 @@ class EmployeeManagementController extends Controller
                     'time' => Carbon::now()->format('H:i'),
                     'late_minutes' => $lateMinutes,
                     'employee_name' => $user->name,
+                    'compensation_type' => $compensationType,
+                    'penalty_amount' => $penaltyInfo['penalty_amount'],
+                    'penalty_percentage' => $penaltyInfo['penalty_percentage'],
+                    'violation_created' => $penaltyInfo['should_create_violation'],
+                    'rule_applied' => $penaltyInfo['rule_id'],
                     'attendance_data' => $attendance
                 ]);
+
 
             } else if ($attendance->check_in && !$attendance->check_out) {
                 // CASE: Check-out (sudah check-in tapi belum check-out)
@@ -272,17 +327,18 @@ class EmployeeManagementController extends Controller
         $page = "Absensi Karyawan";
         $today = Carbon::today();
 
+        // UPDATED: Filter berdasarkan owner (same logic as original)
+        $employees = $this->getCurrentOwnerEmployees();
+        $employeeIds = $employees->pluck('id_user');
+
         $attendances = Attendance::with(['user', 'user.userDetail'])
             ->whereDate('attendance_date', $today)
-            ->where('user_id', '!=', auth()->id())
+            ->whereIn('user_id', $employeeIds)
             ->get();
 
-        $employees = User::join('user_details', 'users.id', '=', 'user_details.kode_user')
-            ->where('user_details.id_upline', $this->getThisUser()->id_upline)
-            ->whereIn('user_details.jabatan', [2, 3]) // Kasir dan Teknisi
-            ->get(['users.*', 'user_details.*', 'users.id as id_user']);
-
-        $schedules = WorkSchedule::where('day_of_week', $today->format('l'))->get();
+        $schedules = WorkSchedule::whereIn('user_id', $employeeIds)
+            ->where('day_of_week', $today->format('l'))
+            ->get();
 
         $content = view('admin.page.attendance', compact('page', 'attendances', 'employees', 'schedules'))->render();
 
@@ -296,9 +352,14 @@ class EmployeeManagementController extends Controller
     {
         $request->validate([
             'user_id' => 'required|exists:users,id',
-            'photo' => 'nullable|image|max:2048', // Photo optional untuk manual
+            'photo' => 'nullable|image|max:2048',
             'location' => 'required|string',
         ]);
+
+        // TAMBAHAN: Validate owner access
+        if (!$this->validateUserOwnerAccess($request->user_id)) {
+            return redirect()->back()->with('error', 'Tidak memiliki akses ke karyawan ini');
+        }
 
         $today = Carbon::today();
         $schedule = WorkSchedule::where('user_id', $request->user_id)
@@ -318,6 +379,10 @@ class EmployeeManagementController extends Controller
             return redirect()->back()->with('error', 'Sudah melakukan check-in hari ini');
         }
 
+        // Get salary setting untuk determine compensation type
+        $salarySetting = SalarySetting::where('user_id', $request->user_id)->first();
+        $compensationType = $salarySetting ? $salarySetting->compensation_type : 'fixed';
+
         // Store photo if provided
         $photoPath = null;
         if ($request->hasFile('photo')) {
@@ -326,11 +391,31 @@ class EmployeeManagementController extends Controller
 
         // Calculate late minutes
         $checkInTime = Carbon::now();
-        $scheduleStartTime = Carbon::parse( $schedule->start_time);
+        // dd($schedule->start_time);
+        $scheduleStartTime = Carbon::createFromFormat('Y-m-d H:i:s',
+            $schedule->start_time);
         $lateMinutes = 0;
-
         if ($checkInTime->gt($scheduleStartTime)) {
             $lateMinutes = $checkInTime->diffInMinutes($scheduleStartTime);
+        }
+
+        // UPDATED: Gunakan penalty rules dari database dengan owner scope
+        $penaltyInfo = $this->calculateAttendanceLatePenalty($lateMinutes, $compensationType);
+
+        if (!$penaltyInfo['success']) {
+            Log::error('Failed to calculate penalty', [
+                'user_id' => $request->user_id,
+                'late_minutes' => $lateMinutes,
+                'compensation_type' => $compensationType,
+                'owner_code' => $this->getCurrentOwnerCode()
+            ]);
+            // Fallback ke penalty default jika ada error
+            $penaltyInfo = [
+                'penalty_amount' => 0,
+                'penalty_percentage' => 0,
+                'should_create_violation' => false,
+                'penalty_description' => 'Error dalam menentukan penalty'
+            ];
         }
 
         $attendance = Attendance::updateOrCreate(
@@ -348,20 +433,50 @@ class EmployeeManagementController extends Controller
             ]
         );
 
-        // Create violation if late more than 30 minutes
-        if ($lateMinutes > 30) {
-            Violation::create([
+        // Create violation berdasarkan penalty info
+        if ($penaltyInfo['should_create_violation']) {
+            $violation = Violation::create([
                 'user_id' => $request->user_id,
                 'violation_date' => $today,
                 'type' => 'telat',
-                'description' => "Terlambat $lateMinutes menit (Manual entry)",
-                'penalty_percentage' => 5,
+                'description' => "Terlambat {$lateMinutes} menit - {$penaltyInfo['penalty_description']} (Manual entry)",
+                'penalty_amount' => $penaltyInfo['penalty_amount'],
+                'penalty_percentage' => $penaltyInfo['penalty_percentage'],
                 'status' => 'pending',
                 'created_by' => auth()->id(),
+                'metadata' => json_encode([
+                    'rule_id' => $penaltyInfo['rule_id'] ?? null,
+                    'compensation_type' => $compensationType,
+                    'owner_code' => $this->getCurrentOwnerCode(),
+                    'calculated_at' => now()->toISOString()
+                ])
+            ]);
+
+            Log::info('Manual check-in violation created using database rules', [
+                'violation_id' => $violation->id,
+                'user_id' => $request->user_id,
+                'late_minutes' => $lateMinutes,
+                'compensation_type' => $compensationType,
+                'rule_id' => $penaltyInfo['rule_id'],
+                'owner_code' => $this->getCurrentOwnerCode(),
+                'penalty_amount' => $penaltyInfo['penalty_amount'],
+                'penalty_percentage' => $penaltyInfo['penalty_percentage']
             ]);
         }
 
-        return redirect()->back()->with('success', 'Check-in berhasil');
+        $message = 'Check-in berhasil';
+        if ($lateMinutes > 0) {
+            $message .= " (Terlambat $lateMinutes menit)";
+            if ($penaltyInfo['should_create_violation']) {
+                if ($penaltyInfo['penalty_amount'] > 0) {
+                    $message .= " - Denda Rp " . number_format($penaltyInfo['penalty_amount'], 0, ',', '.');
+                } else {
+                    $message .= " - Penalty {$penaltyInfo['penalty_percentage']}%";
+                }
+            }
+        }
+
+        return redirect()->back()->with('success', $message);
     }
 
     /**
@@ -448,12 +563,13 @@ class EmployeeManagementController extends Controller
     {
         $page = "Pengaturan Kompensasi";
 
-        $employees = User::join('user_details', 'users.id', '=', 'user_details.kode_user')
-            ->where('user_details.id_upline', $this->getThisUser()->id_upline)
-            ->whereIn('user_details.jabatan', [2, 3])
-            ->get(['users.*', 'user_details.*', 'users.id as id_user']);
+        // UPDATED: Filter berdasarkan owner (same logic as original)
+        $employees = $this->getCurrentOwnerEmployees();
+        $employeeIds = $employees->pluck('id_user');
 
-        $salarySettings = SalarySetting::with('user')->get();
+        $salarySettings = SalarySetting::with('user')
+            ->whereIn('user_id', $employeeIds)
+            ->get();
 
         $content = view('admin.page.salary-settings', compact('employees', 'salarySettings'))->render();
         return view('admin.layout.blank_page', compact('page', 'content'));
@@ -598,18 +714,314 @@ class EmployeeManagementController extends Controller
         return redirect()->back()->with('success', 'Pelanggaran berhasil dicatat');
     }
 
+    // ===================================================================
+    // VIOLATIONS MANAGEMENT - FINAL VERSION
+    // ===================================================================
+
     public function violationsUpdateStatus(Request $request)
-    {
-        $request->validate([
-            'violation_id' => 'required|exists:violations,id',
-            'status' => 'required|in:processed,forgiven',
+{
+    $request->validate([
+        'violation_id' => 'required|exists:violations,id',
+        'status' => 'required|in:processed,forgiven',
+    ]);
+
+    try {
+        DB::beginTransaction();
+
+        $violation = Violation::with('user')->findOrFail($request->violation_id);
+
+        // Cek apakah violation sudah diproses sebelumnya
+        if ($violation->status !== 'pending') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pelanggaran ini sudah diproses sebelumnya'
+            ], 400);
+        }
+
+        // Update status violation dengan data lengkap
+        $violation->update([
+            'status' => $request->status,
+            'processed_at' => now(),
+            'processed_by' => auth()->id()
         ]);
 
-        $violation = Violation::findOrFail($request->violation_id);
-        $violation->update(['status' => $request->status]);
+        Log::info('Violation status updated', [
+            'violation_id' => $violation->id,
+            'status' => $request->status,
+            'processed_by' => auth()->id(),
+            'user_id' => $violation->user_id
+        ]);
 
-        return response()->json(['success' => true]);
+        // Jika status adalah 'processed', terapkan penalty ke salary_settings
+        if ($request->status === 'processed') {
+            $penaltyResult = $this->applyViolationPenalty($violation);
+
+            if (!$penaltyResult['success']) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => $penaltyResult['message']
+                ], 400);
+            }
+        }
+
+        DB::commit();
+
+        $message = $request->status === 'processed'
+            ? 'Pelanggaran berhasil diproses dan penalty diterapkan ke salary settings'
+            : 'Pelanggaran berhasil dimaafkan';
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'data' => $violation->fresh()
+        ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Error updating violation status: ' . $e->getMessage(), [
+            'violation_id' => $request->violation_id,
+            'status' => $request->status,
+            'error_trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal memproses pelanggaran: ' . $e->getMessage()
+        ], 500);
     }
+}
+
+private function applyViolationPenalty(Violation $violation)
+{
+    try {
+        $salarySetting = SalarySetting::where('user_id', $violation->user_id)->first();
+
+        if (!$salarySetting) {
+            Log::warning("Tidak ada pengaturan kompensasi untuk user: {$violation->user_id}");
+            return [
+                'success' => false,
+                'message' => 'Tidak ada pengaturan kompensasi untuk karyawan ini'
+            ];
+        }
+
+        $penaltyAmount = 0;
+        $originalSettings = $salarySetting->toArray();
+
+        if ($salarySetting->compensation_type === 'fixed') {
+            // Untuk gaji tetap - kurangi basic_salary
+            if ($violation->penalty_amount) {
+                $penaltyAmount = $violation->penalty_amount;
+                $newBasicSalary = max(0, $salarySetting->basic_salary - $penaltyAmount);
+                $salarySetting->update(['basic_salary' => $newBasicSalary]);
+
+                Log::info('Fixed salary penalty applied', [
+                    'violation_id' => $violation->id,
+                    'original_basic_salary' => $originalSettings['basic_salary'],
+                    'penalty_amount' => $penaltyAmount,
+                    'new_basic_salary' => $newBasicSalary
+                ]);
+
+            } elseif ($violation->penalty_percentage) {
+                $penaltyAmount = ($salarySetting->basic_salary * $violation->penalty_percentage) / 100;
+                $newBasicSalary = max(0, $salarySetting->basic_salary - $penaltyAmount);
+                $salarySetting->update(['basic_salary' => $newBasicSalary]);
+
+                Log::info('Fixed salary percentage penalty applied', [
+                    'violation_id' => $violation->id,
+                    'original_basic_salary' => $originalSettings['basic_salary'],
+                    'penalty_percentage' => $violation->penalty_percentage,
+                    'penalty_amount' => $penaltyAmount,
+                    'new_basic_salary' => $newBasicSalary
+                ]);
+            }
+        } else {
+            // Untuk sistem persentase - kurangi percentage_value
+            if ($violation->penalty_amount) {
+                $salarySetting->update([
+                    'percentage_value' => min(100, $salarySetting->percentage_value - $violation->penalty_percentage)
+                ]);
+            } elseif ($violation->penalty_percentage) {
+                $salarySetting->update([
+                    'percentage_value' => min(100, $salarySetting->percentage_value - $violation->penalty_percentage)
+                ]);
+
+                Log::info('Percentage salary penalty applied', [
+                    'violation_id' => $violation->id,
+                    'penalty_percentage' => $violation->penalty_percentage,
+                    'original_percentage' => $originalSettings['percentage_value'],
+                    'new_percentage' => $newPercentageValue
+                ]);
+            }
+        }
+
+        // **PENTING: Update violation dengan applied_penalty_amount dan applied_at**
+        $violation->update([
+            'applied_penalty_amount' => $penaltyAmount,
+            'applied_at' => now()
+        ]);
+
+        Log::info('Penalty successfully applied to salary settings', [
+            'violation_id' => $violation->id,
+            'user_id' => $violation->user_id,
+            'compensation_type' => $salarySetting->compensation_type,
+            'applied_penalty_amount' => $penaltyAmount,
+            'original_settings' => $originalSettings,
+            'new_settings' => $salarySetting->fresh()->toArray(),
+            'processed_by' => auth()->id()
+        ]);
+
+        return ['success' => true, 'penalty_amount' => $penaltyAmount];
+
+    } catch (\Exception $e) {
+        Log::error('Error applying violation penalty: ' . $e->getMessage(), [
+            'violation_id' => $violation->id,
+            'user_id' => $violation->user_id,
+            'error_trace' => $e->getTraceAsString()
+        ]);
+
+        return [
+            'success' => false,
+            'message' => 'Gagal menerapkan penalty: ' . $e->getMessage()
+        ];
+    }
+}
+
+public function reversePenalty(Request $request)
+{
+    $request->validate([
+        'violation_id' => 'required|exists:violations,id',
+        'reason' => 'required|string|min:10'
+    ]);
+
+    try {
+        DB::beginTransaction();
+
+        $violation = Violation::with('user')->findOrFail($request->violation_id);
+
+        if (!$violation->applied_penalty_amount || $violation->status !== 'processed') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pelanggaran ini belum memiliki penalty yang diterapkan'
+            ], 400);
+        }
+
+        if ($violation->reversed_at) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Penalty ini sudah pernah dibatalkan sebelumnya'
+            ], 400);
+        }
+
+        $salarySetting = SalarySetting::where('user_id', $violation->user_id)->first();
+
+        if (!$salarySetting) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pengaturan kompensasi tidak ditemukan'
+            ], 404);
+        }
+
+        $originalSettings = $salarySetting->toArray();
+
+        // Kembalikan nilai ke salary settings berdasarkan tipe kompensasi
+        if ($salarySetting->compensation_type === 'fixed') {
+            if ($violation->penalty_amount) {
+                // Penalty nominal
+                $salarySetting->update([
+                    'basic_salary' => $salarySetting->basic_salary + $violation->penalty_amount
+                ]);
+            } elseif ($violation->penalty_percentage) {
+                // Penalty persentase - hitung ulang berdasarkan applied_penalty_amount
+                $salarySetting->update([
+                    'basic_salary' => $salarySetting->basic_salary + $violation->applied_penalty_amount
+                ]);
+            }
+        } else {
+            // Sistem persentase
+            if ($violation->penalty_percentage) {
+                $salarySetting->update([
+                    'percentage_value' => min(100, $salarySetting->percentage_value + $violation->penalty_percentage)
+                ]);
+            } else {
+                // Untuk penalty nominal yang dikonversi ke persentase
+                // Kita perlu menghitung berapa persentase yang harus dikembalikan
+                $currentMonth = now()->month;
+                $currentYear = now()->year;
+
+                $avgProfit = 0;
+                for ($i = 0; $i < 3; $i++) {
+                    $checkMonth = now()->subMonths($i);
+
+                    $totalServiceAmount = \App\Models\Sevices::where('id_teknisi', $violation->user_id)
+                        ->where('status_services', 'Selesai')
+                        ->whereYear('updated_at', $checkMonth->year)
+                        ->whereMonth('updated_at', $checkMonth->month)
+                        ->sum('total_biaya');
+
+                    $totalPartCost = \App\Models\Sevices::where('id_teknisi', $violation->user_id)
+                        ->where('status_services', 'Selesai')
+                        ->whereYear('updated_at', $checkMonth->year)
+                        ->whereMonth('updated_at', $checkMonth->month)
+                        ->sum('harga_sp');
+
+                    $monthlyProfit = $totalServiceAmount - $totalPartCost;
+                    $avgProfit += $monthlyProfit;
+                }
+
+                $avgProfit = $avgProfit / 3;
+
+                if ($avgProfit > 0) {
+                    $percentageToRestore = ($violation->penalty_amount / $avgProfit) * 100;
+                    $salarySetting->update([
+                        'percentage_value' => min(100, $salarySetting->percentage_value + $percentageToRestore)
+                    ]);
+                } else {
+                    // Fallback: kembalikan 1%
+                    $salarySetting->update([
+                        'percentage_value' => min(100, $salarySetting->percentage_value + 1)
+                    ]);
+                }
+            }
+        }
+
+        // Update violation dengan data reversal
+        $violation->update([
+            'status' => 'forgiven',
+            'reversal_reason' => $request->reason,
+            'reversed_at' => now(),
+            'reversed_by' => auth()->id()
+        ]);
+
+        Log::info('Penalty reversed successfully', [
+            'violation_id' => $violation->id,
+            'user_id' => $violation->user_id,
+            'reversed_by' => auth()->id(),
+            'reason' => $request->reason,
+            'original_settings' => $originalSettings,
+            'restored_settings' => $salarySetting->fresh()->toArray()
+        ]);
+
+        DB::commit();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Penalty berhasil dibatalkan dan pengaturan kompensasi dikembalikan'
+        ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Error reversing penalty: ' . $e->getMessage(), [
+            'violation_id' => $request->violation_id,
+            'error_trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal membatalkan penalty: ' . $e->getMessage()
+        ], 500);
+    }
+}
 
     // ===================================================================
     // MONTHLY REPORT GENERATION
@@ -617,16 +1029,22 @@ class EmployeeManagementController extends Controller
 
     public function generateMonthlyReport($year, $month)
     {
-        $employees = User::join('user_details', 'users.id', '=', 'user_details.kode_user')
-            ->where('user_details.id_upline', $this->getThisUser()->id_upline)
-            ->whereIn('user_details.jabatan', [2, 3])
-            ->get(['users.*', 'user_details.*', 'users.id as id_user']);
+         // UPDATED: Support both URL params dan POST data
+        $year = $request->year ?? $request->route('year') ?? date('Y');
+        $month = $request->month ?? $request->route('month') ?? date('m');
+
+        // UPDATED: Gunakan owner scope (sama dengan logic original)
+        $employees = $this->getCurrentOwnerEmployees();
+
+        if ($employees->isEmpty()) {
+            return redirect()->back()->with('error', 'Tidak ada karyawan ditemukan untuk owner ini');
+        }
 
         foreach ($employees as $employee) {
             $this->generateEmployeeMonthlyReport($employee->id_user, $year, $month);
         }
 
-        return redirect()->back()->with('success', 'Laporan bulanan berhasil digenerate');
+        return redirect()->back()->with('success', 'Laporan bulanan berhasil digenerate untuk ' . $employees->count() . ' karyawan');
     }
 
     private function generateEmployeeMonthlyReport($userId, $year, $month)
@@ -728,7 +1146,7 @@ class EmployeeManagementController extends Controller
             }
         }
 
-        // === HITUNG PELANGGARAN IZIN KELUAR KANTOR ===
+        // === HITUNG PELANGGARAN IZIN KELUAR KANTOR dengan database rules ===
         $outsideOfficeViolations = OutsideOfficeLog::where('user_id', $userId)
             ->where('status', 'violated')
             ->whereYear('log_date', $year)
@@ -740,19 +1158,28 @@ class EmployeeManagementController extends Controller
 
         foreach ($outsideOfficeViolations as $violation) {
             if ($violation->late_return_minutes > 15) {
-                // Penalty berdasarkan keterlambatan
-                $penaltyPercentage = $this->calculateOutsideOfficePenalty($violation->late_return_minutes);
-                $penaltyAmount = ($totalCommission * $penaltyPercentage) / 100;
-                $outsideOfficePenalties += $penaltyAmount;
+                // UPDATED: Gunakan penalty rules dari database
+                $penaltyInfo = \App\Http\Controllers\Admin\PenaltyRulesController::getApplicablePenalty(
+                    'outside_office_late',
+                    'both',
+                    $violation->late_return_minutes
+                );
 
-                // Simpan detail untuk summary
-                $outsideOfficeSummary[] = [
-                    'date' => $violation->log_date->format('d/m/Y'),
-                    'late_minutes' => $violation->late_return_minutes,
-                    'penalty_percentage' => $penaltyPercentage,
-                    'penalty_amount' => $penaltyAmount,
-                    'reason' => $violation->reason
-                ];
+                if ($penaltyInfo['success'] && $penaltyInfo['should_create_violation']) {
+                    $penaltyPercentage = $penaltyInfo['penalty_percentage'];
+                    $penaltyAmount = ($totalCommission * $penaltyPercentage) / 100;
+                    $outsideOfficePenalties += $penaltyAmount;
+
+                    // Simpan detail untuk summary
+                    $outsideOfficeSummary[] = [
+                        'date' => $violation->log_date->format('d/m/Y'),
+                        'late_minutes' => $violation->late_return_minutes,
+                        'penalty_percentage' => $penaltyPercentage,
+                        'penalty_amount' => $penaltyAmount,
+                        'reason' => $violation->reason,
+                        'rule_id' => $penaltyInfo['rule_id'] ?? null
+                    ];
+                }
             }
         }
 
@@ -791,20 +1218,46 @@ class EmployeeManagementController extends Controller
                 'percentage_used' => $salarySetting->compensation_type == 'percentage'
                                     ? $salarySetting->percentage_value
                                     : $salarySetting->service_percentage,
-            ]
-        );
+                'metadata' => json_encode([
+                    'penalty_rules_version' => 'database_driven',
+                    'calculated_at' => now()->toISOString(),
+                    'rules_used' => $outsideOfficeSummary
+                ])
+            ]);
     }
 
     /**
      * Helper method untuk calculate outside office penalty percentage
      */
+    private function calculateAttendanceLatePenalty(int $lateMinutes, string $compensationType = 'fixed'): array
+    {
+        $ownerCode = $this->getCurrentOwnerCode();
+
+        return \App\Http\Controllers\Admin\PenaltyRulesController::getApplicablePenalty(
+            'attendance_late',
+            $compensationType,
+            $lateMinutes,
+            $ownerCode
+        );
+    }
     private function calculateOutsideOfficePenalty(int $lateMinutes): int
     {
+        $ownerCode = $this->getCurrentOwnerCode();
+
+        $penaltyInfo = \App\Http\Controllers\Admin\PenaltyRulesController::getApplicablePenalty(
+            'outside_office_late',
+            'both', // Outside office rules berlaku untuk semua tipe kompensasi
+            $lateMinutes,
+            $ownerCode
+        );
+
+        return $penaltyInfo['penalty_percentage'] ?? 0;
         // Penalty bertingkat berdasarkan keterlambatan kembali
-        if ($lateMinutes <= 30) return 2;      // 2% untuk 15-30 menit
-        if ($lateMinutes <= 60) return 5;      // 5% untuk 30-60 menit
-        if ($lateMinutes <= 120) return 10;    // 10% untuk 1-2 jam
-        return 15;                             // 15% untuk lebih dari 2 jam
+        // if ($lateMinutes <= 10) return 0;      // 0% untuk 1-10 menit
+        // if ($lateMinutes <= 30) return 1;      // 1% untuk 15-30 menit
+        // if ($lateMinutes <= 60) return 2;      // 2% untuk 30-60 menit
+        // if ($lateMinutes <= 120) return 5;    // 5% untuk 1-2 jam
+        // return 10;                             // 10% untuk lebih dari 2 jam
     }
 
     // ===================================================================
@@ -1500,7 +1953,7 @@ public function exportOutsideOfficeHistory(Request $request)
  */
 public function getThisUser()
 {
-    return UserDetail::where('kode_user', auth()->id())->first();
+    return $this->getCurrentUserDetail();
 }
     // ===================================================================
     // MONTHLY REPORT VIEWS AND ACTIONS
@@ -1512,7 +1965,12 @@ public function getThisUser()
         $year = $request->year ?? date('Y');
         $month = $request->month ?? date('m');
 
+        // UPDATED: Filter berdasarkan owner (same logic as original)
+        $employees = $this->getCurrentOwnerEmployees();
+        $employeeIds = $employees->pluck('id_user');
+
         $reports = EmployeeMonthlyReport::with(['user', 'processedBy'])
+            ->whereIn('user_id', $employeeIds)
             ->where('year', $year)
             ->where('month', $month)
             ->get();

@@ -14,7 +14,7 @@
                     <a href="{{ route('admin.attendance.index') }}" class="btn btn-primary btn-sm">
                         <i class="fas fa-arrow-left"></i> Kembali ke Absensi
                     </a>
-                    <a href="{{ route('admin.attendance.outside-office.export', request()->query()) }}"
+                    <a href="{{ route('admin.outside-office.export', request()->query()) }}"
                         class="btn btn-success btn-sm">
                         <i class="fas fa-download"></i> Export
                     </a>
@@ -291,7 +291,7 @@
         function markReturn(logId) {
             if (confirm('Konfirmasi kembali dari izin keluar kantor?')) {
                 $.ajax({
-                    url: "{{ route('admin.attendance.outside-office.mark-return-by-log') }}",
+                    url: "{{ route('admin.outside-office.mark-return-by-log') }}",
                     method: 'POST',
                     data: {
                         _token: "{{ csrf_token() }}",
@@ -316,7 +316,7 @@
             const reason = prompt('Alasan reset/pelanggaran:');
             if (reason && reason.trim() !== '') {
                 $.ajax({
-                    url: "{{ route('admin.attendance.outside-office.violate-log') }}",
+                    url: "{{ route('admin.outside-office.violate-log') }}",
                     method: 'POST',
                     data: {
                         _token: "{{ csrf_token() }}",
@@ -340,7 +340,7 @@
 
         function showLogDetail(logId) {
             $.ajax({
-                url: "{{ route('admin.attendance.outside-office.detail', ['id' => '__ID__']) }}".replace('__ID__',
+                url: "{{ route('admin.outside-office.detail', ['id' => '__ID__']) }}".replace('__ID__',
                     logId),
                 method: 'GET',
                 success: function(response) {

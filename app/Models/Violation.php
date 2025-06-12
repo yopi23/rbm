@@ -16,8 +16,15 @@ class Violation extends Model
         'description',
         'penalty_amount',
         'penalty_percentage',
+        'applied_penalty_amount',
         'status',
-        'created_by'
+        'processed_at',
+        'processed_by',
+        'applied_at',
+        'reversal_reason',
+        'reversed_at',
+        'reversed_by',
+        'created_by',
     ];
 
     protected $casts = [

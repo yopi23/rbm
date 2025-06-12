@@ -476,7 +476,8 @@
                                      </a>
                                  </li>
                                  <li class="nav-item">
-                                     <a href="{{ route('admin.salary.index') }}" class="nav-link @yield('salary_settings')">
+                                     <a href="{{ route('admin.salary-settings.index') }}"
+                                         class="nav-link @yield('salary_settings')">
                                          <i class="far fa-circle nav-icon"></i>
                                          <p>Pengaturan Gaji</p>
                                      </a>
@@ -496,7 +497,7 @@
                                      </a>
                                  </li>
                                  <li class="nav-item">
-                                     <a href="{{ route('admin.schedule.index') }}"
+                                     <a href="{{ route('admin.work-schedule.index') }}"
                                          class="nav-link @yield('schedule')">
                                          <i class="far fa-circle nav-icon"></i>
                                          <p>Jadwal Kerja</p>

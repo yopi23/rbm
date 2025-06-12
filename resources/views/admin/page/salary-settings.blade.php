@@ -147,7 +147,7 @@
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
-            <form id="salaryForm" action="{{ route('admin.salary.store') }}" method="POST">
+            <form id="salaryForm" action="{{ route('admin.salary-settings.store') }}" method="POST">
                 @csrf
                 <div class="modal-body">
                     <input type="hidden" name="user_id" id="user_id_salary">
