@@ -52,6 +52,46 @@ class ServiceApiController extends Controller
         }
     }
 
+    public function checkServiceStatus(Request $request, $serviceId)
+{
+    try {
+        // Query untuk mengambil status service berdasarkan ID
+        $service = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+            ->where('sevices.id', $serviceId)
+            ->join('users', 'sevices.id_teknisi', '=', 'users.id')
+            ->select('sevices.id as service_id', 'status_services', 'kode_service', 'nama_pelanggan', 'users.name')
+            ->first();
+
+        // Cek apakah service ditemukan
+        if (!$service) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Service tidak ditemukan.',
+            ], 404);
+        }
+
+        // Return response dengan status service
+        return response()->json([
+            'success' => true,
+            'message' => 'Status service berhasil diambil.',
+            'data' => [
+                'id' => $service->service_id,
+                'kode_service' => $service->kode_service,
+                'nama_pelanggan' => $service->nama_pelanggan,
+                'status_services' => $service->status_services,
+                'teknisi' => $service->name,
+                'is_completed' => $service->status_services != 'Antri'
+            ],
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+        ], 500);
+    }
+}
+
     public function getCompletedservice(Request $request)
     {
         try {

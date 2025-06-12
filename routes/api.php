@@ -41,6 +41,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/pending-services', [DashboardController::class, 'get_pending_services']);
     Route::get('/services/completed-today', [ServiceApiController::class, 'getCompletedToday']);
     Route::get('/services/completedAll', [ServiceApiController::class, 'getCompletedservice']);
+    Route::get('/services/{serviceId}/status', [ServiceApiController::class, 'checkServiceStatus']);
     // detail service
     Route::get('/services/getServiceDetails/{id}', [SparepartApiController::class, 'getServiceDetails']);
     // update service
