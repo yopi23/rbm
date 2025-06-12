@@ -17,6 +17,8 @@ use App\Models\UserDetail;
 use App\Services\WhatsAppService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use App\Models\SubKategoriSparepart;
+use App\Models\KategoriSparepart;
 
 class SparepartApiController extends Controller
 {
@@ -63,59 +65,88 @@ class SparepartApiController extends Controller
     public function search_sparepart(Request $request)
     {
         try {
-            $query = $request->input('query');
-            $command = strtolower(trim($query));
+        $query = $request->input('query');
+        $command = strtolower(trim($query));
 
-            if (empty($command)) {
+        if (empty($command)) {
+            return response()->json([
+                'success' => true,
+                'message' => "Apa yang Anda cari?\n\n" .
+                    "Untuk mencari sparepart, ketik:\n" .
+                    "part,nama sparepart toko\n\n" .
+                    "Untuk menyelesaikan, ketik:\n" .
+                    "selesaikan",
+                'commands' => [
+                    'part,(nama barang)',
+                    'cancel',
+                    'selesaikan',
+                    'rincian atau rinci',
+                    'wa (isi pesan)'
+                ]
+            ]);
+        }
+
+        // Cek apakah input dimulai dengan "part"
+        if (str_starts_with($command, 'part')) {
+            // Tangkap kata kunci setelah "part"
+            $pattern = '/^part[\s,:-]*(.+)$/';
+            if (preg_match($pattern, $command, $matches)) {
+                $searchQuery = trim($matches[1]);
+
+                // Pisahkan input menjadi kata-kata berdasarkan spasi
+                $keywords = array_filter(explode(' ', strtolower($searchQuery)));
+
+                // Buat query pencarian menggunakan DB builder seperti function search
+                $queryBuilder = DB::table('spareparts')
+                    ->where('kode_owner', '=', $this->getThisUser()->id_upline);
+
+                // Gunakan subquery untuk setiap keyword
+                foreach ($keywords as $keyword) {
+                    $queryBuilder->where(function ($q) use ($keyword) {
+                        $q->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', '%' . $keyword . '%');
+                    });
+                }
+
+                // Eksekusi query dengan select fields yang diperlukan
+                $results = $queryBuilder->select([
+                    'id',
+                    'kode_sparepart',
+                    'nama_sparepart',
+                    'kode_kategori',
+                    'kode_sub_kategori',
+                    'harga_beli',
+                    'harga_jual',
+                    'harga_ecer',
+                    'harga_pasang',
+                    'stok_sparepart',
+                    'created_at',
+                    'updated_at'
+                ])->get();
+
+                // Enhance data dengan category dan subcategory names
+                $enhancedResults = $results->map(function($item) {
+                    $category = KategoriSparepart::find($item->kode_kategori);
+                    $subcategory = SubKategoriSparepart::find($item->kode_sub_kategori);
+
+                    $item->kategori_nama = $category ? $category->nama_kategori : null;
+                    $item->sub_kategori_nama = $subcategory ? $subcategory->nama_sub_kategori : null;
+
+                    return $item;
+                });
+
                 return response()->json([
                     'success' => true,
-                    'message' => "Apa yang Anda cari?\n\n" .
-                        "Untuk mencari sparepart, ketik:\n" .
-                        "part,nama sparepart toko\n\n" .
-                        "Untuk menyelesaikan, ketik:\n" .
-                        "selesaikan",
-                    'commands' => [
-                        'part,(nama barang)',
-                        'cancel',
-                        'selesaikan',
-                        'rincian atau rinci',
-                        'wa (isi pesan)'
-                    ]
+                    'type' => 'sparepart_list',
+                    'total_items' => $results->count(),
+                    'data' => $enhancedResults
+                ]);
+            } else {
+                return response()->json([
+                    'success' => true,
+                    'message' => "Format pencarian tidak valid. Gunakan format: 'part (nama barang)'"
                 ]);
             }
-
-            // Cek apakah input dimulai dengan "part"
-            if (str_starts_with($command, 'part')) {
-                // Tangkap kata kunci setelah "part"
-                $pattern = '/^part[\s,:-]*(.+)$/';
-                if (preg_match($pattern, $command, $matches)) {
-                    $searchQuery = trim($matches[1]);
-
-                    // Pisahkan input menjadi kata-kata berdasarkan spasi
-                    $keywords = explode(' ', $searchQuery);
-
-                    // Buat query pencarian
-                    $spareparts = Sparepart::query();
-
-                    // Pastikan setiap kata kunci ada di nama_sparepart
-                    foreach ($keywords as $word) {
-                        $spareparts->where('nama_sparepart', 'LIKE', "%{$word}%");
-                    }
-                    // Eksekusi query
-                    $results = $spareparts->get();
-
-                    return response()->json([
-                        'success' => true,
-                        'type' => 'sparepart_list',
-                        'data' => $results
-                    ]);
-                } else {
-                    return response()->json([
-                        'success' => true,
-                        'message' => "Format pencarian tidak valid. Gunakan format: 'part (nama barang)'"
-                    ]);
-                }
-            }
+        }
 
             // Cek apakah input dimulai dengan "wa"
             if (str_starts_with($command, 'wa')) {
