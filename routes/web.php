@@ -36,6 +36,7 @@ use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\EmployeeManagementController;
 use App\Http\Controllers\Admin\HpController;
 use App\Http\Controllers\Admin\PenaltyRulesController;
+use App\Http\Controllers\Admin\AttendanceCronController;
 
 
 
