@@ -125,10 +125,9 @@ class EmployeeManagementController extends Controller
                 $lateMinutes = 0;
                 if ($schedule && $schedule->is_working_day) {
                     $checkInTime = Carbon::now();
-                    dd($schedule->start_time);
-
+                    Log::info('Schedule start time: ' . $schedule->start_time);
                     $scheduleStartTime = Carbon::createFromFormat('Y-m-d H:i:s',
-                        $todayDate->format('Y-m-d') . ' ' . $schedule->start_time);
+                        $todayDate->format('Y-m-d') . ' ' . date('H:i:s', strtotime($schedule->start_time)));
 
                     if ($checkInTime->gt($scheduleStartTime)) {
                         $lateMinutes = $checkInTime->diffInMinutes($scheduleStartTime);
@@ -362,6 +361,7 @@ class EmployeeManagementController extends Controller
         }
 
         $today = Carbon::today();
+
         $schedule = WorkSchedule::where('user_id', $request->user_id)
             ->where('day_of_week', $today->format('l'))
             ->first();
@@ -392,8 +392,11 @@ class EmployeeManagementController extends Controller
         // Calculate late minutes
         $checkInTime = Carbon::now();
         // dd($schedule->start_time);
+        // $scheduleStartTime = Carbon::createFromFormat('Y-m-d H:i:s',
+        //     $schedule->start_time);
         $scheduleStartTime = Carbon::createFromFormat('Y-m-d H:i:s',
-            $schedule->start_time);
+                $today->format('Y-m-d') . ' ' . date('H:i:s', strtotime($schedule->start_time)));
+
         $lateMinutes = 0;
         if ($checkInTime->gt($scheduleStartTime)) {
             $lateMinutes = $checkInTime->diffInMinutes($scheduleStartTime);
@@ -2131,8 +2134,42 @@ public function getThisUser()
 
     public function getUserSchedule($userId)
     {
-        $schedules = WorkSchedule::where('user_id', $userId)->get();
-        return response()->json(['schedules' => $schedules]);
+        try {
+            $schedules = WorkSchedule::where('user_id', $userId)
+                ->orderByRaw("FIELD(day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')")
+                ->get();
+
+            // Format the time fields properly
+            $formattedSchedules = $schedules->map(function($schedule) {
+                return [
+                    'id' => $schedule->id,
+                    'user_id' => $schedule->user_id,
+                    'day_of_week' => $schedule->day_of_week,
+                    'start_time' => $schedule->start_time ? \Carbon\Carbon::parse($schedule->start_time)->format('H:i') : null,
+                    'end_time' => $schedule->end_time ? \Carbon\Carbon::parse($schedule->end_time)->format('H:i') : null,
+                    'is_working_day' => (bool) $schedule->is_working_day,
+                    'created_at' => $schedule->created_at,
+                    'updated_at' => $schedule->updated_at
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'schedules' => $formattedSchedules
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error getting user schedule: ' . $e->getMessage(), [
+                'user_id' => $userId,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil data jadwal: ' . $e->getMessage(),
+                'schedules' => []
+            ], 500);
+        }
     }
 
     // ===================================================================
