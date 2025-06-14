@@ -44,7 +44,6 @@ class AttendanceCronController extends Controller
             // Get all active employees (kasir dan teknisi)
             $employees = User::join('user_details', 'users.id', '=', 'user_details.kode_user')
                 ->whereIn('user_details.jabatan', [2, 3]) // 2=Kasir, 3=Teknisi
-                ->where('users.deleted_at', null)
                 ->get(['users.*', 'user_details.*', 'users.id as id_user']);
 
             $processedCount = 0;
@@ -140,22 +139,65 @@ class AttendanceCronController extends Controller
      * Validate cron security token
      */
     private function validateCronToken($request)
-    {
-        $providedToken = $request->query('token') ?? $request->header('X-Cron-Token');
-        $validToken = env('CRON_SECRET_TOKEN', 'default-cron-token-12345');
+{
+    $providedToken = $request->query('token') ?? $request->header('X-Cron-Token');
+    $validToken = env('CRON_SECRET_TOKEN');
 
-        // Log attempt for security monitoring
-        Log::info('Cron access attempt', [
-            'ip' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-            'url' => $request->fullUrl(),
-            'token_provided' => !empty($providedToken),
-            'valid_access' => $providedToken === $validToken
-        ]);
+    // Debug logging yang lebih detail
+    Log::info('=== TOKEN VALIDATION DEBUG ===', [
+        'request_method' => $request->method(),
+        'request_url' => $request->fullUrl(),
+        'request_path' => $request->path(),
+        'query_params' => $request->query(),
+        'all_headers' => $request->headers->all(),
+        'ip' => $request->ip(),
+        'user_agent' => $request->userAgent(),
+    ]);
 
-        return $providedToken === $validToken;
-    }
+    Log::info('=== TOKEN COMPARISON DEBUG ===', [
+        'provided_token_from_query' => $request->query('token'),
+        'provided_token_from_header' => $request->header('X-Cron-Token'),
+        'final_provided_token' => $providedToken,
+        'provided_token_length' => strlen($providedToken ?? ''),
+        'provided_token_type' => gettype($providedToken),
+        'provided_token_is_empty' => empty($providedToken),
+        'provided_token_raw' => var_export($providedToken, true),
+    ]);
 
+    Log::info('=== ENV TOKEN DEBUG ===', [
+        'env_token_value' => $validToken,
+        'env_token_length' => strlen($validToken ?? ''),
+        'env_token_type' => gettype($validToken),
+        'env_token_is_empty' => empty($validToken),
+        'env_token_raw' => var_export($validToken, true),
+    ]);
+
+    Log::info('=== COMPARISON RESULT ===', [
+        'tokens_are_identical' => $providedToken === $validToken,
+        'tokens_equal_loose' => $providedToken == $validToken,
+        'both_tokens_exist' => !empty($providedToken) && !empty($validToken),
+        'string_comparison' => strcmp($providedToken ?? '', $validToken ?? ''),
+    ]);
+
+    // Test different ways to get env
+    $envDirect = $_ENV['CRON_SECRET_TOKEN'] ?? null;
+    $envConfig = config('app.cron_secret_token');
+
+    Log::info('=== ENV ACCESS METHODS ===', [
+        'env_function' => $validToken,
+        'env_superglobal' => $envDirect,
+        'config_helper' => $envConfig,
+    ]);
+
+    $result = !empty($providedToken) && !empty($validToken) && $providedToken === $validToken;
+
+    Log::info('=== FINAL VALIDATION RESULT ===', [
+        'validation_passed' => $result,
+        'reason' => $result ? 'success' : 'failed_validation'
+    ]);
+
+    return $result;
+}
     /**
      * Auto checkout employees - Run at 5:00 PM
      * URL: /admin/cron/auto-checkout?token=YOUR_SECRET_TOKEN
