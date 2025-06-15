@@ -10,7 +10,7 @@ use App\Models\DetailPartLuarService;
 use App\Models\Sevices as modelServices;
 use App\Models\DetailCatatanService;
 use App\Models\Garansi;
-use App\Models\PresentaseUser;
+use App\Models\SalarySetting;
 use App\Models\ProfitPresentase;
 use App\Models\User;
 use App\Models\UserDetail;
@@ -593,104 +593,6 @@ class SparepartApiController extends Controller
         return response()->json(['message' => 'Sparepart not found.'], 404);
     }
 
-    // selesaikan
-    // public function updateServiceStatus(Request $request, $id)
-    // {
-    //     try {
-    //         $request->validate([
-    //             'status_services' => 'required|string|in:Selesai', // Validasi status harus "Selesai"
-    //             'id_teknisi' => 'required|exists:user_details,kode_user', // Validasi ID teknisi
-    //         ]);
-
-    //         $update = modelServices::findOrFail($id); // Cari service berdasarkan ID
-    //         $id_teknisi = $request->id_teknisi;
-
-    //         if ($request->status_services === 'Selesai') {
-    //             // Ambil detail part toko dan luar toko
-    //             $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
-    //                 ->where('detail_part_services.kode_services', $id)
-    //                 ->get(['detail_part_services.*', 'spareparts.*']);
-
-    //             $part_luar_toko_service = DetailPartLuarService::where('kode_services', $id)->get();
-
-    //             // Ambil presentase teknisi
-    //             $presentase = PresentaseUser::where('kode_user', $id_teknisi)->first();
-
-    //             // Hitung total part
-    //             $total_part = 0;
-    //             foreach ($part_toko_service as $a) {
-    //                 $total_part += $a->harga_jual * $a->qty_part;
-    //             }
-    //             foreach ($part_luar_toko_service as $b) {
-    //                 $total_part += $b->harga_part * $b->qty_part;
-    //             }
-
-    //             // Update total part ke service
-    //             $update->update([
-    //                 'harga_sp' => $total_part,
-    //                 'status_services' => $request->status_services, // Ubah status menjadi "Selesai"
-    //                 'id_teknisi' => $request->id_teknisi,
-    //             ]);
-
-    //             if ($presentase) {
-    //                 // Periksa apakah komisi sudah pernah dibuat untuk service ini
-    //                 $komisi_exist = ProfitPresentase::where('kode_service', $id)->exists();
-
-    //                 if (!$komisi_exist) {
-    //                     // Hitung profit teknisi
-    //                     $profit = $update->total_biaya - $total_part;
-    //                     $fix_profit = $profit * $presentase->presentase / 100;
-
-    //                     // Ambil data teknisi
-    //                     $teknisi = UserDetail::where('kode_user', $id_teknisi)->first();
-
-    //                     // Simpan data profit ke ProfitPresentase
-    //                     $komisi = ProfitPresentase::create([
-    //                         'tgl_profit' => now(),
-    //                         'kode_service' => $id,
-    //                         'kode_presentase' => $presentase->id,
-    //                         'kode_user' => $id_teknisi,
-    //                         'profit' => $fix_profit,
-    //                         'saldo' => $teknisi->saldo,
-    //                     ]);
-
-    //                     if ($komisi) {
-    //                         // Update saldo teknisi
-    //                         $teknisi->update([
-    //                             'saldo' => $teknisi->saldo + $fix_profit,
-    //                         ]);
-    //                     }
-    //                 }
-    //             }
-    //             // Kirim pesan WhatsApp ke customer
-    //             $this->sendWhatsAppNotification($update);
-
-    //             return response()->json([
-    //                 'success' => true,
-    //                 'message' => "Service status updated to 'Selesai' successfully by technician {$id_teknisi}.",
-    //                 'data' => [
-    //                     'service_id' => $id,
-    //                     'technician_id' => $id_teknisi,
-    //                     'nama' => $teknisi->fullname,
-    //                     'status' => $request->status_services,
-    //                 ],
-    //             ], 200);
-    //         }
-
-    //         return response()->json([
-    //             'success' => false,
-    //             'message' => 'Invalid status provided.',
-    //             'data' => null,
-    //         ], 400);
-    //     } catch (\Exception $e) {
-    //         return response()->json([
-    //             'success' => false,
-    //             'message' => 'Failed to update service status.',
-    //             'error' => $e->getMessage(),
-    //         ], 500);
-    //     }
-    // }
-
     public function updateServiceStatus(Request $request, $id)
     {
         try {
@@ -711,7 +613,7 @@ class SparepartApiController extends Controller
                 $part_luar_toko_service = DetailPartLuarService::where('kode_services', $id)->get();
 
                 // Ambil presentase teknisi
-                $presentase = PresentaseUser::where('kode_user', $id_teknisi)->first();
+                $presentase = SalarySetting::where('user_id', $id_teknisi)->first();
 
                 // Hitung total part
                 $total_part = 0;
@@ -729,14 +631,14 @@ class SparepartApiController extends Controller
                     'id_teknisi' => $request->id_teknisi,
                 ]);
 
-                if ($presentase) {
+                if ($presentase->compensation_type=='percentage') {
                     // Periksa apakah komisi sudah pernah dibuat untuk service ini
                     $komisi_exist = ProfitPresentase::where('kode_service', $id)->exists();
 
                     if (!$komisi_exist) {
                         // Hitung profit teknisi
                         $profit = $update->total_biaya - $total_part;
-                        $fix_profit = $profit * $presentase->presentase / 100;
+                        $fix_profit = $profit * $presentase->percentage_value / 100;
 
                         // Ambil data teknisi
                         $teknisi = UserDetail::where('kode_user', $id_teknisi)->first();
@@ -820,6 +722,462 @@ class SparepartApiController extends Controller
                 'success' => false,
                 'message' => 'Failed to update service status.',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    //CRUD Garansi Service API
+    public function storeGaransiService(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'kode_garansi' => 'required|string',
+                'nama_garansi' => 'required|string|max:255',
+                'tgl_mulai_garansi' => 'required|date',
+                'tgl_exp_garansi' => 'required|date|after:tgl_mulai_garansi',
+                'catatan_garansi' => 'nullable|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $create = Garansi::create([
+                'type_garansi' => 'service',
+                'kode_garansi' => $request->kode_garansi,
+                'nama_garansi' => $request->nama_garansi,
+                'tgl_mulai_garansi' => $request->tgl_mulai_garansi,
+                'tgl_exp_garansi' => $request->tgl_exp_garansi,
+                'catatan_garansi' => $request->catatan_garansi ?? '-',
+                'user_input' => auth()->user()->id,
+                'kode_owner' => $this->getThisUser()->id_upline,
+            ]);
+
+            if ($create) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Garansi berhasil ditambahkan',
+                    'data' => $create
+                ], 201);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menambahkan garansi'
+            ], 500);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Server error',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+   public function getGaransiService($kode_service)
+{
+    try {
+        \Log::info('Get Warranty Request', [
+            'kode_service' => $kode_service,
+            'user_id' => auth()->user()->id
+        ]);
+
+        // Cari garansi berdasarkan kode service
+        $garansi = Garansi::where([
+            ['type_garansi', '=', 'service'],
+            ['kode_garansi', '=', $kode_service]
+        ])->orderBy('created_at', 'desc')->get();
+
+        // Tambahkan informasi status garansi
+        $garansiWithStatus = $garansi->map(function($item) {
+            $item->status_garansi = $this->getWarrantyStatus($item->tgl_exp_garansi);
+            $item->is_expired = now()->gt($item->tgl_exp_garansi);
+            $item->days_remaining = now()->diffInDays($item->tgl_exp_garansi, false);
+            return $item;
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data garansi berhasil diambil',
+            'data' => $garansiWithStatus,
+            'total' => $garansiWithStatus->count()
+        ], 200);
+
+    } catch (\Exception $e) {
+        \Log::error('Get Warranty Error', [
+            'error' => $e->getMessage(),
+            'kode_service' => $kode_service,
+            'user_id' => auth()->user()->id ?? null
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Server error',
+            'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+        ], 500);
+    }
+}
+
+// Helper method untuk menentukan status garansi
+private function getWarrantyStatus($expiry_date)
+{
+    $now = now();
+    $expiry = \Carbon\Carbon::parse($expiry_date);
+    $diffInDays = $now->diffInDays($expiry, false);
+
+    if ($diffInDays < 0) {
+        return 'expired';
+    } elseif ($diffInDays == 0) {
+        return 'expires_today';
+    } elseif ($diffInDays <= 7) {
+        return 'expires_soon';
+    } else {
+        return 'active';
+    }
+}
+
+// Method untuk update garansi (jika diperlukan)
+public function updateGaransiService(Request $request, $id)
+{
+    try {
+        \Log::info('Update Warranty Request', [
+            'warranty_id' => $id,
+            'request_data' => $request->all(),
+            'user_id' => auth()->user()->id
+        ]);
+
+        $validator = Validator::make($request->all(), [
+            'nama_garansi' => 'required|string|max:255',
+            'tgl_mulai_garansi' => 'required|date',
+            'tgl_exp_garansi' => 'required|date|after:tgl_mulai_garansi',
+            'catatan_garansi' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $data = Garansi::findOrFail($id);
+
+        // Check ownership atau permission (opsional)
+        // if ($data->user_input != auth()->user()->id) {
+        //     return response()->json([
+        //         'success' => false,
+        //         'message' => 'Unauthorized to update this warranty'
+        //     ], 403);
+        // }
+
+        $data->update([
+            'nama_garansi' => $request->nama_garansi,
+            'tgl_mulai_garansi' => $request->tgl_mulai_garansi,
+            'tgl_exp_garansi' => $request->tgl_exp_garansi,
+            'catatan_garansi' => $request->catatan_garansi ?? '-',
+            'user_input' => auth()->user()->id,
+        ]);
+
+        \Log::info('Warranty Updated Successfully', [
+            'warranty_id' => $id,
+            'updated_by' => auth()->user()->id
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Garansi berhasil diupdate',
+            'data' => $data
+        ], 200);
+
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Garansi tidak ditemukan'
+        ], 404);
+    } catch (\Exception $e) {
+        \Log::error('Update Warranty Error', [
+            'error' => $e->getMessage(),
+            'warranty_id' => $id,
+            'user_id' => auth()->user()->id ?? null
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Server error',
+            'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+        ], 500);
+    }
+}
+
+// Method untuk menghapus garansi (jika diperlukan)
+public function deleteGaransiService($id)
+{
+    try {
+        \Log::info('Delete Warranty Request', [
+            'warranty_id' => $id,
+            'user_id' => auth()->user()->id
+        ]);
+
+        $data = Garansi::findOrFail($id);
+
+        // Check ownership atau permission (opsional)
+        // if ($data->user_input != auth()->user()->id) {
+        //     return response()->json([
+        //         'success' => false,
+        //         'message' => 'Unauthorized to delete this warranty'
+        //     ], 403);
+        // }
+
+        $data->delete();
+
+        \Log::info('Warranty Deleted Successfully', [
+            'warranty_id' => $id,
+            'deleted_by' => auth()->user()->id
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Garansi berhasil dihapus'
+        ], 200);
+
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Garansi tidak ditemukan'
+        ], 404);
+    } catch (\Exception $e) {
+        \Log::error('Delete Warranty Error', [
+            'error' => $e->getMessage(),
+            'warranty_id' => $id,
+            'user_id' => auth()->user()->id ?? null
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Server error',
+            'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+        ], 500);
+    }
+}
+
+// Method untuk mendapatkan statistik garansi (bonus)
+public function getWarrantyStats()
+{
+    try {
+        $user = auth()->user();
+        $userDetail = $this->getThisUser();
+        $idUpline = $userDetail->id_upline ?? $user->id;
+
+        $stats = [
+            'total_warranties' => Garansi::where('kode_owner', $idUpline)->count(),
+            'active_warranties' => Garansi::where('kode_owner', $idUpline)
+                ->where('tgl_exp_garansi', '>', now())
+                ->count(),
+            'expired_warranties' => Garansi::where('kode_owner', $idUpline)
+                ->where('tgl_exp_garansi', '<=', now())
+                ->count(),
+            'expiring_soon' => Garansi::where('kode_owner', $idUpline)
+                ->whereBetween('tgl_exp_garansi', [now(), now()->addDays(7)])
+                ->count(),
+        ];
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Statistik garansi berhasil diambil',
+            'data' => $stats
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Server error',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+    //CRUD Catatan Service API
+    public function storeCatatanService(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'tgl_catatan_service' => 'required|date',
+                'kode_services' => 'required|exists:sevices,id',
+                'catatan_service' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $create = DetailCatatanService::create([
+                'tgl_catatan_service' => $request->tgl_catatan_service,
+                'kode_services' => $request->kode_services,
+                'kode_user' => auth()->user()->id,
+                'catatan_service' => $request->catatan_service ?? '-',
+            ]);
+
+            if ($create) {
+                // Get the created note with user information
+                $catatan = DetailCatatanService::join('users', 'detail_catatan_services.kode_user', '=', 'users.id')
+                    ->where('detail_catatan_services.id', $create->id)
+                    ->select([
+                        'detail_catatan_services.id as id_catatan',
+                        'detail_catatan_services.*',
+                        'users.*'
+                    ])
+                    ->first();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Catatan berhasil dibuat',
+                    'data' => $catatan
+                ], 201);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal membuat catatan'
+            ], 500);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Server error',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function updateCatatanService(Request $request, $id)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'tgl_catatan_service' => 'required|date',
+                'catatan_service' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $data = DetailCatatanService::findOrFail($id);
+
+            // Check if the current user is the owner of this note
+            if ($data->kode_user != auth()->user()->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Anda tidak memiliki izin untuk mengubah catatan ini'
+                ], 403);
+            }
+
+            $data->update([
+                'tgl_catatan_service' => $request->tgl_catatan_service,
+                'catatan_service' => $request->catatan_service ?? '-',
+            ]);
+
+            // Get updated note with user information
+            $catatan = DetailCatatanService::join('users', 'detail_catatan_services.kode_user', '=', 'users.id')
+                ->where('detail_catatan_services.id', $id)
+                ->select([
+                    'detail_catatan_services.id as id_catatan',
+                    'detail_catatan_services.*',
+                    'users.*'
+                ])
+                ->first();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Catatan berhasil diupdate',
+                'data' => $catatan
+            ], 200);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Catatan tidak ditemukan'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Server error',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function deleteCatatanService($id)
+    {
+        try {
+            $data = DetailCatatanService::findOrFail($id);
+
+            // Check if the current user is the owner of this note
+            if ($data->kode_user != auth()->user()->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Anda tidak memiliki izin untuk menghapus catatan ini'
+                ], 403);
+            }
+
+            $data->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Catatan berhasil dihapus'
+            ], 200);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Catatan tidak ditemukan'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Server error',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getCatatanService($service_id)
+    {
+        try {
+            $catatan = DetailCatatanService::join('users', 'detail_catatan_services.kode_user', '=', 'users.id')
+                ->where('detail_catatan_services.kode_services', $service_id)
+                ->select([
+                    'detail_catatan_services.id as id_catatan',
+                    'detail_catatan_services.*',
+                    'users.*'
+                ])
+                ->orderBy('detail_catatan_services.tgl_catatan_service', 'desc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data catatan berhasil diambil',
+                'data' => $catatan
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Server error',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

@@ -161,7 +161,7 @@
                 if (response.schedules) {
                     // Reset form to default values first
                     $('.start_time_Monday, .start_time_Tuesday, .start_time_Wednesday, .start_time_Thursday, .start_time_Friday, .start_time_Saturday')
-                        .val('8:00');
+                        .val('08:00');
                     $('.end_time_Monday, .end_time_Tuesday, .end_time_Wednesday, .end_time_Thursday, .end_time_Friday, .end_time_Saturday')
                         .val('16:30');
                     $('.working_day_Monday, .working_day_Tuesday, .working_day_Wednesday, .working_day_Thursday, .working_day_Friday, .working_day_Saturday')

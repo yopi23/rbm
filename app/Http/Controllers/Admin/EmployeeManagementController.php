@@ -2179,20 +2179,57 @@ public function getThisUser()
     /**
      * Get attendance history for mobile app
      */
-    public function getAttendanceHistory(Request $request, $userId)
-    {
-        $limit = $request->limit ?? 30;
+    public function getAttendanceHistory(Request $request, $userId = null)
+{
+    $month = $request->month ?? date('m');
+    $year = $request->year ?? date('Y');
+    $employeeId = $request->employee_id ?? $userId;
 
-        $attendances = Attendance::where('user_id', $userId)
-            ->orderBy('attendance_date', 'desc')
-            ->limit($limit)
-            ->get();
+    // For admin viewing all or specific employee
+    if ($userId === null) {
+        $query = Attendance::with(['user', 'user.userDetail']);
 
-        return response()->json([
-            'success' => true,
-            'data' => $attendances
-        ]);
+        if ($employeeId) {
+            $query->where('user_id', $employeeId);
+        } else {
+            // Filter by owner if needed
+            $employees = $this->getCurrentOwnerEmployees();
+            $employeeIds = $employees->pluck('id_user');
+            $query->whereIn('user_id', $employeeIds);
+        }
+
+        $query->whereYear('attendance_date', $year)
+              ->whereMonth('attendance_date', $month)
+              ->orderBy('attendance_date', 'desc');
     }
+    // For employee viewing their own history
+    else {
+        $query = Attendance::where('user_id', $employeeId)
+            ->whereYear('attendance_date', $year)
+            ->whereMonth('attendance_date', $month)
+            ->orderBy('attendance_date', 'desc');
+    }
+
+    $history = $query->get()->map(function($item) {
+        return [
+            'id' => $item->id,
+            'user_id' => $item->user_id,
+            'user_name' => $item->user->name ?? 'Unknown',
+            'attendance_date' => $item->attendance_date,
+            'check_in' => $item->check_in,
+            'check_out' => $item->check_out,
+            'status' => $item->status,
+            'late_minutes' => $item->late_minutes,
+            'location' => $item->location,
+            'note' => $item->note,
+        ];
+    });
+
+    return response()->json([
+        'success' => true,
+        'data' => $history
+    ]);
+}
 
     /**
      * Get user schedule for mobile app
@@ -2207,6 +2244,21 @@ public function getThisUser()
         ]);
     }
 
+    public function getEmployeeList()
+{
+    $employees = $this->getCurrentOwnerEmployees();
+
+    return response()->json([
+        'success' => true,
+        'employees' => $employees->map(function($item) {
+            return [
+                'id' => $item->id_user,
+                'name' => $item->name,
+                'position' => $item->jabatan == 2 ? 'Kasir' : 'Teknisi',
+            ];
+        })
+    ]);
+}
     /**
      * Get salary info for mobile app
      */

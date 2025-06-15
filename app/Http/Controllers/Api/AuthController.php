@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
+use App\Models\SalarySetting;
 use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
@@ -24,7 +25,7 @@ class AuthController extends Controller
             // Cek versi aplikasi terlebih dahulu
             // $clientVersion = '2025.06.02';
             $clientVersion = $request->input('version');
-            $minVersion = '2025.06.02'; // versi minimum yang diizinkan
+            $minVersion = '2025.06.16'; // versi minimum yang diizinkan
 
             if (version_compare($clientVersion, $minVersion, '<')) {
                 return response()->json([
@@ -43,10 +44,14 @@ class AuthController extends Controller
             }
 
             // Login berhasil
-            $user = User::where('email', $request->email)
-                ->with('userDetail')
+            // $user = User::where('email', $request->email)
+            //     ->with('userDetail')
+            //     ->first();
+            $user = User::with(['userDetail', 'salarySetting:id,user_id,compensation_type'])
+                ->where('email', $request->email)
                 ->first();
             $token = $user->createToken('auth_token')->plainTextToken;
+
 
             return response()->json([
                 'status' => 'success',
@@ -67,9 +72,9 @@ class AuthController extends Controller
     {
         try {
             // Ambil versi dari request
-            // $clientVersion = '2025.06.02';
+            // $clientVersion = '2025.06.16';
             $clientVersion = $request->input('version');
-            $minVersion = '2025.06.02'; // versi minimum yang diizinkan
+            $minVersion = '2025.06.16'; // versi minimum yang diizinkan
 
             // Cek versi aplikasi terlebih dahulu, terlepas dari token
             if (version_compare($clientVersion, $minVersion, '<')) {

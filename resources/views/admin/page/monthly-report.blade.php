@@ -11,21 +11,21 @@
                     Laporan Bulanan Karyawan
                 </div>
                 <div class="card-tools">
-                    <form action="{{ route('admin.employee.generate-report') }}" method="POST" class="form-inline">
+                    <form id="reportForm" method="POST" class="form-inline">
                         @csrf
-                        <select name="year" class="form-control mr-2">
+                        <select name="year" id="yearSelect" class="form-control mr-2">
                             @for ($i = date('Y'); $i >= date('Y') - 5; $i--)
                                 <option value="{{ $i }}" {{ $year == $i ? 'selected' : '' }}>
                                     {{ $i }}</option>
                             @endfor
                         </select>
-                        <select name="month" class="form-control mr-2">
+                        <select name="month" id="monthSelect" class="form-control mr-2">
                             @for ($i = 1; $i <= 12; $i++)
                                 <option value="{{ $i }}" {{ $month == $i ? 'selected' : '' }}>
                                     {{ date('F', mktime(0, 0, 0, $i, 1)) }}</option>
                             @endfor
                         </select>
-                        <button type="submit" class="btn btn-primary">
+                        <button type="button" class="btn btn-primary" onclick="submitReport()">
                             <i class="fas fa-sync"></i> Generate Laporan
                         </button>
                     </form>
@@ -146,5 +146,16 @@
                 }
             });
         }
+    }
+</script>
+<script>
+    function submitReport() {
+        const year = document.getElementById('yearSelect').value;
+        const month = document.getElementById('monthSelect').value;
+        const form = document.getElementById('reportForm');
+        form.action = "{{ route('admin.employee.generate-monthly-report', ['year' => ':year', 'month' => ':month']) }}"
+            .replace(':year', year)
+            .replace(':month', month);
+        form.submit();
     }
 </script>

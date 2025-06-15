@@ -90,6 +90,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/suppliers', [OrderApiController::class, 'getSuppliers']);
 
 
+    // Warranty (Garansi) routes
+    Route::post('/warranty/store', [SparepartApiController::class, 'storeGaransiService']);
+    Route::put('/warranty/{id}', [SparepartApiController::class, 'updateGaransiService']);
+    Route::delete('/warranty/{id}', [SparepartApiController::class, 'deleteGaransiService']);
+    Route::get('/warranty/{kode_service}', [SparepartApiController::class, 'getGaransiService']);
+
+    // Service Notes routes
+    Route::post('/service-notes/store', [SparepartApiController::class, 'storeCatatanService']);
+    Route::put('/service-notes/{id}', [SparepartApiController::class, 'updateCatatanService']);
+    Route::delete('/service-notes/{id}', [SparepartApiController::class, 'deleteCatatanService']);
+    Route::get('/service-notes/{service_id}', [SparepartApiController::class, 'getCatatanService']);
+
 
     Route::prefix('customer')->group(function () {
         Route::get('/', [CustomerApiController::class, 'index']);

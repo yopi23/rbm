@@ -7,7 +7,7 @@ use App\Models\DetailCatatanService;
 use App\Models\DetailPartLuarService;
 use App\Models\DetailPartServices;
 use App\Models\Garansi;
-use App\Models\PresentaseUser;
+use App\Models\SalarySetting;
 use App\Models\ProfitPresentase;
 use Illuminate\Http\Request;
 use App\Models\Sevices as modelServices;
@@ -440,7 +440,7 @@ class ServiceController extends Controller
                 // if ($this->getThisUser()->jabatan != '1') {
                 $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')->where([['kode_services', '=', $id]])->get(['detail_part_services.id as id_detail_part', 'detail_part_services.*', 'spareparts.*']);
                 $part_luar_toko_service = DetailPartLuarService::where([['kode_services', '=', $id]])->get();
-                $presentase = PresentaseUser::where([['kode_user', '=', $id_teknisi]])->get()->first();
+                $presentase = SalarySetting::where([['user_id', '=', $id_teknisi]])->get()->first();
 
                 $total_part = 0;
                 foreach ($part_toko_service as $a) {
@@ -454,10 +454,10 @@ class ServiceController extends Controller
                     'harga_sp' => $total_part  // Menambahkan total_part ke kolom 'part'
                 ]);
 
-                if ($presentase) {
+                if ($presentase->compensation_type =='percentage') {
 
                     $profit = $update->total_biaya - $total_part;
-                    $fix_profit =  $profit * $presentase->presentase / 100;
+                    $fix_profit =  $profit * $presentase->percentage_value / 100;
 
                     //
                     $pegawais = UserDetail::where([['kode_user', '=', $id_teknisi,]])->get()->first();
@@ -481,6 +481,7 @@ class ServiceController extends Controller
 
                 // Status WhatsApp notification
                 $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
+
 
                 // Kirim notifikasi WhatsApp jika nomor telepon tersedia
                 if (!empty($update->no_telp)) {
