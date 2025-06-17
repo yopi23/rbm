@@ -1162,7 +1162,7 @@ public function getWarrantyStats()
                 ->select([
                     'detail_catatan_services.id as id_catatan',
                     'detail_catatan_services.*',
-                    'users.*'
+                    'users.name'
                 ])
                 ->orderBy('detail_catatan_services.tgl_catatan_service', 'desc')
                 ->get();

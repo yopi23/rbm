@@ -144,7 +144,8 @@ class ServiceApiController extends Controller
             $allServices = modelServices::where('kode_owner', $kodeOwner)
                 ->where(function ($query) use ($search) {
                     $query->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
-                        ->orWhere('sevices.type_unit', 'LIKE', "%$search%");
+                        ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
+                        ->orwhere('kode_service', $search);
                 })
                 ->whereYear('sevices.created_at', '>=', $tahunLalu) // Filter tahun
                 ->join('users', 'sevices.id_teknisi', '=', 'users.id')
