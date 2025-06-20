@@ -1181,4 +1181,24 @@ public function getWarrantyStats()
             ], 500);
         }
     }
+
+    public function getServiceIndicators(Request $request) {
+        $services = modelServices::where('status_services', 'Antri')->get();
+
+        $indicators = [];
+        foreach ($services as $service) {
+            $hasWarranty = Garansi::where('kode_garansi', $service->kode_service)->exists();
+            $hasNotes = DetailCatatanService::where('kode_services', $service->id)->exists();
+
+            $indicators[$service->id] = [
+                'has_warranty' => $hasWarranty,
+                'has_notes' => $hasNotes
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $indicators
+        ]);
+    }
 }

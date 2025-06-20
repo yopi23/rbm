@@ -31,4 +31,32 @@ class UserDetail extends Model
         'link_linkedin',
     ];
 
+    public function withdrawals()
+    {
+        return $this->hasMany(Penarikan::class, 'kode_user', 'kode_user');
+    }
+
+    // Relationship untuk penarikan yang diproses oleh admin ini
+    public function adminWithdrawals()
+    {
+        return $this->hasMany(Penarikan::class, 'admin_id', 'kode_user');
+    }
+
+    // Accessor untuk role text
+    public function getRoleTextAttribute()
+    {
+        return match($this->jabatan) {
+            '1' => 'Admin',
+            '2' => 'Kasir',
+            '3' => 'Teknisi',
+            default => 'Unknown'
+        };
+    }
+
+    // Scope untuk employees only (bukan admin)
+    public function scopeEmployees($query)
+    {
+        return $query->whereIn('jabatan', ['2', '3']);
+    }
+
 }

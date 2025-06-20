@@ -36,6 +36,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/attendance/request-leave', [Api\AttendanceController::class, 'requestLeave']);
     Route::get('/attendance/status', [Api\AttendanceController::class, 'getStatus']);
 
+    // Admin Employee Withdrawal Routes
+    Route::post('/admin/penarikan-karyawan', [UserDataController::class, 'adminWithdrawEmployee']);
+    Route::get('/admin/penarikan-history', [UserDataController::class, 'adminWithdrawalHistory']);
+    Route::get('/admin/penarikan-summary', [UserDataController::class, 'adminWithdrawalSummary']);
+
+    Route::get('/karyawan', [UserDataController::Class, 'getKaryawan']);
 
     Route::post('/create-service', [DashboardController::class, 'create_service_api']);
     Route::post('/pending-services', [DashboardController::class, 'get_pending_services']);
@@ -101,6 +107,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/service-notes/{id}', [SparepartApiController::class, 'updateCatatanService']);
     Route::delete('/service-notes/{id}', [SparepartApiController::class, 'deleteCatatanService']);
     Route::get('/service-notes/{service_id}', [SparepartApiController::class, 'getCatatanService']);
+    Route::get('/services/indicators', [SparepartApiController::class, 'getServiceIndicators']);
 
 
     Route::prefix('customer')->group(function () {
@@ -159,6 +166,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Employee API Routes
     Route::prefix('employee')->group(function () {
+
+
         // Get user schedule for mobile
         Route::get('/schedule/{userId}', [EmployeeManagementController::class, 'getUserScheduleAPI']);
 
