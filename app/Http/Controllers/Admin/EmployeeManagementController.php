@@ -2177,6 +2177,406 @@ public function getThisUser()
     // ===================================================================
 
     /**
+     * Manual Check-In by Admin (API untuk mobile)
+     */
+    public function manualCheckIn(Request $request)
+    {
+        try {
+            $request->validate([
+                'employee_id' => 'required|exists:users,id',
+                'location' => 'required|string|max:255',
+                'note' => 'nullable|string|max:500'
+            ]);
+
+            // Validate admin authority
+            $adminId = auth()->id();
+            $admin = User::find($adminId);
+            $adminDetail = UserDetail::where('kode_user', $adminId)->first();
+
+            if (!$adminDetail || !in_array($adminDetail->jabatan, [1, 0])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hanya admin yang dapat melakukan absensi manual'
+                ], 403);
+            }
+
+            // Validate employee access
+            if (!$this->validateUserOwnerAccess($request->employee_id)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Tidak memiliki akses ke karyawan ini'
+                ], 403);
+            }
+
+            $employee = User::find($request->employee_id);
+            $today = Carbon::today();
+
+            // Check if already checked in today
+            $existingAttendance = Attendance::where('user_id', $request->employee_id)
+                ->whereDate('attendance_date', $today)
+                ->first();
+
+            if ($existingAttendance && $existingAttendance->check_in) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Karyawan sudah melakukan check-in hari ini',
+                    'attendance_data' => $existingAttendance
+                ], 400);
+            }
+
+            // Get work schedule
+            $schedule = WorkSchedule::where('user_id', $request->employee_id)
+                ->where('day_of_week', $today->format('l'))
+                ->first();
+
+            if (!$schedule || !$schedule->is_working_day) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Tidak ada jadwal kerja untuk hari ini'
+                ], 400);
+            }
+
+            // Get salary setting
+            $salarySetting = SalarySetting::where('user_id', $request->employee_id)->first();
+            $compensationType = $salarySetting ? $salarySetting->compensation_type : 'fixed';
+
+            // Calculate late minutes
+            $checkInTime = Carbon::now();
+            $scheduleStartTime = Carbon::createFromFormat('Y-m-d H:i:s',
+                $today->format('Y-m-d') . ' ' . date('H:i:s', strtotime($schedule->start_time)));
+
+            $lateMinutes = 0;
+            if ($checkInTime->gt($scheduleStartTime)) {
+                $lateMinutes = $checkInTime->diffInMinutes($scheduleStartTime);
+            }
+
+            // Calculate penalty
+            $penaltyInfo = $this->calculateAttendanceLatePenalty($lateMinutes, $compensationType);
+
+            if (!$penaltyInfo['success']) {
+                Log::error('Failed to calculate penalty for manual check-in', [
+                    'user_id' => $request->employee_id,
+                    'late_minutes' => $lateMinutes,
+                    'compensation_type' => $compensationType
+                ]);
+                $penaltyInfo = [
+                    'penalty_amount' => 0,
+                    'penalty_percentage' => 0,
+                    'should_create_violation' => false,
+                    'penalty_description' => 'Error dalam menentukan penalty'
+                ];
+            }
+
+            DB::beginTransaction();
+
+            // Create attendance record
+            $attendance = Attendance::updateOrCreate(
+                [
+                    'user_id' => $request->employee_id,
+                    'attendance_date' => $today,
+                ],
+                [
+                    'check_in' => $checkInTime,
+                    'status' => 'hadir',
+                    'location' => 'Manual by Admin: ' . $request->location,
+                    'note' => $request->note,
+                    'late_minutes' => $lateMinutes,
+                    'created_by' => $adminId,
+                ]
+            );
+
+            // Create violation if penalty applies
+            if ($penaltyInfo['should_create_violation']) {
+                $violation = Violation::create([
+                    'user_id' => $request->employee_id,
+                    'violation_date' => $today,
+                    'type' => 'telat',
+                    'description' => "Terlambat {$lateMinutes} menit - {$penaltyInfo['penalty_description']} (Manual entry oleh admin)",
+                    'penalty_amount' => $penaltyInfo['penalty_amount'],
+                    'penalty_percentage' => $penaltyInfo['penalty_percentage'],
+                    'status' => 'pending',
+                    'created_by' => $adminId,
+                    'metadata' => json_encode([
+                        'rule_id' => $penaltyInfo['rule_id'] ?? null,
+                        'compensation_type' => $compensationType,
+                        'calculated_at' => now()->toISOString(),
+                        'entry_method' => 'manual_admin'
+                    ])
+                ]);
+
+                Log::info('Manual check-in violation created', [
+                    'violation_id' => $violation->id,
+                    'user_id' => $request->employee_id,
+                    'admin_id' => $adminId,
+                    'late_minutes' => $lateMinutes
+                ]);
+            }
+
+            DB::commit();
+
+            $message = "Check-in manual berhasil untuk {$employee->name}";
+            if ($lateMinutes > 0) {
+                $message .= " (Terlambat $lateMinutes menit)";
+                if ($penaltyInfo['should_create_violation']) {
+                    if ($penaltyInfo['penalty_amount'] > 0) {
+                        $message .= " - Denda Rp " . number_format($penaltyInfo['penalty_amount'], 0, ',', '.');
+                    } else {
+                        $message .= " - Penalty {$penaltyInfo['penalty_percentage']}%";
+                    }
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'data' => [
+                    'attendance_id' => $attendance->id,
+                    'employee_name' => $employee->name,
+                    'check_in_time' => $checkInTime->format('H:i'),
+                    'late_minutes' => $lateMinutes,
+                    'penalty_applied' => $penaltyInfo['should_create_violation'],
+                    'penalty_amount' => $penaltyInfo['penalty_amount'],
+                    'penalty_percentage' => $penaltyInfo['penalty_percentage'],
+                    'compensation_type' => $compensationType
+                ]
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data tidak valid',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error in manual check-in: ' . $e->getMessage(), [
+                'employee_id' => $request->employee_id ?? null,
+                'admin_id' => auth()->id()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal melakukan check-in manual: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Manual Check-Out by Admin (API untuk mobile)
+     */
+    public function manualCheckOut(Request $request)
+    {
+        try {
+            $request->validate([
+                'employee_id' => 'required|exists:users,id',
+                'location' => 'required|string|max:255',
+                'note' => 'nullable|string|max:500'
+            ]);
+
+            // Validate admin authority
+            $adminId = auth()->id();
+            $adminDetail = UserDetail::where('kode_user', $adminId)->first();
+
+            if (!$adminDetail || !in_array($adminDetail->jabatan, [1, 0])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hanya admin yang dapat melakukan absensi manual'
+                ], 403);
+            }
+
+            // Validate employee access
+            if (!$this->validateUserOwnerAccess($request->employee_id)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Tidak memiliki akses ke karyawan ini'
+                ], 403);
+            }
+
+            $employee = User::find($request->employee_id);
+            $today = Carbon::today();
+
+            // Find today's attendance
+            $attendance = Attendance::where('user_id', $request->employee_id)
+                ->whereDate('attendance_date', $today)
+                ->first();
+
+            if (!$attendance || !$attendance->check_in) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Karyawan belum melakukan check-in hari ini'
+                ], 400);
+            }
+
+            if ($attendance->check_out) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Karyawan sudah melakukan check-out hari ini',
+                    'attendance_data' => $attendance
+                ], 400);
+            }
+
+            $checkOutTime = Carbon::now();
+
+            // Update attendance
+            $attendance->update([
+                'check_out' => $checkOutTime,
+                'note' => $attendance->note ? $attendance->note . ' | Checkout: ' . $request->note : 'Checkout: ' . $request->note,
+                'updated_at' => $checkOutTime
+            ]);
+
+            Log::info('Manual check-out completed', [
+                'attendance_id' => $attendance->id,
+                'user_id' => $request->employee_id,
+                'admin_id' => $adminId,
+                'check_out_time' => $checkOutTime
+            ]);
+
+            // Calculate work duration
+            $checkInTime = Carbon::parse($attendance->check_in);
+            $workDuration = $checkInTime->diff($checkOutTime);
+            $workHours = $workDuration->h + ($workDuration->i / 60);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Check-out manual berhasil untuk {$employee->name}",
+                'data' => [
+                    'attendance_id' => $attendance->id,
+                    'employee_name' => $employee->name,
+                    'check_in_time' => $checkInTime->format('H:i'),
+                    'check_out_time' => $checkOutTime->format('H:i'),
+                    'work_duration' => sprintf('%d jam %d menit', $workDuration->h, $workDuration->i),
+                    'work_hours' => round($workHours, 2)
+                ]
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data tidak valid',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Error in manual check-out: ' . $e->getMessage(), [
+                'employee_id' => $request->employee_id ?? null,
+                'admin_id' => auth()->id()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal melakukan check-out manual: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get Employee Attendance Status (API untuk mobile)
+     */
+    public function getEmployeeAttendanceStatus($employeeId)
+    {
+        try {
+            // Validate admin authority
+            $adminDetail = UserDetail::where('kode_user', auth()->id())->first();
+            if (!$adminDetail || !in_array($adminDetail->jabatan, [1, 0])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hanya admin yang dapat mengakses status absensi karyawan'
+                ], 403);
+            }
+
+            // Validate employee access
+            if (!$this->validateUserOwnerAccess($employeeId)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Tidak memiliki akses ke karyawan ini'
+                ], 403);
+            }
+
+            $employee = User::find($employeeId);
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Karyawan tidak ditemukan'
+                ], 404);
+            }
+
+            $today = Carbon::today();
+
+            // Get today's attendance
+            $attendance = Attendance::where('user_id', $employeeId)
+                ->whereDate('attendance_date', $today)
+                ->first();
+
+            // Get work schedule
+            $schedule = WorkSchedule::where('user_id', $employeeId)
+                ->where('day_of_week', $today->format('l'))
+                ->first();
+
+            $status = [
+                'employee_id' => $employeeId,
+                'employee_name' => $employee->name,
+                'date' => $today->format('Y-m-d'),
+                'has_schedule' => $schedule && $schedule->is_working_day,
+                'schedule' => $schedule ? [
+                    'start_time' => $schedule->start_time ? Carbon::parse($schedule->start_time)->format('H:i') : null,
+                    'end_time' => $schedule->end_time ? Carbon::parse($schedule->end_time)->format('H:i') : null,
+                    'is_working_day' => $schedule->is_working_day
+                ] : null,
+                'attendance' => $attendance ? [
+                    'id' => $attendance->id,
+                    'check_in' => $attendance->check_in ? Carbon::parse($attendance->check_in)->format('H:i') : null,
+                    'check_out' => $attendance->check_out ? Carbon::parse($attendance->check_out)->format('H:i') : null,
+                    'status' => $attendance->status,
+                    'late_minutes' => $attendance->late_minutes ?? 0,
+                    'location' => $attendance->location,
+                    'note' => $attendance->note
+                ] : null,
+                'can_check_in' => !$attendance || !$attendance->check_in,
+                'can_check_out' => $attendance && $attendance->check_in && !$attendance->check_out,
+                'is_completed' => $attendance && $attendance->check_in && $attendance->check_out
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $status
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error getting employee attendance status: ' . $e->getMessage(), [
+                'employee_id' => $employeeId,
+                'admin_id' => auth()->id()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil status absensi: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Helper method untuk validasi akses karyawan berdasarkan owner
+     */
+    private function validateUserOwnerAccess($userId)
+    {
+        try {
+            $currentUser = $this->getCurrentUserDetail();
+            if (!$currentUser) {
+                return false;
+            }
+
+            $targetUserDetail = UserDetail::where('kode_user', $userId)->first();
+            if (!$targetUserDetail) {
+                return false;
+            }
+
+            // Check if same owner/upline
+            return $currentUser->id_upline === $targetUserDetail->id_upline;
+        } catch (\Exception $e) {
+            Log::error('Error validating user owner access: ' . $e->getMessage());
+            return false;
+        }
+    }
+    /**
      * Get attendance history for mobile app
      */
     public function getAttendanceHistory(Request $request, $userId = null)
@@ -2245,20 +2645,44 @@ public function getThisUser()
     }
 
     public function getEmployeeList()
-{
-    $employees = $this->getCurrentOwnerEmployees();
+    {
+        try {
+            // Get employees filtered by owner
+            $employees = $this->getCurrentOwnerEmployees();
 
-    return response()->json([
-        'success' => true,
-        'employees' => $employees->map(function($item) {
-            return [
-                'id' => $item->id_user,
-                'name' => $item->name,
-                'position' => $item->jabatan == 2 ? 'Kasir' : 'Teknisi',
-            ];
-        })
-    ]);
-}
+            if ($employees->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Tidak ada karyawan ditemukan'
+                ], 404);
+            }
+
+            // Format data untuk dropdown/selection di mobile
+            $formattedEmployees = $employees->map(function($employee) {
+                return [
+                    'id' => $employee->id_user,
+                    'name' => $employee->name,
+                    'jabatan' => $employee->jabatan == 2 ? 'Kasir' : 'Teknisi',
+                    'jabatan_code' => $employee->jabatan,
+                    'is_active' => true // Could add status check if needed
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'employees' => $formattedEmployees,
+                'total_count' => $formattedEmployees->count()
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error getting employee list: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil data karyawan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
     /**
      * Get salary info for mobile app
      */

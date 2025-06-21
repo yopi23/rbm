@@ -36,6 +36,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/attendance/request-leave', [Api\AttendanceController::class, 'requestLeave']);
     Route::get('/attendance/status', [Api\AttendanceController::class, 'getStatus']);
 
+      // Manual Attendance by Admin (API untuk mobile)
+    Route::get('/employees/list', [EmployeeManagementController::class, 'getEmployeeList']);
+    Route::post('/attendance/manual-checkin', [EmployeeManagementController::class, 'manualCheckIn']);
+    Route::post('/attendance/manual-checkout', [EmployeeManagementController::class, 'manualCheckOut']);
+    Route::get('/attendance/employee-status/{employeeId}', [EmployeeManagementController::class, 'getEmployeeAttendanceStatus']);
+
     // Admin Employee Withdrawal Routes
     Route::post('/admin/penarikan-karyawan', [UserDataController::class, 'adminWithdrawEmployee']);
     Route::get('/admin/penarikan-history', [UserDataController::class, 'adminWithdrawalHistory']);
