@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\CustomerApiController;
 use App\Http\Controllers\Admin\HpController;
 use App\Http\Controllers\Api\HpApiController;
 use App\Http\Controllers\Api\CommissionController;
+use App\Http\Controllers\Api\FinancialReportApiController;
 use App\Http\Controllers\Admin\EmployeeManagementController;
 /*
 |--------------------------------------------------------------------------
@@ -114,6 +115,32 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/service-notes/{id}', [SparepartApiController::class, 'deleteCatatanService']);
     Route::get('/service-notes/{service_id}', [SparepartApiController::class, 'getCatatanService']);
     Route::get('/services/indicators', [SparepartApiController::class, 'getServiceIndicators']);
+
+    // Laporan Keuangan
+    // Route::get('/financial-report', [FinancialReportApiController::class, 'getFinancialReport']);
+    // Route::get('/financial-report/detailed', [FinancialReportApiController::class, 'getDetailedReport']);
+    // Route::get('/financial-report/daily', [FinancialReportApiController::class, 'getDailyReport']);
+
+     // Main financial report
+    Route::get('/financial-report', [FinancialReportApiController::class, 'getFinancialReport']);
+
+    // Detailed reports by type
+    Route::get('/financial-report/detailed', [FinancialReportApiController::class, 'getDetailedReport']);
+
+    // Daily breakdown report
+    Route::get('/financial-report/daily', [FinancialReportApiController::class, 'getDailyReport']);
+
+    // NEW: Service loss details
+    Route::get('/financial-report/service-loss', [FinancialReportApiController::class, 'getServiceLossDetails']);
+
+    // Financial summary for dashboard
+    Route::get('/financial-report/summary', [FinancialReportApiController::class, 'getFinancialSummary']);
+
+    // Technician profit analysis
+    Route::get('/financial-report/technician-analysis', [FinancialReportApiController::class, 'getTechnicianProfitAnalysis']);
+
+    // Export functionality
+    Route::post('/financial-report/export', [FinancialReportApiController::class, 'exportFinancialReport']);
 
 
     Route::prefix('customer')->group(function () {
