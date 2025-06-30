@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\HpController;
 use App\Http\Controllers\Api\HpApiController;
 use App\Http\Controllers\Api\CommissionController;
 use App\Http\Controllers\Api\FinancialReportApiController;
+use App\Http\Controllers\Api\PengeluaranApiController;
 use App\Http\Controllers\Admin\EmployeeManagementController;
 /*
 |--------------------------------------------------------------------------
@@ -116,11 +117,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/service-notes/{service_id}', [SparepartApiController::class, 'getCatatanService']);
     Route::get('/services/indicators', [SparepartApiController::class, 'getServiceIndicators']);
 
-    // Laporan Keuangan
-    // Route::get('/financial-report', [FinancialReportApiController::class, 'getFinancialReport']);
-    // Route::get('/financial-report/detailed', [FinancialReportApiController::class, 'getDetailedReport']);
-    // Route::get('/financial-report/daily', [FinancialReportApiController::class, 'getDailyReport']);
-
+    // Pengeluaran Toko
+    Route::get('pengeluaran-toko', [PengeluaranApiController::class, 'getPengeluaranToko'])->name('api.pengeluaran-toko.index');
+    Route::post('pengeluaran-toko', [PengeluaranApiController::class, 'storePengeluaranToko'])->name('api.pengeluaran-toko.store');
+    Route::get('pengeluaran-toko/{id}', [PengeluaranApiController::class, 'showPengeluaranToko'])->name('api.pengeluaran-toko.show');
+    Route::put('pengeluaran-toko/{id}', [PengeluaranApiController::class, 'updatePengeluaranToko'])->name('api.pengeluaran-toko.update');
+    Route::delete('pengeluaran-toko/{id}', [PengeluaranApiController::class, 'deletePengeluaranToko'])->name('api.pengeluaran-toko.delete');
 
     // Pengeluaran Operasional
     Route::get('pengeluaran-operasional', [PengeluaranApiController::class, 'getPengeluaranOperasional'])->name('api.pengeluaran-operasional.index');
