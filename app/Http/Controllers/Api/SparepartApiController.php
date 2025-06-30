@@ -1183,7 +1183,7 @@ public function getWarrantyStats()
     }
 
     public function getServiceIndicators(Request $request) {
-        $services = modelServices::whereIn('status_services', ['Antri','Selesai'])->get();
+        $services = modelServices::where('status_services', 'Antri')->get();
 
         $indicators = [];
         foreach ($services as $service) {
