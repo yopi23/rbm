@@ -232,8 +232,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
 Route::prefix('orders')->middleware(['auth:sanctum'])->group(function () {
-    // Mendapatkan data
+    // Mendapatkan data dengan berbagai filter
     Route::get('/', [OrderApiController::class, 'getOrders']);
+    Route::get('/recent', [OrderApiController::class, 'getRecentOrders']); // Endpoint baru untuk pesanan terbaru
+    Route::get('/summary', [OrderApiController::class, 'getOrdersSummary']); // Endpoint baru untuk ringkasan
+
+    // Detail pesanan
     Route::get('/{id}', [OrderApiController::class, 'getOrderDetail']);
     Route::get('/{id}/low-stock-items', [OrderApiController::class, 'getLowStockItems']);
 
@@ -249,6 +253,7 @@ Route::prefix('orders')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/{id}/items', [OrderApiController::class, 'addOrderItem']);
     Route::post('/{id}/items/multiple', [OrderApiController::class, 'addMultipleItems']);
     Route::delete('/items/{itemId}', [OrderApiController::class, 'removeOrderItem']);
+
 });
 // API Routes untuk Stock Opname
 Route::prefix('stock-opname')->middleware(['auth:sanctum'])->group(function () {
