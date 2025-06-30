@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\HpController;
 use App\Http\Controllers\Api\HpApiController;
 use App\Http\Controllers\Api\CommissionController;
 use App\Http\Controllers\Api\FinancialReportApiController;
+use App\Http\Controllers\Api\PengeluaranApiController;
 use App\Http\Controllers\Admin\EmployeeManagementController;
 /*
 |--------------------------------------------------------------------------
@@ -116,12 +117,27 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/service-notes/{service_id}', [SparepartApiController::class, 'getCatatanService']);
     Route::get('/services/indicators', [SparepartApiController::class, 'getServiceIndicators']);
 
-    // Laporan Keuangan
-    // Route::get('/financial-report', [FinancialReportApiController::class, 'getFinancialReport']);
-    // Route::get('/financial-report/detailed', [FinancialReportApiController::class, 'getDetailedReport']);
-    // Route::get('/financial-report/daily', [FinancialReportApiController::class, 'getDailyReport']);
+    // Pengeluaran Toko
+    Route::get('pengeluaran-toko', [PengeluaranApiController::class, 'getPengeluaranToko'])->name('api.pengeluaran-toko.index');
+    Route::post('pengeluaran-toko', [PengeluaranApiController::class, 'storePengeluaranToko'])->name('api.pengeluaran-toko.store');
+    Route::get('pengeluaran-toko/{id}', [PengeluaranApiController::class, 'showPengeluaranToko'])->name('api.pengeluaran-toko.show');
+    Route::put('pengeluaran-toko/{id}', [PengeluaranApiController::class, 'updatePengeluaranToko'])->name('api.pengeluaran-toko.update');
+    Route::delete('pengeluaran-toko/{id}', [PengeluaranApiController::class, 'deletePengeluaranToko'])->name('api.pengeluaran-toko.delete');
 
-     // Main financial report
+    // Pengeluaran Operasional
+    Route::get('pengeluaran-operasional', [PengeluaranApiController::class, 'getPengeluaranOperasional'])->name('api.pengeluaran-operasional.index');
+    Route::post('pengeluaran-operasional', [PengeluaranApiController::class, 'storePengeluaranOperasional'])->name('api.pengeluaran-operasional.store');
+    Route::get('pengeluaran-operasional/{id}', [PengeluaranApiController::class, 'showPengeluaranOperasional'])->name('api.pengeluaran-operasional.show');
+    Route::put('pengeluaran-operasional/{id}', [PengeluaranApiController::class, 'updatePengeluaranOperasional'])->name('api.pengeluaran-operasional.update');
+    Route::delete('pengeluaran-operasional/{id}', [PengeluaranApiController::class, 'deletePengeluaranOperasional'])->name('api.pengeluaran-operasional.delete');
+
+    // Helper endpoints
+    Route::get('employees', [PengeluaranApiController::class, 'getEmployees'])->name('api.employees');
+    Route::get('kategori-laci', [PengeluaranApiController::class, 'getKategoriLaci'])->name('api.kategori-laci');
+    Route::get('pengeluaran-summary', [PengeluaranApiController::class, 'getSummary'])->name('api.pengeluaran.summary');
+    //end pengeluaran
+
+     // Main Laporan Keuangan
     Route::get('/financial-report', [FinancialReportApiController::class, 'getFinancialReport']);
 
     // Detailed reports by type
@@ -141,6 +157,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Export functionality
     Route::post('/financial-report/export', [FinancialReportApiController::class, 'exportFinancialReport']);
+
 
 
     Route::prefix('customer')->group(function () {
@@ -212,13 +229,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/commissions/today', [CommissionController::class, 'getTodayCommissions']);
     Route::get('/commissions/my-today', [CommissionController::class, 'getMyTodayCommission']);
 
-
 });
 
-
 Route::prefix('orders')->middleware(['auth:sanctum'])->group(function () {
-    // Mendapatkan data
+    // Mendapatkan data dengan berbagai filter
     Route::get('/', [OrderApiController::class, 'getOrders']);
+    Route::get('/recent', [OrderApiController::class, 'getRecentOrders']); // Endpoint baru untuk pesanan terbaru
+    Route::get('/summary', [OrderApiController::class, 'getOrdersSummary']); // Endpoint baru untuk ringkasan
+
+    // Detail pesanan
     Route::get('/{id}', [OrderApiController::class, 'getOrderDetail']);
     Route::get('/{id}/low-stock-items', [OrderApiController::class, 'getLowStockItems']);
 
