@@ -22,23 +22,181 @@ class OrderApiController extends Controller
      *
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getOrders()
+    public function getOrders(Request $request)
     {
         try {
+            $query = Order::with('supplier')
+                ->where('kode_owner', $this->getThisUser()->id_upline);
+
+            // Filter berdasarkan tanggal jika parameter start_date diberikan
+            if ($request->has('start_date') && !empty($request->start_date)) {
+                $startDate = $request->start_date;
+
+                // Validasi format tanggal
+                try {
+                    $parsedDate = \Carbon\Carbon::createFromFormat('Y-m-d', $startDate);
+                    $query->where('created_at', '>=', $parsedDate->startOfDay());
+                } catch (\Exception $e) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Format tanggal tidak valid. Gunakan format Y-m-d (contoh: 2024-01-01)',
+                    ], 400);
+                }
+            }
+
+            // Filter berdasarkan tanggal akhir jika parameter end_date diberikan
+            if ($request->has('end_date') && !empty($request->end_date)) {
+                $endDate = $request->end_date;
+
+                try {
+                    $parsedDate = \Carbon\Carbon::createFromFormat('Y-m-d', $endDate);
+                    $query->where('created_at', '<=', $parsedDate->endOfDay());
+                } catch (\Exception $e) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Format tanggal akhir tidak valid. Gunakan format Y-m-d (contoh: 2024-12-31)',
+                    ], 400);
+                }
+            }
+
+            // Filter berdasarkan status jika parameter status diberikan
+            if ($request->has('status') && !empty($request->status)) {
+                $status = $request->status;
+                $validStatuses = ['draft', 'menunggu_pengiriman', 'selesai', 'dibatalkan'];
+
+                if (in_array($status, $validStatuses)) {
+                    $query->where('status_order', $status);
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Status tidak valid. Status yang tersedia: ' . implode(', ', $validStatuses),
+                    ], 400);
+                }
+            }
+
+            // Filter berdasarkan pencarian kode_order atau catatan
+            if ($request->has('search') && !empty($request->search)) {
+                $search = $request->search;
+                $query->where(function($q) use ($search) {
+                    $q->where('kode_order', 'like', '%' . $search . '%')
+                      ->orWhere('catatan', 'like', '%' . $search . '%');
+                });
+            }
+
+            // Pagination jika diperlukan
+            if ($request->has('per_page') && is_numeric($request->per_page)) {
+                $perPage = min((int)$request->per_page, 100); // Maksimal 100 per halaman
+                $orders = $query->orderBy('created_at', 'desc')->paginate($perPage);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Daftar pesanan berhasil diambil',
+                    'data' => $orders->items(),
+                    'pagination' => [
+                        'current_page' => $orders->currentPage(),
+                        'last_page' => $orders->lastPage(),
+                        'per_page' => $orders->perPage(),
+                        'total' => $orders->total(),
+                        'from' => $orders->firstItem(),
+                        'to' => $orders->lastItem(),
+                    ]
+                ]);
+            } else {
+                // Tanpa pagination - ambil semua data
+                $orders = $query->orderBy('created_at', 'desc')->get();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Daftar pesanan berhasil diambil',
+                    'data' => $orders,
+                    'total_records' => $orders->count()
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil daftar pesanan',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get orders summary/statistics
+     */
+    public function getOrdersSummary(Request $request)
+    {
+        try {
+            $query = Order::where('kode_owner', $this->getThisUser()->id_upline);
+
+            // Filter berdasarkan tanggal jika diberikan
+            if ($request->has('start_date') && !empty($request->start_date)) {
+                $startDate = \Carbon\Carbon::createFromFormat('Y-m-d', $request->start_date);
+                $query->where('created_at', '>=', $startDate->startOfDay());
+            }
+
+            if ($request->has('end_date') && !empty($request->end_date)) {
+                $endDate = \Carbon\Carbon::createFromFormat('Y-m-d', $request->end_date);
+                $query->where('created_at', '<=', $endDate->endOfDay());
+            }
+
+            // Hitung statistik berdasarkan status
+            $summary = [
+                'total_orders' => $query->count(),
+                'draft_orders' => (clone $query)->where('status_order', 'draft')->count(),
+                'pending_orders' => (clone $query)->where('status_order', 'menunggu_pengiriman')->count(),
+                'completed_orders' => (clone $query)->where('status_order', 'selesai')->count(),
+                'cancelled_orders' => (clone $query)->where('status_order', 'dibatalkan')->count(),
+                'total_items' => (clone $query)->sum('total_item'),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Ringkasan pesanan berhasil diambil',
+                'data' => $summary
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil ringkasan pesanan',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get recent orders (last 2 months by default)
+     */
+    public function getRecentOrders(Request $request)
+    {
+        try {
+            // Default 2 bulan terakhir
+            $monthsBack = $request->get('months_back', 2);
+            $startDate = \Carbon\Carbon::now()->subMonths($monthsBack)->startOfDay();
+
             $orders = Order::with('supplier')
                 ->where('kode_owner', $this->getThisUser()->id_upline)
+                ->where('created_at', '>=', $startDate)
                 ->orderBy('created_at', 'desc')
                 ->get();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Daftar pesanan berhasil diambil',
-                'data' => $orders
+                'message' => "Daftar pesanan {$monthsBack} bulan terakhir berhasil diambil",
+                'data' => $orders,
+                'filter_info' => [
+                    'start_date' => $startDate->format('Y-m-d'),
+                    'months_back' => $monthsBack,
+                    'total_records' => $orders->count()
+                ]
             ]);
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal mengambil daftar pesanan',
+                'message' => 'Gagal mengambil pesanan terbaru',
                 'error' => $e->getMessage()
             ], 500);
         }

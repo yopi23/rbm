@@ -121,7 +121,20 @@ Route::middleware('auth:sanctum')->group(function () {
     // Route::get('/financial-report/detailed', [FinancialReportApiController::class, 'getDetailedReport']);
     // Route::get('/financial-report/daily', [FinancialReportApiController::class, 'getDailyReport']);
 
-     // Main financial report
+
+    // Pengeluaran Operasional
+    Route::get('pengeluaran-operasional', [PengeluaranApiController::class, 'getPengeluaranOperasional'])->name('api.pengeluaran-operasional.index');
+    Route::post('pengeluaran-operasional', [PengeluaranApiController::class, 'storePengeluaranOperasional'])->name('api.pengeluaran-operasional.store');
+    Route::get('pengeluaran-operasional/{id}', [PengeluaranApiController::class, 'showPengeluaranOperasional'])->name('api.pengeluaran-operasional.show');
+    Route::put('pengeluaran-operasional/{id}', [PengeluaranApiController::class, 'updatePengeluaranOperasional'])->name('api.pengeluaran-operasional.update');
+    Route::delete('pengeluaran-operasional/{id}', [PengeluaranApiController::class, 'deletePengeluaranOperasional'])->name('api.pengeluaran-operasional.delete');
+
+    // Helper endpoints
+    Route::get('employees', [PengeluaranApiController::class, 'getEmployees'])->name('api.employees');
+    Route::get('pengeluaran-summary', [PengeluaranApiController::class, 'getSummary'])->name('api.pengeluaran.summary');
+    //end pengeluaran
+
+     // Main Laporan Keuangan
     Route::get('/financial-report', [FinancialReportApiController::class, 'getFinancialReport']);
 
     // Detailed reports by type
