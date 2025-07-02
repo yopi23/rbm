@@ -82,7 +82,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
+    Route::get('/sparepart/suggestions', [SalesApiController::class, 'searchSuggestions']);
     Route::get('/spareparts/search', [SalesApiController::class, 'search']);
+     Route::get('spareparts/{id}', [SalesApiController::class, 'getSparepartById']);
+    Route::get('/spareparts/popular', [SalesApiController::class, 'getPopularSearches']);
 
     Route::get('/service/search', [ServiceApiController::class, 'allservice']);
     // Route::prefix('api')->group(function () {
