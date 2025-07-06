@@ -96,6 +96,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/sales/{id}/detail', [SalesApiController::class, 'getSaleDetail']);
     Route::put('/sales/{id}/update', [SalesApiController::class, 'updateSale']);
     Route::delete('/sales/{id}/delete', [SalesApiController::class, 'deleteSale']);
+    Route::put('/sales/{id}/cancel', [SalesApiController::class, 'cancelSale']);
     // });
 
     Route::get('/user-profile/{kode_user}', [UserDataController::class, 'getUserProfile']);

@@ -596,18 +596,6 @@ private function buildAllKeywordsMatch($keywords)
                     continue; // Lewati item ini tapi lanjutkan dengan yang lain
                 }
 
-                 // Kurangi stok berdasarkan qty masing-masing item
-                // $sparepart->update([
-                //     'stok_sparepart' => $sparepart->stok_sparepart - $qtySparepart,
-                // ]);
-
-                // \Log::info('Sparepart after update:', [
-                //     'id' => $sparepartId,
-                //     'name' => $sparepart->nama_sparepart,
-                //     'new_stock' => $sparepart->stok_sparepart,
-                //     'qty_stock' => $qtySparepart
-                // ]);
-
                 // Hitung total penjualan
                 $totalPenjualan += $hargaJual * $qtySparepart;
                 $totalBayar += $hargaJual * $qtySparepart;
@@ -836,13 +824,21 @@ private function buildAllKeywordsMatch($keywords)
     // Tambahkan method baru ini di SalesApiController.php
     public function cancelSale(Request $request, $id)
     {
+        // \Log::info('=== CANCEL SALE START ===');
+        // \Log::info('Sale ID: ' . $id);
+        // \Log::info('Request Data: ' . json_encode($request->all()));
+
         DB::beginTransaction();
         try {
             // Temukan penjualan
+            // \Log::info('Finding sale with ID: ' . $id);
             $sale = Penjualan::findOrFail($id);
+            // \Log::info('Sale found: ' . json_encode($sale->toArray()));
 
             // Hanya lanjutkan jika penjualan belum diproses/diselesaikan
+            // \Log::info('Checking sale status: ' . $sale->status_penjualan);
             if ($sale->status_penjualan == '1') {
+                // \Log::warning('Cannot cancel processed sale. Status: ' . $sale->status_penjualan);
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Tidak dapat membatalkan penjualan yang sudah diproses'
@@ -850,36 +846,97 @@ private function buildAllKeywordsMatch($keywords)
             }
 
             // Dapatkan semua detail penjualan
+            // \Log::info('Getting sale details for sale ID: ' . $sale->id);
             $saleDetails = DetailSparepartPenjualan::where('kode_penjualan', $sale->id)->get();
+            // \Log::info('Sale details count: ' . $saleDetails->count());
+            // \Log::info('Sale details: ' . json_encode($saleDetails->toArray()));
 
             // Kembalikan stok untuk setiap item
+            $stockUpdates = [];
             foreach ($saleDetails as $detail) {
+                // \Log::info('Processing detail - Sparepart ID: ' . $detail->kode_sparepart . ', Qty: ' . $detail->qty_sparepart);
+
                 $sparepart = Sparepart::find($detail->kode_sparepart);
                 if ($sparepart) {
-                    $sparepart->update([
-                        'stok_sparepart' => $sparepart->stok_sparepart + $detail->qty_sparepart
+                    // \Log::info('Sparepart found: ' . json_encode($sparepart->toArray()));
+                    // \Log::info('Current stock: ' . $sparepart->stok_sparepart);
+                    // \Log::info('Returning qty: ' . $detail->qty_sparepart);
+
+                    $oldStock = $sparepart->stok_sparepart;
+                    $newStock = $oldStock + $detail->qty_sparepart;
+
+                    // \Log::info('Stock calculation: ' . $oldStock . ' + ' . $detail->qty_sparepart . ' = ' . $newStock);
+
+                    $updateResult = $sparepart->update([
+                        'stok_sparepart' => $newStock
                     ]);
+
+                    // \Log::info('Stock update result: ' . ($updateResult ? 'SUCCESS' : 'FAILED'));
+
+                    // Verify update
+                    $sparepart->refresh();
+                    // \Log::info('Stock after update: ' . $sparepart->stok_sparepart);
+
+                    $stockUpdates[] = [
+                        'sparepart_id' => $detail->kode_sparepart,
+                        'sparepart_name' => $sparepart->nama_sparepart,
+                        'old_stock' => $oldStock,
+                        'returned_qty' => $detail->qty_sparepart,
+                        'new_stock' => $sparepart->stok_sparepart,
+                        'update_success' => $updateResult
+                    ];
+                } else {
+                    // \Log::error('Sparepart not found with ID: ' . $detail->kode_sparepart);
+                    $stockUpdates[] = [
+                        'sparepart_id' => $detail->kode_sparepart,
+                        'error' => 'Sparepart not found'
+                    ];
                 }
             }
 
+            // \Log::info('Stock updates summary: ' . json_encode($stockUpdates));
+
             // Hapus detail penjualan
-            DetailSparepartPenjualan::where('kode_penjualan', $sale->id)->delete();
+            // \Log::info('Deleting sale details for sale ID: ' . $sale->id);
+            $deletedDetailsCount = DetailSparepartPenjualan::where('kode_penjualan', $sale->id)->delete();
+            // \Log::info('Deleted sale details count: ' . $deletedDetailsCount);
 
             // Hapus penjualan
-            $sale->delete();
+            // \Log::info('Deleting sale with ID: ' . $sale->id);
+            $saleDeleteResult = $sale->delete();
+            // \Log::info('Sale deletion result: ' . ($saleDeleteResult ? 'SUCCESS' : 'FAILED'));
 
             DB::commit();
+            // \Log::info('Transaction committed successfully');
+            // \Log::info('=== CANCEL SALE SUCCESS ===');
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Penjualan berhasil dibatalkan dan stok dikembalikan'
+                'message' => 'Penjualan berhasil dibatalkan dan stok dikembalikan',
+                'debug_info' => [
+                    'sale_id' => $id,
+                    'details_processed' => $saleDetails->count(),
+                    'stock_updates' => $stockUpdates,
+                    'deleted_details_count' => $deletedDetailsCount
+                ]
             ]);
+
         } catch (\Exception $e) {
             DB::rollBack();
+            // \Log::error('=== CANCEL SALE ERROR ===');
+            // \Log::error('Error type: ' . get_class($e));
+            // \Log::error('Error message: ' . $e->getMessage());
+            // \Log::error('Error file: ' . $e->getFile() . ':' . $e->getLine());
+            // \Log::error('Stack trace: ' . $e->getTraceAsString());
 
             return response()->json([
                 'status' => 'error',
-                'message' => 'Gagal membatalkan penjualan: ' . $e->getMessage()
+                'message' => 'Gagal membatalkan penjualan: ' . $e->getMessage(),
+                'debug_info' => [
+                    'error_type' => get_class($e),
+                    'error_file' => $e->getFile(),
+                    'error_line' => $e->getLine()
+                ]
             ], 500);
         }
     }
