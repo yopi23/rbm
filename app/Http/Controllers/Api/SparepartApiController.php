@@ -1339,106 +1339,103 @@ class SparepartApiController extends Controller
      * When status becomes 'Selesai', commission is calculated.
      */
     public function updateServiceStatus(Request $request, $id)
-    {
-        try {
-            $validator = Validator::make($request->all(), [
-                'status_services' => 'required|string|in:Selesai,Proses,Antri', // Allow all valid statuses
-                'id_teknisi' => 'nullable|exists:users,id', // Allow null for non-assigned states, exists:users for valid id
-            ]);
+{
+    try {
+        $validator = Validator::make($request->all(), [
+            'status_services' => 'required|string|in:Selesai,Proses,Antri',
+            'id_teknisi' => 'nullable|exists:users,id',
+        ]);
 
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validation error',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
-            $service = modelServices::findOrFail($id); // Find service
-            $newStatus = $request->status_services;
-            $newTechnicianId = $request->id_teknisi;
-
-            DB::beginTransaction();
-
-            $service->update([
-                'status_services' => $newStatus,
-                'id_teknisi' => $newTechnicianId,
-                // Automatically set updated_at if you don't have this in a model observer
-                // 'updated_at' => now(),
-            ]);
-
-            // If service becomes 'Selesai', recalculate commission.
-            // If it changes from 'Selesai' to something else, potentially revert commission.
-            if ($newStatus === 'Selesai' && $oldStatus !== 'Selesai') {
-                $this->performCommissionRecalculation($id);
-            } else if ($newStatus !== 'Selesai' && $oldStatus === 'Selesai') {
-                // Handle reversion of commission if service moves from 'Selesai' to 'Proses'/'Antri'
-                $profitPresentase = ProfitPresentase::where('kode_service', $id)->first();
-                if ($profitPresentase) {
-                    $teknisi = UserDetail::where('kode_user', $profitPresentase->kode_user)->first();
-                    if ($teknisi) {
-                        $teknisi->update(['saldo' => $teknisi->saldo - $profitPresentase->profit]);
-                    }
-                    $profitPresentase->delete();
-                    Log::info("Commission reverted for Service ID: $id due to status change from Selesai to non-Selesai.");
-                }
-            }
-
-
-            // WhatsApp notification (only if status becomes 'Selesai')
-            $whatsappStatus = 'Pesan WhatsApp tidak dikirim.';
-            if ($newStatus === 'Selesai' && !empty($service->no_telp)) {
-                $whatsAppService = app(WhatsAppService::class);
-                if (!$whatsAppService->isValidPhoneNumber($service->no_telp)) {
-                    $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak valid';
-                } else {
-                    try {
-                        $waResult = $whatsAppService->sendServiceCompletionNotification([
-                            'nomor_services' => $service->kode_service,
-                            'nama_barang' => $service->type_unit,
-                            'no_hp' => $service->no_telp,
-                        ]);
-                        if ($waResult['status']) {
-                            $whatsappStatus = 'Pesan WhatsApp berhasil dikirim';
-                        } else {
-                            $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
-                        }
-                    } catch (\Exception $waException) {
-                        Log::error("Failed to send WhatsApp notification for service {$id}: " . $waException->getMessage());
-                        $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
-                    }
-                }
-            }
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => "Service status updated to '{$newStatus}' successfully.",
-                'data' => [
-                    'service_id' => $id,
-                    'status' => $newStatus,
-                    'technician_id' => $newTechnicianId,
-                    'whatsapp_notification' => $whatsappStatus
-                ],
-            ], 200);
-
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            DB::rollBack();
+        if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Service not found.',
-            ], 404);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error("Update Service Status Error for Service ID {$id}: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update service status.',
-                'error' => $e->getMessage(),
-            ], 500);
+                'message' => 'Validation error',
+                'errors' => $validator->errors()
+            ], 422);
         }
+
+        $service = modelServices::findOrFail($id);
+        $oldStatus = $service->status_services;
+        $newStatus = $request->status_services;
+        $newTechnicianId = $request->id_teknisi;
+
+        DB::beginTransaction();
+
+        $service->update([
+            'status_services' => $newStatus,
+            'id_teknisi' => $newTechnicianId,
+        ]);
+
+        // Komisi: Hitung atau revert berdasarkan perubahan status
+        if ($newStatus === 'Selesai' && $oldStatus !== 'Selesai') {
+            $this->performCommissionRecalculation($id);
+        } elseif ($newStatus !== 'Selesai' && $oldStatus === 'Selesai') {
+            $profitPresentase = ProfitPresentase::where('kode_service', $id)->first();
+            if ($profitPresentase) {
+                $teknisi = UserDetail::where('kode_user', $profitPresentase->kode_user)->first();
+                if ($teknisi) {
+                    $teknisi->update([
+                        'saldo' => $teknisi->saldo - $profitPresentase->profit
+                    ]);
+                }
+                $profitPresentase->delete();
+                Log::info("Komisi dibatalkan untuk Service ID: $id karena status berubah dari Selesai.");
+            }
+        }
+
+        // Kirim WhatsApp jika selesai
+        $whatsappStatus = 'Pesan WhatsApp tidak dikirim.';
+        if ($newStatus === 'Selesai' && !empty($service->no_telp)) {
+            $whatsAppService = app(WhatsAppService::class);
+            if (!$whatsAppService->isValidPhoneNumber($service->no_telp)) {
+                $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak valid';
+            } else {
+                try {
+                    $waResult = $whatsAppService->sendServiceCompletionNotification([
+                        'nomor_services' => $service->kode_service,
+                        'nama_barang' => $service->type_unit,
+                        'no_hp' => $service->no_telp,
+                    ]);
+                    $whatsappStatus = $waResult['status']
+                        ? 'Pesan WhatsApp berhasil dikirim'
+                        : 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
+                } catch (\Exception $waException) {
+                    Log::error("Gagal kirim WA untuk Service ID {$id}: " . $waException->getMessage());
+                    $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
+                }
+            }
+        }
+
+        DB::commit();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Status service berhasil diperbarui ke '{$newStatus}'.",
+            'data' => [
+                'service_id' => $id,
+                'status' => $newStatus,
+                'technician_id' => $newTechnicianId,
+                'whatsapp_notification' => $whatsappStatus
+            ],
+        ], 200);
+
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        DB::rollBack();
+        return response()->json([
+            'success' => false,
+            'message' => 'Service tidak ditemukan.',
+        ], 404);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error("Gagal update status service untuk ID {$id}: " . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal memperbarui status service.',
+            'error' => $e->getMessage(),
+        ], 500);
     }
+}
+
 
 public function revertServiceToQueue($id)
     {
