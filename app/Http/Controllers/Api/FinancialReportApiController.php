@@ -19,6 +19,8 @@ use App\Models\Sevices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
 
 class FinancialReportApiController extends Controller
@@ -1186,4 +1188,482 @@ class FinancialReportApiController extends Controller
             ], 500);
         }
     }
+
+    //report service
+/**
+ * Get device statistics report with custom date range
+ * Shows completed devices by type with revenue breakdown
+ */
+    public function getDeviceStatistics(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'tgl_awal' => 'required|date',
+                'tgl_akhir' => 'required|date|after_or_equal:tgl_awal',
+                'group_by' => 'sometimes|in:day,week,month', // Optional grouping
+                'limit' => 'sometimes|integer|min:1|max:100',
+                'sort_by' => 'sometimes|in:count,revenue,avg_revenue',
+                'sort_order' => 'sometimes|in:asc,desc'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $startDate = $request->tgl_awal;
+            $endDate = $request->tgl_akhir;
+            $groupBy = $request->get('group_by', null);
+            $limit = $request->get('limit', 50);
+            $sortBy = $request->get('sort_by', 'revenue');
+            $sortOrder = $request->get('sort_order', 'desc');
+
+            // Get user's owner ID
+            $kodeOwner = $this->getKodeOwner();
+
+            // Cache key for the query
+            $cacheKey = "device_statistics_{$kodeOwner}_{$startDate}_{$endDate}_{$groupBy}_{$sortBy}_{$sortOrder}_{$limit}";
+
+            $result = Cache::remember($cacheKey, 300, function () use ($kodeOwner, $startDate, $endDate, $groupBy, $limit, $sortBy, $sortOrder) {
+
+                // Base query for completed services in date range
+                $baseQuery = DB::table('sevices')
+                    ->where('kode_owner', $kodeOwner)
+                    ->where('status_services', 'Selesai')
+                    ->whereBetween('sevices.updated_at', [
+                        $startDate . ' 00:00:00',
+                        $endDate . ' 23:59:59'
+                    ]);
+
+                // Get device type statistics
+                $deviceStatsQuery = clone $baseQuery;
+                $deviceStats = $deviceStatsQuery
+                    ->select([
+                        'type_unit',
+                        DB::raw('COUNT(*) as total_services'),
+                        DB::raw('SUM(total_biaya) as total_revenue'),
+                        DB::raw('AVG(total_biaya) as avg_revenue'),
+                        DB::raw('SUM(dp) as total_dp'),
+                        DB::raw('SUM(total_biaya - dp) as total_remaining'),
+                        DB::raw('MIN(total_biaya) as min_revenue'),
+                        DB::raw('MAX(total_biaya) as max_revenue'),
+                        DB::raw('SUM(harga_sp) as total_parts_cost')
+                    ])
+                    ->groupBy('type_unit')
+                    ->orderBy($this->getSortColumn($sortBy), $sortOrder)
+                    ->limit($limit)
+                    ->get();
+
+                // Calculate profit margin for each device type
+                $deviceStats = $deviceStats->map(function ($item) {
+                    $item->profit_margin = $item->total_revenue > 0
+                        ? round((($item->total_revenue - $item->total_parts_cost) / $item->total_revenue) * 100, 2)
+                        : 0;
+                    $item->avg_revenue = round($item->avg_revenue, 2);
+                    $item->completion_rate = round(($item->total_services / max($item->total_services, 1)) * 100, 2);
+                    return $item;
+                });
+
+                // Get daily/weekly/monthly breakdown if requested
+                $timeSeriesData = null;
+                if ($groupBy) {
+                    $timeSeriesQuery = clone $baseQuery;
+                    $timeSeriesData = $this->getTimeSeriesData($timeSeriesQuery, $groupBy);
+                }
+
+                // Get overall summary
+                $summaryQuery = clone $baseQuery;
+                $summary = $summaryQuery
+                    ->select([
+                        DB::raw('COUNT(*) as total_services'),
+                        DB::raw('COUNT(DISTINCT type_unit) as unique_device_types'),
+                        DB::raw('SUM(total_biaya) as total_revenue'),
+                        DB::raw('AVG(total_biaya) as avg_revenue_per_service'),
+                        DB::raw('SUM(dp) as total_dp_collected'),
+                        DB::raw('SUM(total_biaya - dp) as total_remaining_payments'),
+                        DB::raw('SUM(harga_sp) as total_parts_cost')
+                    ])
+                    ->first();
+
+                // Calculate additional metrics
+                $summary->total_profit = $summary->total_revenue - $summary->total_parts_cost;
+                $summary->overall_profit_margin = $summary->total_revenue > 0
+                    ? round(($summary->total_profit / $summary->total_revenue) * 100, 2)
+                    : 0;
+                $summary->avg_revenue_per_service = round($summary->avg_revenue_per_service, 2);
+                $summary->dp_collection_rate = $summary->total_revenue > 0
+                    ? round(($summary->total_dp_collected / $summary->total_revenue) * 100, 2)
+                    : 0;
+
+                // Get top performing technicians for this period
+                $topTechniciansQuery = clone $baseQuery;
+                $topTechnicians = $topTechniciansQuery
+                    ->join('users', 'sevices.id_teknisi', '=', 'users.id')
+                    ->select([
+                        'users.name as teknisi_name',
+                        'users.id as teknisi_id',
+                        DB::raw('COUNT(*) as services_completed'),
+                        DB::raw('SUM(sevices.total_biaya) as total_revenue'),
+                        DB::raw('AVG(sevices.total_biaya) as avg_revenue'),
+                        DB::raw('COUNT(DISTINCT sevices.type_unit) as device_types_handled')
+                    ])
+                    ->groupBy('users.id', 'users.name')
+                    ->orderByDesc('total_revenue')
+                    ->limit(10)
+                    ->get();
+
+                return [
+                    'device_statistics' => $deviceStats,
+                    'summary' => $summary,
+                    'time_series' => $timeSeriesData,
+                    'top_technicians' => $topTechnicians,
+                    'metadata' => [
+                        'date_range' => [
+                            'start' => $startDate,
+                            'end' => $endDate,
+                            'days' => Carbon::parse($startDate)->diffInDays(Carbon::parse($endDate)) + 1
+                        ],
+                        'group_by' => $groupBy,
+                        'sort_by' => $sortBy,
+                        'sort_order' => $sortOrder,
+                        'limit' => $limit
+                    ]
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Device statistics retrieved successfully',
+                'data' => $result
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Get Device Statistics Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving device statistics',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get device trends over time
+     */
+    public function getDeviceTrends(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'tgl_awal' => 'required|date',
+                'tgl_akhir' => 'required|date|after_or_equal:tgl_awal',
+                'device_types' => 'sometimes|array',
+                'device_types.*' => 'string',
+                'interval' => 'sometimes|in:day,week,month'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $startDate = $request->tgl_awal;
+            $endDate = $request->tgl_akhir;
+            $deviceTypes = $request->get('device_types', []);
+            $interval = $request->get('interval', 'day');
+
+            $kodeOwner = $this->getKodeOwner();
+
+            $cacheKey = "device_trends_{$kodeOwner}_{$startDate}_{$endDate}_{$interval}_" . md5(json_encode($deviceTypes));
+
+            $result = Cache::remember($cacheKey, 300, function () use ($kodeOwner, $startDate, $endDate, $deviceTypes, $interval) {
+
+                $query = DB::table('sevices')
+                    ->where('kode_owner', $kodeOwner)
+                    ->where('status_services', 'Selesai')
+                    ->whereBetween('updated_at', [
+                        $startDate . ' 00:00:00',
+                        $endDate . ' 23:59:59'
+                    ]);
+
+                // Filter by specific device types if provided
+                if (!empty($deviceTypes)) {
+                    $query->whereIn('type_unit', $deviceTypes);
+                }
+
+                // Group by time interval and device type
+                $dateFormat = $this->getDateFormat($interval);
+
+                $trends = $query
+                    ->select([
+                        DB::raw("DATE_FORMAT(updated_at, '{$dateFormat}') as period"),
+                        'type_unit',
+                        DB::raw('COUNT(*) as service_count'),
+                        DB::raw('SUM(total_biaya) as revenue'),
+                        DB::raw('AVG(total_biaya) as avg_revenue')
+                    ])
+                    ->groupBy('period', 'type_unit')
+                    ->orderBy('period')
+                    ->orderBy('revenue', 'desc')
+                    ->get();
+
+                // Transform data for easier frontend consumption
+                $trendsByPeriod = [];
+                foreach ($trends as $trend) {
+                    if (!isset($trendsByPeriod[$trend->period])) {
+                        $trendsByPeriod[$trend->period] = [
+                            'period' => $trend->period,
+                            'total_services' => 0,
+                            'total_revenue' => 0,
+                            'devices' => []
+                        ];
+                    }
+
+                    $trendsByPeriod[$trend->period]['total_services'] += $trend->service_count;
+                    $trendsByPeriod[$trend->period]['total_revenue'] += $trend->revenue;
+                    $trendsByPeriod[$trend->period]['devices'][] = [
+                        'type_unit' => $trend->type_unit,
+                        'service_count' => $trend->service_count,
+                        'revenue' => $trend->revenue,
+                        'avg_revenue' => round($trend->avg_revenue, 2)
+                    ];
+                }
+
+                return [
+                    'trends_by_period' => array_values($trendsByPeriod),
+                    'trends_raw' => $trends,
+                    'metadata' => [
+                        'interval' => $interval,
+                        'device_types_filter' => $deviceTypes,
+                        'total_periods' => count($trendsByPeriod)
+                    ]
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Device trends retrieved successfully',
+                'data' => $result
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Get Device Trends Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving device trends',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get device comparison report
+     */
+    public function getDeviceComparison(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'period1_start' => 'required|date',
+                'period1_end' => 'required|date|after_or_equal:period1_start',
+                'period2_start' => 'required|date',
+                'period2_end' => 'required|date|after_or_equal:period2_start',
+                'device_types' => 'sometimes|array'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $kodeOwner = $this->getKodeOwner();
+            $deviceTypes = $request->get('device_types', []);
+
+            // Get data for both periods
+            $period1Data = $this->getDeviceDataForPeriod(
+                $kodeOwner,
+                $request->period1_start,
+                $request->period1_end,
+                $deviceTypes
+            );
+
+            $period2Data = $this->getDeviceDataForPeriod(
+                $kodeOwner,
+                $request->period2_start,
+                $request->period2_end,
+                $deviceTypes
+            );
+
+            // Calculate comparisons
+            $comparison = $this->calculateDeviceComparison($period1Data, $period2Data);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Device comparison retrieved successfully',
+                'data' => [
+                    'period1' => [
+                        'date_range' => $request->period1_start . ' to ' . $request->period1_end,
+                        'data' => $period1Data
+                    ],
+                    'period2' => [
+                        'date_range' => $request->period2_start . ' to ' . $request->period2_end,
+                        'data' => $period2Data
+                    ],
+                    'comparison' => $comparison
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Get Device Comparison Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving device comparison',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    // Helper methods
+
+    private function getKodeOwner()
+    {
+        // Adjust this based on your authentication system
+        return auth()->user()->userDetail->id_upline ?? auth()->user()->id;
+    }
+
+    private function getSortColumn($sortBy)
+    {
+        switch ($sortBy) {
+            case 'count':
+                return 'total_services';
+            case 'revenue':
+                return 'total_revenue';
+            case 'avg_revenue':
+                return 'avg_revenue';
+            default:
+                return 'total_revenue';
+        }
+    }
+
+    private function getDateFormat($interval)
+    {
+        switch ($interval) {
+            case 'day':
+                return '%Y-%m-%d';
+            case 'week':
+                return '%Y-%u'; // Year-Week
+            case 'month':
+                return '%Y-%m';
+            default:
+                return '%Y-%m-%d';
+        }
+    }
+
+    private function getTimeSeriesData($query, $groupBy)
+    {
+        $dateFormat = $this->getDateFormat($groupBy);
+
+        return $query
+            ->select([
+                DB::raw("DATE_FORMAT(updated_at, '{$dateFormat}') as period"),
+                DB::raw('COUNT(*) as service_count'),
+                DB::raw('SUM(total_biaya) as revenue'),
+                DB::raw('COUNT(DISTINCT type_unit) as unique_devices')
+            ])
+            ->groupBy('period')
+            ->orderBy('period')
+            ->get();
+    }
+
+    private function getDeviceDataForPeriod($kodeOwner, $startDate, $endDate, $deviceTypes = [])
+    {
+        $query = DB::table('sevices')
+            ->where('kode_owner', $kodeOwner)
+            ->where('status_services', 'Selesai')
+            ->whereBetween('updated_at', [
+                $startDate . ' 00:00:00',
+                $endDate . ' 23:59:59'
+            ]);
+
+        if (!empty($deviceTypes)) {
+            $query->whereIn('type_unit', $deviceTypes);
+        }
+
+        return $query
+            ->select([
+                'type_unit',
+                DB::raw('COUNT(*) as total_services'),
+                DB::raw('SUM(total_biaya) as total_revenue'),
+                DB::raw('AVG(total_biaya) as avg_revenue')
+            ])
+            ->groupBy('type_unit')
+            ->orderByDesc('total_revenue')
+            ->get();
+    }
+
+    private function calculateDeviceComparison($period1Data, $period2Data)
+    {
+        $comparison = [];
+
+        // Create lookup for period2 data
+        $period2Lookup = [];
+        foreach ($period2Data as $item) {
+            $period2Lookup[$item->type_unit] = $item;
+        }
+
+        // Calculate comparisons
+        foreach ($period1Data as $item1) {
+            $deviceType = $item1->type_unit;
+            $item2 = $period2Lookup[$deviceType] ?? null;
+
+            $comparison[$deviceType] = [
+                'device_type' => $deviceType,
+                'period1' => [
+                    'services' => $item1->total_services,
+                    'revenue' => $item1->total_revenue,
+                    'avg_revenue' => round($item1->avg_revenue, 2)
+                ],
+                'period2' => [
+                    'services' => $item2 ? $item2->total_services : 0,
+                    'revenue' => $item2 ? $item2->total_revenue : 0,
+                    'avg_revenue' => $item2 ? round($item2->avg_revenue, 2) : 0
+                ]
+            ];
+
+            // Calculate percentage changes
+            $comparison[$deviceType]['changes'] = [
+                'services_change' => $this->calculatePercentageChange(
+                    $item2 ? $item2->total_services : 0,
+                    $item1->total_services
+                ),
+                'revenue_change' => $this->calculatePercentageChange(
+                    $item2 ? $item2->total_revenue : 0,
+                    $item1->total_revenue
+                ),
+                'avg_revenue_change' => $this->calculatePercentageChange(
+                    $item2 ? $item2->avg_revenue : 0,
+                    $item1->avg_revenue
+                )
+            ];
+        }
+
+        return array_values($comparison);
+    }
+
+    private function calculatePercentageChange($oldValue, $newValue)
+    {
+        if ($oldValue == 0) {
+            return $newValue > 0 ? 100 : 0;
+        }
+
+        return round((($newValue - $oldValue) / $oldValue) * 100, 2);
+    }
+    //report service
 }

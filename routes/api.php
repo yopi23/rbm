@@ -3,23 +3,23 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Admin\DashboardController;
-use App\Http\Controllers\Api\ServiceApiController;
-use App\Http\Controllers\Api\SparepartApiController;
+use App\Http\Controllers\Admin\DashboardController; // Assuming this has create_service_api, get_pending_services
+use App\Http\Controllers\Api\ServiceApiController; // Your main Service API Controller
+use App\Http\Controllers\Api\SparepartApiController; // Your Sparepart/Service Operations API Controller
 use App\Http\Controllers\Api\PengambilanController;
 use App\Http\Controllers\Api\SalesApiController;
 use App\Http\Controllers\Api\UserDataController;
 use App\Http\Controllers\Api\WhatsAppMessageController;
-use FontLib\Table\Type\name;
 use App\Http\Controllers\Api\OrderApiController;
 use App\Http\Controllers\Api\StockOpnameController;
 use App\Http\Controllers\Api\CustomerApiController;
-use App\Http\Controllers\Admin\HpController;
+use App\Http\Controllers\Admin\HpController; // Assuming for legacy /hp
 use App\Http\Controllers\Api\HpApiController;
 use App\Http\Controllers\Api\CommissionController;
 use App\Http\Controllers\Api\FinancialReportApiController;
 use App\Http\Controllers\Api\PengeluaranApiController;
 use App\Http\Controllers\Admin\EmployeeManagementController;
+
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -33,62 +33,100 @@ use App\Http\Controllers\Admin\EmployeeManagementController;
 
 Route::middleware('auth:sanctum')->group(function () {
 
-    // Attendance routes
-    Route::post('/attendance/scan', [Api\AttendanceController::class, 'scanQrCode']);
-    Route::post('/attendance/request-leave', [Api\AttendanceController::class, 'requestLeave']);
-    Route::get('/attendance/status', [Api\AttendanceController::class, 'getStatus']);
-
-      // Manual Attendance by Admin (API untuk mobile)
-    Route::get('/employees/list', [EmployeeManagementController::class, 'getEmployeeList']);
-    Route::post('/attendance/manual-checkin', [EmployeeManagementController::class, 'manualCheckIn']);
-    Route::post('/attendance/manual-checkout', [EmployeeManagementController::class, 'manualCheckOut']);
-    Route::get('/attendance/employee-status/{employeeId}', [EmployeeManagementController::class, 'getEmployeeAttendanceStatus']);
-
-    // Admin Employee Withdrawal Routes
-    Route::post('/admin/penarikan-karyawan', [UserDataController::class, 'adminWithdrawEmployee']);
-    Route::get('/admin/penarikan-history', [UserDataController::class, 'adminWithdrawalHistory']);
-    Route::get('/admin/penarikan-summary', [UserDataController::class, 'adminWithdrawalSummary']);
-
-    Route::get('/karyawan', [UserDataController::Class, 'getKaryawan']);
-
-    Route::post('/create-service', [DashboardController::class, 'create_service_api']);
-    Route::post('/pending-services', [DashboardController::class, 'get_pending_services']);
-    Route::get('/services/completed-today', [ServiceApiController::class, 'getCompletedToday']);
-    Route::get('/services/completedAll', [ServiceApiController::class, 'getCompletedservice']);
-    Route::get('/services/{serviceId}/status', [ServiceApiController::class, 'checkServiceStatus']);
-    // detail service
-    Route::get('/services/getServiceDetails/{id}', [SparepartApiController::class, 'getServiceDetails']);
-    // update service
-    Route::put('/services/{id}', [SparepartApiController::class, 'updateService']);
-    Route::delete('/services/{id}/delete', [SparepartApiController::class, 'delete_service']);
-    // cari sparepart
-    Route::get('/sparepart-toko/search', [SparepartApiController::class, 'searchSparepartToko']);
-    Route::post('/service/search-sparepart', [SparepartApiController::class, 'search_sparepart']);
-    // crud sparepart toko
-    Route::post('/sparepart-toko', [SparepartApiController::class, 'storeSparepartToko']);
-    Route::delete('/sparepart-toko/{id}', [SparepartApiController::class, 'deleteSparepartToko']);
-    // crud sparepart luar
-    Route::post('/sparepart-luar', [SparepartApiController::class, 'storeSparepartLuar']);
-    Route::put('/sparepart-luar/{id}', [SparepartApiController::class, 'updateSparepartLuar']);
-    Route::delete('/sparepart-luar/{id}', [SparepartApiController::class, 'deleteSparepartLuar']);
-
-    Route::put('/service/updateServiceStatus/{id}', [SparepartApiController::class, 'updateServiceStatus']);
-
-    Route::post('/pengambilan', [PengambilanController::class, 'store']);
-    Route::get('/services/available', [PengambilanController::class, 'getAvailableServices']);
-    Route::get('/kategori-laci', [PengambilanController::class, 'getKategoriLaciList']);
-
+    // Authentication and User Data
     Route::get('/validate-token', [AuthController::class, 'validateToken']);
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
+    Route::get('/user-profile/{kode_user}', [UserDataController::class, 'getUserProfile']);
+    Route::post('/penarikan', [UserDataController::class, 'store_penarikan']);
+    Route::get('/karyawan', [UserDataController::class, 'getKaryawan']);
+
+    // Admin/Employee Attendance & Payroll related
+    Route::post('/attendance/scan', [Api\AttendanceController::class, 'scanQrCode']); // Assuming attendance controller in Api folder
+    Route::post('/attendance/request-leave', [Api\AttendanceController::class, 'requestLeave']);
+    Route::get('/attendance/status', [Api\AttendanceController::class, 'getStatus']);
+    Route::get('/employees/list', [EmployeeManagementController::class, 'getEmployeeList']);
+    Route::post('/attendance/manual-checkin', [EmployeeManagementController::class, 'manualCheckIn']);
+    Route::post('/attendance/manual-checkout', [EmployeeManagementController::class, 'manualCheckOut']);
+    Route::get('/attendance/employee-status/{employeeId}', [EmployeeManagementController::class, 'getEmployeeAttendanceStatus']);
+    Route::post('/admin/penarikan-karyawan', [UserDataController::class, 'adminWithdrawEmployee']);
+    Route::get('/admin/penarikan-history', [UserDataController::class, 'adminWithdrawalHistory']);
+    Route::get('/admin/penarikan-summary', [UserDataController::class, 'adminWithdrawalSummary']);
+    Route::prefix('attendance')->group(function () {
+        Route::post('/generate-employee-qr', [EmployeeManagementController::class, 'generateEmployeeQrCode']);
+        Route::post('/scan-employee-qr', [EmployeeManagementController::class, 'scanEmployeeQrCode']);
+        Route::post('/scan/{token}', [EmployeeManagementController::class, 'scanQrCode']);
+        Route::post('/request-leave', [EmployeeManagementController::class, 'requestLeave']);
+        Route::get('/history/{userId}', [EmployeeManagementController::class, 'getAttendanceHistory']);
+        Route::get('/status/{userId}', [EmployeeManagementController::class, 'getCurrentAttendanceStatus']);
+    });
+    Route::prefix('employee')->group(function () {
+        Route::get('/schedule/{userId}', [EmployeeManagementController::class, 'getUserScheduleAPI']);
+        Route::get('/salary/{userId}', [EmployeeManagementController::class, 'getSalaryInfo']);
+    });
+    Route::get('/commissions/today', [CommissionController::class, 'getTodayCommissions']);
+    Route::get('/commissions/my-today', [CommissionController::class, 'getMyTodayCommission']);
+
+    // Service Management (General & Completed Specific)
+    Route::post('/create-service', [DashboardController::class, 'create_service_api']); // Assuming this creates new services
+    Route::post('/pending-services', [DashboardController::class, 'get_pending_services']); // Assuming this gets uncompleted services
+
+    // Services General (can be used by both Flutter & Admin Panel)
+    Route::get('/services/getServiceDetails/{id}', [SparepartApiController::class, 'getServiceDetails']); // Retrieve full service details
+    Route::put('/services/{id}', [SparepartApiController::class, 'updateService']); // Update core service details (can apply to any status)
+    Route::delete('/services/{id}/delete', [SparepartApiController::class, 'delete_service']); // Delete service (can apply to any status)
+    Route::put('/service/updateServiceStatus/{id}', [SparepartApiController::class, 'updateServiceStatus']); // Update service status and trigger commission logic
+    Route::put('/services/{id}/revert-to-queue', [SparepartApiController::class, 'revertServiceToQueue']); //
+
+    // Service Status & Indicators (from ServiceApiController)
+    Route::get('/services/completed-today', [ServiceApiController::class, 'getCompletedToday']);
+    Route::get('/services/completedAll', [ServiceApiController::class, 'getCompletedservice']);
+    Route::get('/services/{serviceId}/status', [ServiceApiController::class, 'checkServiceStatus']);
+    Route::get('/services/indicators', [SparepartApiController::class, 'getServiceIndicators']); // Check if this should be in ServiceApiController
+
+
+    // **ROUTE PENTING DARI FILE LAMA - JANGAN DIHAPUS**
+    // Route untuk fungsi search sparepart dengan command system
+    Route::post('/service/search-sparepart', [SparepartApiController::class, 'search_sparepart']); // FUNGSI COMMAND SEARCH
+
+    // **ROUTE DETAIL SERVICE LAMA - JANGAN DIHAPUS**
+    // Route untuk detail service dengan struktur data lengkap (berbeda dari getServiceDetails)
+    Route::get('/services/detail/{id}', [SparepartApiController::class, 'detail_service']); // FUNGSI DETAIL SERVICE LAMA
+
+    // Sparepart Management (General / Initial Service)
+    Route::get('/sparepart-toko/search', [SparepartApiController::class, 'searchSparepartToko']); // Search for store parts (generic)
+    Route::post('/sparepart-toko', [SparepartApiController::class, 'storeSparepartToko']); // Add store part (generic, no commission recalculation here)
+    Route::delete('/sparepart-toko/{id}', [SparepartApiController::class, 'deleteSparepartToko']); // Delete store part (generic, no commission recalculation here)
+
+    // **ROUTE SPAREPART LUAR GENERIC - DARI FILE LAMA**
+    Route::post('/sparepart-luar', [SparepartApiController::class, 'storeSparepartLuar']); // GENERIC untuk service belum selesai
+    Route::put('/sparepart-luar/{id}', [SparepartApiController::class, 'updateSparepartLuar']); // GENERIC untuk service belum selesai
+    Route::delete('/sparepart-luar/{id}', [SparepartApiController::class, 'deleteSparepartLuar']); // GENERIC untuk service belum selesai
+
+    // Sparepart Management (Specifically for COMPLETED Services - with Commission Recalculation)
+    Route::post('/completed-services/sparepart-toko', [SparepartApiController::class, 'addPartTokoToCompletedService']); // Renamed route, now explicit
+    Route::put('/completed-services/sparepart-toko/{detailPartId}', [SparepartApiController::class, 'updatePartTokoQuantityForCompletedService']); // New route for updating qty
+    Route::delete('/completed-services/sparepart-toko/{detailPartId}', [SparepartApiController::class, 'deletePartTokoFromCompletedService']); // Renamed route, now explicit
+
+    Route::post('/completed-services/sparepart-luar', [SparepartApiController::class, 'addPartLuarToCompletedService']); // Renamed route, now explicit
+    Route::put('/completed-services/sparepart-luar/{detailPartLuarId}', [SparepartApiController::class, 'updatePartLuarForCompletedService']); // Renamed route, now explicit
+    Route::delete('/completed-services/sparepart-luar/{detailPartLuarId}', [SparepartApiController::class, 'deletePartLuarFromCompletedService']); // Renamed route, now explicit
+
+    // Explicit Commission Recalculation (manual trigger if needed)
+    Route::post('/services/{serviceId}/recalculate-commission', [SparepartApiController::class, 'recalculateCommission']);
+
+    // Pengambilan (Pickup)
+    Route::post('/pengambilan', [PengambilanController::class, 'store']);
+    Route::get('/services/available', [PengambilanController::class, 'getAvailableServices']);
+    Route::get('/kategori-laci', [PengambilanController::class, 'getKategoriLaciList']);
+
+    // Sales (POS) related
     Route::get('/sparepart/suggestions', [SalesApiController::class, 'searchSuggestions']);
     Route::get('/spareparts/search', [SalesApiController::class, 'search']);
-     Route::get('spareparts/{id}', [SalesApiController::class, 'getSparepartById']);
+    Route::get('spareparts/{id}', [SalesApiController::class, 'getSparepartById']);
     Route::get('/spareparts/popular', [SalesApiController::class, 'getPopularSearches']);
-
-    Route::get('/service/search', [ServiceApiController::class, 'allservice']);
-    // Route::prefix('api')->group(function () {
+    Route::get('/service/search', [ServiceApiController::class, 'allservice']); // This is for all services search by general query
     Route::get('/sales-history', [SalesApiController::class, 'getSalesHistory']);
     Route::post('/sales', [SalesApiController::class, 'createSale']);
     Route::post('/updateSale', [SalesApiController::class, 'updateSaleStatus']);
@@ -97,16 +135,25 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/sales/{id}/update', [SalesApiController::class, 'updateSale']);
     Route::delete('/sales/{id}/delete', [SalesApiController::class, 'deleteSale']);
     Route::put('/sales/{id}/cancel', [SalesApiController::class, 'cancelSale']);
-    // });
 
-    Route::get('/user-profile/{kode_user}', [UserDataController::class, 'getUserProfile']);
-    Route::post('/penarikan', [UserDataController::class, 'store_penarikan']);
+    // **ROUTE SUPPLIERS DARI FILE LAMA - JANGAN DIHAPUS**
+    Route::get('/suppliers', [OrderApiController::class, 'getSuppliers']); // ROUTE SUPPLIERS LANGSUNG
 
-    // routes/api.php
-    Route::post('/send-message', [WhatsAppMessageController::class, 'sendMessage']);
-
-    Route::get('/suppliers', [OrderApiController::class, 'getSuppliers']);
-
+    // Orders Management (Grouped for clarity)
+    Route::prefix('orders')->group(function () {
+        Route::get('/', [OrderApiController::class, 'getOrders']);
+        Route::get('/recent', [OrderApiController::class, 'getRecentOrders']);
+        Route::get('/summary', [OrderApiController::class, 'getOrdersSummary']);
+        Route::get('/{id}', [OrderApiController::class, 'getOrderDetail']);
+        Route::get('/{id}/low-stock-items', [OrderApiController::class, 'getLowStockItems']);
+        Route::get('/search/spareparts', [OrderApiController::class, 'searchSpareparts']);
+        Route::post('/', [OrderApiController::class, 'createOrder']);
+        Route::put('/{id}', [OrderApiController::class, 'updateOrder']);
+        Route::post('/{id}/finalize', [OrderApiController::class, 'finalizeOrder']);
+        Route::post('/{id}/items', [OrderApiController::class, 'addOrderItem']);
+        Route::post('/{id}/items/multiple', [OrderApiController::class, 'addMultipleItems']);
+        Route::delete('/items/{itemId}', [OrderApiController::class, 'removeOrderItem']);
+    });
 
     // Warranty (Garansi) routes
     Route::post('/warranty/store', [SparepartApiController::class, 'storeGaransiService']);
@@ -119,189 +166,144 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/service-notes/{id}', [SparepartApiController::class, 'updateCatatanService']);
     Route::delete('/service-notes/{id}', [SparepartApiController::class, 'deleteCatatanService']);
     Route::get('/service-notes/{service_id}', [SparepartApiController::class, 'getCatatanService']);
-    Route::get('/services/indicators', [SparepartApiController::class, 'getServiceIndicators']);
 
-    // Pengeluaran Toko
+    // Financial & Reports
     Route::get('pengeluaran-toko', [PengeluaranApiController::class, 'getPengeluaranToko'])->name('api.pengeluaran-toko.index');
     Route::post('pengeluaran-toko', [PengeluaranApiController::class, 'storePengeluaranToko'])->name('api.pengeluaran-toko.store');
     Route::get('pengeluaran-toko/{id}', [PengeluaranApiController::class, 'showPengeluaranToko'])->name('api.pengeluaran-toko.show');
     Route::put('pengeluaran-toko/{id}', [PengeluaranApiController::class, 'updatePengeluaranToko'])->name('api.pengeluaran-toko.update');
     Route::delete('pengeluaran-toko/{id}', [PengeluaranApiController::class, 'deletePengeluaranToko'])->name('api.pengeluaran-toko.delete');
-
-    // Pengeluaran Operasional
     Route::get('pengeluaran-operasional', [PengeluaranApiController::class, 'getPengeluaranOperasional'])->name('api.pengeluaran-operasional.index');
     Route::post('pengeluaran-operasional', [PengeluaranApiController::class, 'storePengeluaranOperasional'])->name('api.pengeluaran-operasional.store');
     Route::get('pengeluaran-operasional/{id}', [PengeluaranApiController::class, 'showPengeluaranOperasional'])->name('api.pengeluaran-operasional.show');
     Route::put('pengeluaran-operasional/{id}', [PengeluaranApiController::class, 'updatePengeluaranOperasional'])->name('api.pengeluaran-operasional.update');
     Route::delete('pengeluaran-operasional/{id}', [PengeluaranApiController::class, 'deletePengeluaranOperasional'])->name('api.pengeluaran-operasional.delete');
-
-    // Helper endpoints
     Route::get('employees', [PengeluaranApiController::class, 'getEmployees'])->name('api.employees');
     Route::get('pengeluaran-summary', [PengeluaranApiController::class, 'getSummary'])->name('api.pengeluaran.summary');
-    //end pengeluaran
-
-     // Main Laporan Keuangan
     Route::get('/financial-report', [FinancialReportApiController::class, 'getFinancialReport']);
-
-    // Detailed reports by type
     Route::get('/financial-report/detailed', [FinancialReportApiController::class, 'getDetailedReport']);
-
-    // Daily breakdown report
     Route::get('/financial-report/daily', [FinancialReportApiController::class, 'getDailyReport']);
-
-    // NEW: Service loss details
     Route::get('/financial-report/service-loss', [FinancialReportApiController::class, 'getServiceLossDetails']);
-
-    // Financial summary for dashboard
     Route::get('/financial-report/summary', [FinancialReportApiController::class, 'getFinancialSummary']);
-
-    // Technician profit analysis
     Route::get('/financial-report/technician-analysis', [FinancialReportApiController::class, 'getTechnicianProfitAnalysis']);
-
-    // Export functionality
     Route::post('/financial-report/export', [FinancialReportApiController::class, 'exportFinancialReport']);
 
+    Route::prefix('device-statistics')->group(function () {
+        Route::get('/', [FinancialReportApiController::class, 'getDeviceStatistics']);
+        Route::get('/trends', [FinancialReportApiController::class, 'getDeviceTrends']);
+        Route::get('/comparison', [FinancialReportApiController::class, 'getDeviceComparison']);
+    });
 
+    // Or add them to the existing financial-report group:
+    Route::get('/financial-report/device-statistics', [FinancialReportApiController::class, 'getDeviceStatistics']);
+    Route::get('/financial-report/device-trends', [FinancialReportApiController::class, 'getDeviceTrends']);
+    Route::get('/financial-report/device-comparison', [FinancialReportApiController::class, 'getDeviceComparison']);
+
+    // Get daily report services (with pagination)
+    Route::get('/services/dailyReport', [ServiceApiController::class, 'getDailyReportServices']);
+    // Get daily report grouped by date
+    Route::get('/services/dailyReportGrouped', [ServiceApiController::class, 'getDailyReportGrouped']);
+
+    // Customer Management
     Route::prefix('customer')->group(function () {
         Route::get('/', [CustomerApiController::class, 'index']);
         Route::post('/', [CustomerApiController::class, 'store']);
         Route::get('/{id}', [CustomerApiController::class, 'show']);
         Route::put('/{id}', [CustomerApiController::class, 'update']);
         Route::delete('/{id}', [CustomerApiController::class, 'destroy']);
-
-        // Additional API routes
         Route::get('/status/{status}', [CustomerApiController::class, 'getByStatus']);
         Route::post('/search', [CustomerApiController::class, 'search']);
-
-        // Get new kode toko for form
         Route::get('/generate-kode', [CustomerApiController::class, 'getNewKodeToko']);
     });
 
-    //TG
-    Route::get('/hp', [HpController::class, 'api']);
-    Route::post('/hp/suggest', [HpController::class, 'apiSuggest']);
-
-    // API untuk pencarian data HP
+    // HP (Device Model) Management
+    // **ROUTE HP DARI FILE LAMA - JANGAN DIHAPUS**
+    Route::get('/hp', [HpApiController::class, 'search']); // Use HpApiController for all /hp routes
     Route::get('/hp/search', [HpApiController::class, 'search']);
-    // Alias dengan parameter query lebih eksplisit
-    Route::get('/hp', [HpApiController::class, 'search']);
-
-    // Pencarian khusus berdasarkan tipe HP
     Route::get('/hp/type', [HpApiController::class, 'searchByType']);
-
-    // Dapatkan data filter untuk pencarian
     Route::get('/hp/filters', [HpApiController::class, 'filters']);
-
-    // Dapatkan data detail HP berdasarkan ID
     Route::get('/hp/{id}', [HpApiController::class, 'detail']);
+    Route::post('/hp/suggest', [HpController::class, 'apiSuggest']); // Assuming this is for suggestions logic
 
-    //absen
-    Route::prefix('attendance')->group(function () {
-        // QR Code Generation untuk karyawan
-        Route::post('/generate-employee-qr', [EmployeeManagementController::class, 'generateEmployeeQrCode']);
-
-        // Scan QR Code karyawan oleh admin
-        Route::post('/scan-employee-qr', [EmployeeManagementController::class, 'scanEmployeeQrCode']);
-
-        // Legacy QR Code scan (untuk compatibility jika masih ada yang pakai sistem lama)
-        Route::post('/scan/{token}', [EmployeeManagementController::class, 'scanQrCode']);
-
-        // Request leave dari mobile
-        Route::post('/request-leave', [EmployeeManagementController::class, 'requestLeave']);
-
-        // Get attendance history for mobile
-        Route::get('/history/{userId}', [EmployeeManagementController::class, 'getAttendanceHistory']);
-
-        // Get current attendance status
-        Route::get('/status/{userId}', [EmployeeManagementController::class, 'getCurrentAttendanceStatus']);
+    // Stock Opname
+    Route::prefix('stock-opname')->group(function () {
+        Route::get('/periods', [StockOpnameController::class, 'getPeriods']);
+        Route::get('/periods/{id}', [StockOpnameController::class, 'getPeriodDetail']);
+        Route::post('/periods', [StockOpnameController::class, 'createPeriod']);
+        Route::put('/periods/{id}/start', [StockOpnameController::class, 'startProcess']);
+        Route::put('/periods/{id}/complete', [StockOpnameController::class, 'completePeriod']);
+        Route::put('/periods/{id}/cancel', [StockOpnameController::class, 'cancelPeriod']);
+        Route::get('/periods/{id}/pending-items', [StockOpnameController::class, 'getPendingItems']);
+        Route::get('/periods/{id}/checked-items', [StockOpnameController::class, 'getCheckedItems']);
+        Route::post('/periods/{id}/scan', [StockOpnameController::class, 'scanSparepart']);
+        Route::post('/periods/{periodId}/items/{detailId}/check', [StockOpnameController::class, 'saveItemCheck']);
+        Route::get('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'getAdjustmentDetail']);
+        Route::post('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'saveAdjustment']);
+        Route::post('/periods/{periodId}/add-new-item', [StockOpnameController::class, 'addNewItem']);
+        Route::get('/periods/{id}/report', [StockOpnameController::class, 'getReport']);
+        Route::get('/periods/{id}/items-with-selisih', [StockOpnameController::class, 'getItemsWithSelisih']);
+        Route::get('/categories', [StockOpnameController::class, 'getCategories']);
+        Route::get('/suppliers', [StockOpnameController::class, 'getSuppliers']);
     });
 
-    // Employee API Routes
-    Route::prefix('employee')->group(function () {
+    // WhatsApp Integration
+    Route::post('/send-message', [WhatsAppMessageController::class, 'sendMessage']);
 
+}); // End of auth:sanctum middleware group
 
-        // Get user schedule for mobile
-        Route::get('/schedule/{userId}', [EmployeeManagementController::class, 'getUserScheduleAPI']);
-
-        // Get salary info for mobile
-        Route::get('/salary/{userId}', [EmployeeManagementController::class, 'getSalaryInfo']);
-    });
-
-
-    Route::get('/commissions/today', [CommissionController::class, 'getTodayCommissions']);
-    Route::get('/commissions/my-today', [CommissionController::class, 'getMyTodayCommission']);
-
-
-});
-
-
-Route::prefix('orders')->middleware(['auth:sanctum'])->group(function () {
-    // Mendapatkan data dengan berbagai filter
-    Route::get('/', [OrderApiController::class, 'getOrders']);
-    Route::get('/recent', [OrderApiController::class, 'getRecentOrders']); // Endpoint baru untuk pesanan terbaru
-    Route::get('/summary', [OrderApiController::class, 'getOrdersSummary']); // Endpoint baru untuk ringkasan
-
-    // Detail pesanan
-    Route::get('/{id}', [OrderApiController::class, 'getOrderDetail']);
-    Route::get('/{id}/low-stock-items', [OrderApiController::class, 'getLowStockItems']);
-
-    // Pencarian sparepart untuk ditambahkan ke pesanan
-    Route::get('/search/spareparts', [OrderApiController::class, 'searchSpareparts']);
-
-    // Membuat dan mengelola pesanan
-    Route::post('/', [OrderApiController::class, 'createOrder']);
-    Route::put('/{id}', [OrderApiController::class, 'updateOrder']);
-    Route::post('/{id}/finalize', [OrderApiController::class, 'finalizeOrder']);
-
-    // Mengelola item pesanan
-    Route::post('/{id}/items', [OrderApiController::class, 'addOrderItem']);
-    Route::post('/{id}/items/multiple', [OrderApiController::class, 'addMultipleItems']);
-    Route::delete('/items/{itemId}', [OrderApiController::class, 'removeOrderItem']);
-
-});
-// API Routes untuk Stock Opname
-Route::prefix('stock-opname')->middleware(['auth:sanctum'])->group(function () {
-    // Periode Stock Opname
-    Route::get('/periods', [StockOpnameController::class, 'getPeriods']);
-    Route::get('/periods/{id}', [StockOpnameController::class, 'getPeriodDetail']);
-    Route::post('/periods', [StockOpnameController::class, 'createPeriod']);
-    Route::put('/periods/{id}/start', [StockOpnameController::class, 'startProcess']);
-    Route::put('/periods/{id}/complete', [StockOpnameController::class, 'completePeriod']);
-    Route::put('/periods/{id}/cancel', [StockOpnameController::class, 'cancelPeriod']);
-
-    // Item Stock Opname
-    Route::get('/periods/{id}/pending-items', [StockOpnameController::class, 'getPendingItems']);
-    Route::get('/periods/{id}/checked-items', [StockOpnameController::class, 'getCheckedItems']);
-    Route::post('/periods/{id}/scan', [StockOpnameController::class, 'scanSparepart']);
-    Route::post('/periods/{periodId}/items/{detailId}/check', [StockOpnameController::class, 'saveItemCheck']);
-
-    // Penyesuaian Stok
-    Route::get('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'getAdjustmentDetail']);
-    Route::post('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'saveAdjustment']);
-    Route::post('/periods/{periodId}/add-new-item', [StockOpnameController::class, 'addNewItem']);
-
-    // Laporan
-    Route::get('/periods/{id}/report', [StockOpnameController::class, 'getReport']);
-    Route::get('/periods/{id}/items-with-selisih', [StockOpnameController::class, 'getItemsWithSelisih']);
-
-    // Tambahkan endpoint untuk kategori dan supplier
-    Route::get('/categories', [StockOpnameController::class, 'getCategories']);
-    Route::get('/suppliers', [StockOpnameController::class, 'getSuppliers']);
-});
+// **ROUTE CUSTOMER PREFIX DARI FILE LAMA - DILUAR MIDDLEWARE (JANGAN DIHAPUS)**
+// Ini untuk akses customer tanpa auth jika diperlukan
 Route::prefix('customer')->group(function () {
     Route::get('/', [CustomerApiController::class, 'index']);
     Route::post('/', [CustomerApiController::class, 'store']);
     Route::get('/{id}', [CustomerApiController::class, 'show']);
     Route::put('/{id}', [CustomerApiController::class, 'update']);
     Route::delete('/{id}', [CustomerApiController::class, 'destroy']);
-
-    // Additional API routes
     Route::get('/status/{status}', [CustomerApiController::class, 'getByStatus']);
     Route::post('/search', [CustomerApiController::class, 'search']);
-
-    // Get new kode toko for form
     Route::get('/generate-kode', [CustomerApiController::class, 'getNewKodeToko']);
 });
-Route::get('/spareparts/cari', [SalesApiController::class, 'cari']);
-Route::get('/cek-service', [ServiceApiController::class,'cekService']);
+
+// **ROUTE ORDERS DARI FILE LAMA - DILUAR GRUP (JANGAN DIHAPUS)**
+// Additional orders routes with specific middleware
+Route::prefix('orders')->middleware(['auth:sanctum'])->group(function () {
+    Route::get('/', [OrderApiController::class, 'getOrders']);
+    Route::get('/recent', [OrderApiController::class, 'getRecentOrders']);
+    Route::get('/summary', [OrderApiController::class, 'getOrdersSummary']);
+    Route::get('/{id}', [OrderApiController::class, 'getOrderDetail']);
+    Route::get('/{id}/low-stock-items', [OrderApiController::class, 'getLowStockItems']);
+    Route::get('/search/spareparts', [OrderApiController::class, 'searchSpareparts']);
+    Route::post('/', [OrderApiController::class, 'createOrder']);
+    Route::put('/{id}', [OrderApiController::class, 'updateOrder']);
+    Route::post('/{id}/finalize', [OrderApiController::class, 'finalizeOrder']);
+    Route::post('/{id}/items', [OrderApiController::class, 'addOrderItem']);
+    Route::post('/{id}/items/multiple', [OrderApiController::class, 'addMultipleItems']);
+    Route::delete('/items/{itemId}', [OrderApiController::class, 'removeOrderItem']);
+});
+
+// **ROUTE STOCK OPNAME DARI FILE LAMA - DILUAR GRUP (JANGAN DIHAPUS)**
+// Additional stock opname routes with specific middleware
+Route::prefix('stock-opname')->middleware(['auth:sanctum'])->group(function () {
+    Route::get('/periods', [StockOpnameController::class, 'getPeriods']);
+    Route::get('/periods/{id}', [StockOpnameController::class, 'getPeriodDetail']);
+    Route::post('/periods', [StockOpnameController::class, 'createPeriod']);
+    Route::put('/periods/{id}/start', [StockOpnameController::class, 'startProcess']);
+    Route::put('/periods/{id}/complete', [StockOpnameController::class, 'completePeriod']);
+    Route::put('/periods/{id}/cancel', [StockOpnameController::class, 'cancelPeriod']);
+    Route::get('/periods/{id}/pending-items', [StockOpnameController::class, 'getPendingItems']);
+    Route::get('/periods/{id}/checked-items', [StockOpnameController::class, 'getCheckedItems']);
+    Route::post('/periods/{id}/scan', [StockOpnameController::class, 'scanSparepart']);
+    Route::post('/periods/{periodId}/items/{detailId}/check', [StockOpnameController::class, 'saveItemCheck']);
+    Route::get('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'getAdjustmentDetail']);
+    Route::post('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'saveAdjustment']);
+    Route::post('/periods/{periodId}/add-new-item', [StockOpnameController::class, 'addNewItem']);
+    Route::get('/periods/{id}/report', [StockOpnameController::class, 'getReport']);
+    Route::get('/periods/{id}/items-with-selisih', [StockOpnameController::class, 'getItemsWithSelisih']);
+    Route::get('/categories', [StockOpnameController::class, 'getCategories']);
+    Route::get('/suppliers', [StockOpnameController::class, 'getSuppliers']);
+});
+
+// Public routes (no authentication required)
+Route::get('/spareparts/cari', [SalesApiController::class, 'cari']); // Example public search
+Route::get('/cek-service', [ServiceApiController::class,'cekService']); // Example public service check
 Route::post('login', [AuthController::class, 'login']);
