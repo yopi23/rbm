@@ -1949,27 +1949,31 @@ public function revertServiceToQueue($id)
      * if you want indicators for all services, including 'Selesai'.
      * Consider adjusting based on actual need.
      */
-    public function getServiceIndicators(Request $request) {
-        // Current implementation: only for 'Antri' services.
-        // If you need indicators for 'Selesai' services as well, remove or modify this where clause.
-        $services = modelServices::where('kode_owner', $this->getThisUser()->id_upline)->get(); // Get all services for owner
+    public function getServiceIndicators(Request $request)
+{
+    // Tambah filter owner untuk keamanan data
+    $services = modelServices::where('status_services', 'Antri')
+                             ->where('kode_owner', $this->getThisUser()->id_upline)
+                             ->get();
 
-        $indicators = [];
-        foreach ($services as $service) {
-            $hasWarranty = Garansi::where('kode_garansi', $service->kode_service)
-                                   ->where('type_garansi', 'service') // Ensure correct type
-                                   ->exists();
-            $hasNotes = DetailCatatanService::where('kode_services', $service->id)->exists();
+    $indicators = [];
+    foreach ($services as $service) {
+        $hasWarranty = Garansi::where('kode_garansi', $service->kode_service)
+                             ->where('type_garansi', 'service') // Pastikan hanya garansi service
+                             ->exists();
+        $hasNotes = DetailCatatanService::where('kode_services', $service->id)->exists();
 
-            $indicators[$service->id] = [
-                'has_warranty' => $hasWarranty,
-                'has_notes' => $hasNotes
-            ];
-        }
-
-        return response()->json([
-            'success' => true,
-            'data' => $indicators
-        ]);
+        $indicators[$service->id] = [
+            'has_warranty' => $hasWarranty,
+            'has_notes' => $hasNotes
+        ];
     }
+
+    return response()->json([
+        'success' => true,
+        'data' => $indicators
+    ]);
+}
+
+
 }
