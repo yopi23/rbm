@@ -1227,7 +1227,7 @@ class FinancialReportApiController extends Controller
             // Cache key for the query
             $cacheKey = "device_statistics_{$kodeOwner}_{$startDate}_{$endDate}_{$groupBy}_{$sortBy}_{$sortOrder}_{$limit}";
 
-            $result = Cache::remember($cacheKey, 300, function () use ($kodeOwner, $startDate, $endDate, $groupBy, $limit, $sortBy, $sortOrder) {
+            $result = Cache::remember($cacheKey, 2, function () use ($kodeOwner, $startDate, $endDate, $groupBy, $limit, $sortBy, $sortOrder) {
 
                 // Base query for completed services in date range
                 $baseQuery = DB::table('sevices')

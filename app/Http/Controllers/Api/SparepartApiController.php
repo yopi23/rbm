@@ -484,8 +484,7 @@ class SparepartApiController extends Controller
             // Trigger commission recalculation if relevant financial fields changed
             // AND the service is already marked as 'Selesai'
             if ($service->status_services === 'Selesai' && (
-                (isset($validatedData['total_biaya']) && $validatedData['total_biaya'] != $oldTotalBiaya) ||
-                (isset($validatedData['dp']) && $validatedData['dp'] != $oldDp)
+                (isset($validatedData['total_biaya']) && $validatedData['total_biaya'] != $oldTotalBiaya)
             )) {
                 $this->performCommissionRecalculation($id);
             }
@@ -1364,6 +1363,7 @@ class SparepartApiController extends Controller
         $service->update([
             'status_services' => $newStatus,
             'id_teknisi' => $newTechnicianId,
+            'tgl_service' => Carbon::now()->format('Y-m-d H:i:s'),
         ]);
 
         // Komisi: Hitung atau revert berdasarkan perubahan status

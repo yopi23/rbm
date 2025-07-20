@@ -39,10 +39,10 @@ class ServiceApiController extends Controller
 
         $completedServices = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
             ->where('status_services', 'Selesai')
-            ->whereDate('sevices.updated_at', $today)
+            ->whereDate('sevices.tgl_service', $today)
             ->join('users', 'sevices.id_teknisi', '=', 'users.id')
             ->select('sevices.*', 'users.name as teknisi')
-            ->orderBy('sevices.updated_at', 'desc')
+            ->orderBy('sevices.tgl_service', 'desc')
             ->get();
 
         return response()->json([
@@ -171,15 +171,15 @@ class ServiceApiController extends Controller
         }
 
         if ($date_from) {
-            $query->whereDate('sevices.updated_at', '>=', $date_from);
+            $query->whereDate('sevices.tgl_service', '>=', $date_from);
         }
 
         if ($date_to) {
-            $query->whereDate('sevices.updated_at', '<=', $date_to);
+            $query->whereDate('sevices.tgl_service', '<=', $date_to);
         }
 
         $totalCount = $query->count();
-        $services = $query->orderBy('sevices.updated_at', 'desc')
+        $services = $query->orderBy('sevices.tgl_service', 'desc')
                          ->offset(($page - 1) * $limit)
                          ->limit($limit)
                          ->get();
@@ -426,7 +426,7 @@ class ServiceApiController extends Controller
                 // Daily trends
                 $dailyCompletions = $baseQuery
                     ->where('status_services', 'Selesai')
-                    ->selectRaw('DATE(updated_at) as date, COUNT(*) as count, SUM(total_biaya) as revenue')
+                    ->selectRaw('DATE(tgl_service) as date, COUNT(*) as count, SUM(total_biaya) as revenue')
                     ->groupBy('date')
                     ->orderBy('date')
                     ->get();
@@ -520,7 +520,7 @@ class ServiceApiController extends Controller
 
                 // Service completion times
                 $completionTimes = $query->where('status_services', 'Selesai')
-                    ->selectRaw('TIMESTAMPDIFF(HOUR, created_at, updated_at) as completion_hours')
+                    ->selectRaw('TIMESTAMPDIFF(HOUR, created_at, tgl_service) as completion_hours')
                     ->pluck('completion_hours')
                     ->filter(function ($time) {
                         return $time > 0; // Filter out negative or zero times
@@ -856,11 +856,11 @@ class ServiceApiController extends Controller
 
         // Apply additional filters
         if (!empty($filters['date_from'])) {
-            $query->whereDate('sevices.updated_at', '>=', $filters['date_from']);
+            $query->whereDate('sevices.tgl_service', '>=', $filters['date_from']);
         }
 
         if (!empty($filters['date_to'])) {
-            $query->whereDate('sevices.updated_at', '<=', $filters['date_to']);
+            $query->whereDate('sevices.tgl_service', '<=', $filters['date_to']);
         }
 
         if (!empty($filters['technician_id'])) {
@@ -871,7 +871,7 @@ class ServiceApiController extends Controller
             $query->where('sevices.status_services', $filters['status']);
         }
 
-        $services = $query->orderBy('sevices.updated_at', 'desc')->get();
+        $services = $query->orderBy('sevices.tgl_service', 'desc')->get();
 
         // Include detailed information if requested
         if ($filters['include_details'] === 'true') {
@@ -1125,7 +1125,7 @@ class ServiceApiController extends Controller
                 // Most profitable services
                 $profitableServices = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
                     ->where('status_services', 'Selesai')
-                    ->whereBetween('updated_at', $dateRange)
+                    ->whereBetween('tgl_service', $dateRange)
                     ->orderByDesc('total_biaya')
                     ->limit($limit)
                     ->get();
@@ -1133,8 +1133,8 @@ class ServiceApiController extends Controller
                 // Fastest completion times
                 $fastestServices = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
                     ->where('status_services', 'Selesai')
-                    ->whereBetween('updated_at', $dateRange)
-                    ->selectRaw('*, TIMESTAMPDIFF(HOUR, created_at, updated_at) as completion_hours')
+                    ->whereBetween('tgl_service', $dateRange)
+                    ->selectRaw('*, TIMESTAMPDIFF(HOUR, created_at, tgl_service) as completion_hours')
                     ->havingRaw('completion_hours > 0')
                     ->orderBy('completion_hours', 'asc')
                     ->limit($limit)
@@ -1212,7 +1212,7 @@ class ServiceApiController extends Controller
                     $avgCompletionTime = modelServices::where('type_unit', 'LIKE', "%{$deviceType}%")
                         ->where('kode_owner', $this->getThisUser()->id_upline)
                         ->where('status_services', 'Selesai')
-                        ->selectRaw('AVG(TIMESTAMPDIFF(HOUR, created_at, updated_at)) as avg_hours')
+                        ->selectRaw('AVG(TIMESTAMPDIFF(HOUR, created_at, tgl_service)) as avg_hours')
                         ->value('avg_hours');
 
                     $recommendations['avg_completion_hours'] = round($avgCompletionTime ?? 0, 2);
@@ -1395,15 +1395,15 @@ class ServiceApiController extends Controller
             }
 
             if ($date_from) {
-                $query->whereDate('sevices.updated_at', '>=', $date_from);
+                $query->whereDate('sevices.tgl_service', '>=', $date_from);
             }
 
             if ($date_to) {
-                $query->whereDate('sevices.updated_at', '<=', $date_to);
+                $query->whereDate('sevices.tgl_service', '<=', $date_to);
             }
 
             $totalCount = $query->count();
-            $services = $query->orderBy('sevices.updated_at', 'desc')
+            $services = $query->orderBy('sevices.tgl_service', 'desc')
                              ->offset(($page - 1) * $limit)
                              ->limit($limit)
                              ->get();
@@ -1432,6 +1432,7 @@ class ServiceApiController extends Controller
                     'id' => $service->id,
                     'kode_service' => $service->kode_service,
                     'nama_pelanggan' => $service->nama_pelanggan,
+                    'tgl_service' => $service->tgl_service,
                     'type_unit' => $service->type_unit,
                     'teknisi' => $service->teknisi,
                     'id_teknisi' => $service->id_teknisi,
