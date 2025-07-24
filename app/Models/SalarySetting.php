@@ -15,10 +15,12 @@ class SalarySetting extends Model
         'user_id',
         'compensation_type',
         'basic_salary',
+        'max_salary',
         'service_percentage',
         'target_bonus',
         'monthly_target',
         'percentage_value',
+        'max_percentage',
         'created_by',
         'is_active'
     ];

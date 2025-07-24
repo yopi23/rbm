@@ -1351,7 +1351,239 @@ class ServiceApiController extends Controller
         }
     }
 
-    public function getDailyReportServices(Request $request)
+//     public function getDailyReportServices(Request $request)
+// {
+//     try {
+//         $page = $request->get('page', 1);
+//         $limit = min($request->get('limit', 20), 50);
+//         $search = $request->get('search', '');
+//         $technician_id = $request->get('technician_id');
+//         $date_from = $request->get('date_from');
+//         $date_to = $request->get('date_to');
+//         $status = $request->get('status'); // 'Selesai', 'Diambil', atau kosong untuk semua
+
+//         $cacheKey = "daily_report_{$this->getThisUser()->id_upline}_{$page}_{$limit}_" .
+//                    md5($search . $technician_id . $date_from . $date_to . $status);
+
+//         $result = Cache::remember($cacheKey, 300, function () use ($page, $limit, $search, $technician_id, $date_from, $date_to, $status) {
+//             $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+//                 ->whereIn('status_services', ['Selesai', 'Diambil']) // Ambil kedua status
+//                 ->join('users', 'sevices.id_teknisi', '=', 'users.id')
+//                 ->select(
+//                     'sevices.*',
+//                     'users.name as teknisi',
+//                     'sevices.status_services as service_status'
+//                 );
+
+//             // Filter by specific status if provided
+//             if (!empty($status)) {
+//                 $query->where('sevices.status_services', $status);
+//             }
+
+//             // Apply search filters
+//             if (!empty($search)) {
+//                 $query->where(function ($q) use ($search) {
+//                     $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
+//                       ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
+//                       ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
+//                       ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
+//                 });
+//             }
+
+//             if ($technician_id) {
+//                 $query->where('sevices.id_teknisi', $technician_id);
+//             }
+
+//             if ($date_from) {
+//                 $query->whereDate('sevices.tgl_service', '>=', $date_from);
+//             }
+
+//             if ($date_to) {
+//                 $query->whereDate('sevices.tgl_service', '<=', $date_to);
+//             }
+
+//             $totalCount = $query->count();
+//             $services = $query->orderBy('sevices.tgl_service', 'desc')
+//                              ->offset(($page - 1) * $limit)
+//                              ->limit($limit)
+//                              ->get();
+
+//             // FIXED: Add computed fields with CORRECT payment logic
+//             $services = $services->map(function ($service) {
+//                 $totalBiaya = (float) $service->total_biaya;
+//                 $dp = (float) $service->dp;
+//                 $sisaBayar = $totalBiaya - $dp;
+//                 $isLunas = $sisaBayar <= 0;
+
+//                 // FIXED: Correct omset calculation based on business logic
+//                 $omsetValue = 0;
+//                 if ($service->service_status === 'Diambil') {
+//                     // Service Diambil = PASTI LUNAS = uang masuk = total_biaya
+//                     $omsetValue = $totalBiaya;
+//                 } elseif ($service->service_status === 'Selesai') {
+//                     // Service Selesai = cek status pembayaran
+//                     $omsetValue = $isLunas ? $totalBiaya : $dp;
+//                 } else {
+//                     // Status lainnya
+//                     $omsetValue = $isLunas ? $totalBiaya : $dp;
+//                 }
+
+//                 return [
+//                     'id' => $service->id,
+//                     'kode_service' => $service->kode_service,
+//                     'nama_pelanggan' => $service->nama_pelanggan,
+//                     'tgl_service' => $service->tgl_service,
+//                     'type_unit' => $service->type_unit,
+//                     'teknisi' => $service->teknisi,
+//                     'id_teknisi' => $service->id_teknisi,
+//                     'total_biaya' => $totalBiaya,
+//                     'dp' => $dp,
+//                     'sisa_bayar' => $sisaBayar,
+//                     'is_lunas' => $isLunas || $service->service_status === 'Diambil', // Diambil = pasti lunas
+//                     'service_status' => $service->service_status,
+//                     'keterangan' => $service->keterangan,
+//                     'created_at' => $service->created_at,
+//                     'updated_at' => $service->updated_at,
+//                     // FIXED: Correct omset value calculation
+//                     'omset_value' => $omsetValue,
+//                 ];
+//             });
+
+//             return [
+//                 'data' => $services,
+//                 'pagination' => [
+//                     'current_page' => (int) $page,
+//                     'per_page' => (int) $limit,
+//                     'total' => (int) $totalCount,
+//                     'total_pages' => ceil($totalCount / $limit),
+//                     'has_next_page' => $page < ceil($totalCount / $limit),
+//                     'has_previous_page' => $page > 1,
+//                 ]
+//             ];
+//         });
+
+//         // Calculate summary with corrected logic
+//         $summary = $this->calculateDailySummary($date_from, $date_to);
+
+//         return response()->json([
+//             'success' => true,
+//             'message' => 'Data layanan harian berhasil diambil.',
+//             'data' => $result['data'],
+//             'pagination' => $result['pagination'],
+//             'summary' => $summary,
+//             'filters' => [
+//                 'search' => $search,
+//                 'technician_id' => $technician_id,
+//                 'date_from' => $date_from,
+//                 'date_to' => $date_to,
+//                 'status' => $status
+//             ]
+//         ], 200);
+//     } catch (\Exception $e) {
+//         Log::error("Get Daily Report Services Error: " . $e->getMessage());
+//         return response()->json([
+//             'success' => false,
+//             'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+//         ], 500);
+//     }
+// }
+
+/**
+ * FIXED: Calculate summary for daily report with CORRECT payment logic
+ */
+// private function calculateDailySummary($date_from, $date_to)
+// {
+//     try {
+//         $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+//             ->whereIn('status_services', ['Selesai', 'Diambil']);
+
+//         if ($date_from) {
+//             $query->whereDate('updated_at', '>=', $date_from);
+//         }
+
+//         if ($date_to) {
+//             $query->whereDate('updated_at', '<=', $date_to);
+//         }
+
+//         $services = $query->get();
+
+//         $summary = [
+//             'total_services' => $services->count(),
+//             'completed_services' => $services->where('status_services', 'Selesai')->count(),
+//             'taken_services' => $services->where('status_services', 'Diambil')->count(),
+//             'total_omset' => 0, // Uang yang benar-benar masuk
+//             'completed_omset' => 0,
+//             'taken_omset' => 0,
+//             'total_dp_collected' => 0,
+//             'total_remaining_payment' => 0, // FIXED: Sisa tagihan yang benar
+//         ];
+
+//         foreach ($services as $service) {
+//             $totalBiaya = (float) $service->total_biaya;
+//             $dp = (float) $service->dp;
+//             $sisaBayar = $totalBiaya - $dp;
+//             $isLunas = $sisaBayar <= 0;
+
+//             // Total DP collected
+//             $summary['total_dp_collected'] += $dp;
+
+//             if ($service->status_services === 'Diambil') {
+//                 // FIXED: Service Diambil = PASTI LUNAS
+//                 $omsetValue = $totalBiaya; // Uang masuk = total biaya
+//                 $summary['taken_omset'] += $omsetValue;
+//                 $summary['total_omset'] += $omsetValue;
+//                 // PENTING: Service diambil TIDAK ada sisa tagihan
+//                 // $summary['total_remaining_payment'] += 0; // Tidak menambah sisa tagihan
+
+//                 Log::info("Service Diambil: {$service->nama_pelanggan} - Omset: {$omsetValue} - Sisa: 0");
+
+//             } elseif ($service->status_services === 'Selesai') {
+//                 // FIXED: Service Selesai = cek status pembayaran
+//                 if ($isLunas) {
+//                     // Selesai dan sudah lunas
+//                     $omsetValue = $totalBiaya; // Uang masuk = total biaya
+//                     $summary['completed_omset'] += $omsetValue;
+//                     $summary['total_omset'] += $omsetValue;
+//                     // Tidak ada sisa tagihan karena sudah lunas
+
+//                     Log::info("Service Selesai (Lunas): {$service->nama_pelanggan} - Omset: {$omsetValue} - Sisa: 0");
+//                 } else {
+//                     // Selesai tapi belum lunas
+//                     $omsetValue = $dp; // Uang masuk = DP saja
+//                     $summary['completed_omset'] += $omsetValue;
+//                     $summary['total_omset'] += $omsetValue;
+//                     $summary['total_remaining_payment'] += $sisaBayar; // Ada sisa tagihan
+
+//                     Log::info("Service Selesai (Belum Lunas): {$service->nama_pelanggan} - Omset: {$omsetValue} - Sisa: {$sisaBayar}");
+//                 }
+//             }
+//         }
+
+//         // VALIDASI: Pastikan tidak ada sisa tagihan jika semua service diambil
+//         if ($summary['taken_services'] > 0 && $summary['completed_services'] == 0 && $summary['total_remaining_payment'] > 0) {
+//             Log::warning("INCONSISTENCY: Ada service diambil tapi masih ada sisa tagihan!");
+//             // Reset sisa tagihan jika hanya ada service diambil
+//             $summary['total_remaining_payment'] = 0;
+//         }
+
+//         Log::info("Summary Calculation:", $summary);
+
+//         return $summary;
+//     } catch (\Exception $e) {
+//         Log::error("Calculate Daily Summary Error: " . $e->getMessage());
+//         return [
+//             'total_services' => 0,
+//             'completed_services' => 0,
+//             'taken_services' => 0,
+//             'total_omset' => 0,
+//             'completed_omset' => 0,
+//             'taken_omset' => 0,
+//             'total_dp_collected' => 0,
+//             'total_remaining_payment' => 0,
+//         ];
+//     }
+// }
+public function getDailyReportServices(Request $request)
 {
     try {
         $page = $request->get('page', 1);
@@ -1360,14 +1592,14 @@ class ServiceApiController extends Controller
         $technician_id = $request->get('technician_id');
         $date_from = $request->get('date_from');
         $date_to = $request->get('date_to');
-        $status = $request->get('status'); // 'Selesai', 'Diambil', atau kosong untuk semua
+        $status = $request->get('status');
 
         $cacheKey = "daily_report_{$this->getThisUser()->id_upline}_{$page}_{$limit}_" .
                    md5($search . $technician_id . $date_from . $date_to . $status);
 
         $result = Cache::remember($cacheKey, 300, function () use ($page, $limit, $search, $technician_id, $date_from, $date_to, $status) {
             $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
-                ->whereIn('status_services', ['Selesai', 'Diambil']) // Ambil kedua status
+                ->whereIn('status_services', ['Selesai', 'Diambil'])
                 ->join('users', 'sevices.id_teknisi', '=', 'users.id')
                 ->select(
                     'sevices.*',
@@ -1375,12 +1607,10 @@ class ServiceApiController extends Controller
                     'sevices.status_services as service_status'
                 );
 
-            // Filter by specific status if provided
             if (!empty($status)) {
                 $query->where('sevices.status_services', $status);
             }
 
-            // Apply search filters
             if (!empty($search)) {
                 $query->where(function ($q) use ($search) {
                     $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
@@ -1394,37 +1624,64 @@ class ServiceApiController extends Controller
                 $query->where('sevices.id_teknisi', $technician_id);
             }
 
+            // FIXED: Filter berdasarkan tanggal yang tepat sesuai konteks
             if ($date_from) {
-                $query->whereDate('sevices.tgl_service', '>=', $date_from);
+                $query->where(function ($q) use ($date_from) {
+                    $q->where(function ($subQ) use ($date_from) {
+                        // Service Selesai: gunakan tgl_service
+                        $subQ->where('sevices.status_services', 'Selesai')
+                             ->whereDate('sevices.tgl_service', '>=', $date_from);
+                    })->orWhere(function ($subQ) use ($date_from) {
+                        // Service Diambil: gunakan updated_at (tanggal diambil)
+                        $subQ->where('sevices.status_services', 'Diambil')
+                             ->whereDate('sevices.updated_at', '>=', $date_from);
+                    });
+                });
             }
 
             if ($date_to) {
-                $query->whereDate('sevices.tgl_service', '<=', $date_to);
+                $query->where(function ($q) use ($date_to) {
+                    $q->where(function ($subQ) use ($date_to) {
+                        // Service Selesai: gunakan tgl_service
+                        $subQ->where('sevices.status_services', 'Selesai')
+                             ->whereDate('sevices.tgl_service', '<=', $date_to);
+                    })->orWhere(function ($subQ) use ($date_to) {
+                        // Service Diambil: gunakan updated_at (tanggal diambil)
+                        $subQ->where('sevices.status_services', 'Diambil')
+                             ->whereDate('sevices.updated_at', '<=', $date_to);
+                    });
+                });
             }
 
             $totalCount = $query->count();
-            $services = $query->orderBy('sevices.tgl_service', 'desc')
+            $services = $query->orderBy('sevices.updated_at', 'desc')
                              ->offset(($page - 1) * $limit)
                              ->limit($limit)
                              ->get();
 
-            // FIXED: Add computed fields with CORRECT payment logic
+            // FIXED: Enhanced mapping dengan logika tanggal dan omset yang BENAR
             $services = $services->map(function ($service) {
                 $totalBiaya = (float) $service->total_biaya;
                 $dp = (float) $service->dp;
                 $sisaBayar = $totalBiaya - $dp;
                 $isLunas = $sisaBayar <= 0;
 
-                // FIXED: Correct omset calculation based on business logic
+                // FIXED: Tentukan tanggal yang tepat untuk menghitung omset
+                $relevantDate = null;
                 $omsetValue = 0;
+
                 if ($service->service_status === 'Diambil') {
-                    // Service Diambil = PASTI LUNAS = uang masuk = total_biaya
-                    $omsetValue = $totalBiaya;
+                    // Service Diambil = gunakan updated_at (tanggal status berubah ke Diambil)
+                    $relevantDate = $service->updated_at;
+                    $omsetValue = $totalBiaya; // Diambil = pasti lunas = total biaya
                 } elseif ($service->service_status === 'Selesai') {
-                    // Service Selesai = cek status pembayaran
+                    // Service Selesai = gunakan tgl_service (tanggal service selesai)
+                    $relevantDate = $service->tgl_service;
+                    // Omset berdasarkan status pembayaran
                     $omsetValue = $isLunas ? $totalBiaya : $dp;
                 } else {
-                    // Status lainnya
+                    // Status lainnya = gunakan updated_at
+                    $relevantDate = $service->updated_at;
                     $omsetValue = $isLunas ? $totalBiaya : $dp;
                 }
 
@@ -1433,19 +1690,21 @@ class ServiceApiController extends Controller
                     'kode_service' => $service->kode_service,
                     'nama_pelanggan' => $service->nama_pelanggan,
                     'tgl_service' => $service->tgl_service,
+                    'tgl_diambil' => $service->service_status === 'Diambil' ? $service->updated_at : null,
                     'type_unit' => $service->type_unit,
                     'teknisi' => $service->teknisi,
                     'id_teknisi' => $service->id_teknisi,
                     'total_biaya' => $totalBiaya,
                     'dp' => $dp,
                     'sisa_bayar' => $sisaBayar,
-                    'is_lunas' => $isLunas || $service->service_status === 'Diambil', // Diambil = pasti lunas
+                    'is_lunas' => $isLunas || $service->service_status === 'Diambil',
                     'service_status' => $service->service_status,
                     'keterangan' => $service->keterangan,
                     'created_at' => $service->created_at,
                     'updated_at' => $service->updated_at,
-                    // FIXED: Correct omset value calculation
+                    // FIXED: Omset dengan tanggal yang tepat
                     'omset_value' => $omsetValue,
+                    'relevant_date' => $relevantDate, // Tanggal untuk grouping yang benar
                 ];
             });
 
@@ -1462,8 +1721,8 @@ class ServiceApiController extends Controller
             ];
         });
 
-        // Calculate summary with corrected logic
-        $summary = $this->calculateDailySummary($date_from, $date_to);
+        // FIXED: Summary calculation dengan tanggal yang tepat
+        $summary = $this->calculateDailySummaryFixed($date_from, $date_to);
 
         return response()->json([
             'success' => true,
@@ -1488,87 +1747,69 @@ class ServiceApiController extends Controller
     }
 }
 
-/**
- * FIXED: Calculate summary for daily report with CORRECT payment logic
- */
-private function calculateDailySummary($date_from, $date_to)
+// FIXED: Summary calculation yang benar berdasarkan tanggal yang tepat
+private function calculateDailySummaryFixed($dateFrom, $dateTo)
 {
     try {
         $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
             ->whereIn('status_services', ['Selesai', 'Diambil']);
 
-        if ($date_from) {
-            $query->whereDate('updated_at', '>=', $date_from);
-        }
-
-        if ($date_to) {
-            $query->whereDate('updated_at', '<=', $date_to);
+        // Filter berdasarkan tanggal yang relevan dengan konteks
+        if ($dateFrom && $dateTo) {
+            $query->where(function ($q) use ($dateFrom, $dateTo) {
+                $q->where(function ($subQ) use ($dateFrom, $dateTo) {
+                    // Service Selesai: filter berdasarkan tgl_service
+                    $subQ->where('status_services', 'Selesai')
+                         ->whereDate('tgl_service', '>=', $dateFrom)
+                         ->whereDate('tgl_service', '<=', $dateTo);
+                })->orWhere(function ($subQ) use ($dateFrom, $dateTo) {
+                    // Service Diambil: filter berdasarkan updated_at
+                    $subQ->where('status_services', 'Diambil')
+                         ->whereDate('updated_at', '>=', $dateFrom)
+                         ->whereDate('updated_at', '<=', $dateTo);
+                });
+            });
         }
 
         $services = $query->get();
 
-        $summary = [
-            'total_services' => $services->count(),
-            'completed_services' => $services->where('status_services', 'Selesai')->count(),
-            'taken_services' => $services->where('status_services', 'Diambil')->count(),
-            'total_omset' => 0, // Uang yang benar-benar masuk
-            'completed_omset' => 0,
-            'taken_omset' => 0,
-            'total_dp_collected' => 0,
-            'total_remaining_payment' => 0, // FIXED: Sisa tagihan yang benar
-        ];
+        $completedServices = 0;
+        $takenServices = 0;
+        $totalOmset = 0;
+        $totalDpCollected = 0;
+        $totalRemainingPayment = 0;
 
         foreach ($services as $service) {
             $totalBiaya = (float) $service->total_biaya;
             $dp = (float) $service->dp;
             $sisaBayar = $totalBiaya - $dp;
-            $isLunas = $sisaBayar <= 0;
-
-            // Total DP collected
-            $summary['total_dp_collected'] += $dp;
 
             if ($service->status_services === 'Diambil') {
-                // FIXED: Service Diambil = PASTI LUNAS
-                $omsetValue = $totalBiaya; // Uang masuk = total biaya
-                $summary['taken_omset'] += $omsetValue;
-                $summary['total_omset'] += $omsetValue;
-                // PENTING: Service diambil TIDAK ada sisa tagihan
-                // $summary['total_remaining_payment'] += 0; // Tidak menambah sisa tagihan
-
-                Log::info("Service Diambil: {$service->nama_pelanggan} - Omset: {$omsetValue} - Sisa: 0");
-
+                $takenServices++;
+                $totalOmset += $totalBiaya; // Diambil = pasti lunas = total biaya
             } elseif ($service->status_services === 'Selesai') {
-                // FIXED: Service Selesai = cek status pembayaran
-                if ($isLunas) {
-                    // Selesai dan sudah lunas
-                    $omsetValue = $totalBiaya; // Uang masuk = total biaya
-                    $summary['completed_omset'] += $omsetValue;
-                    $summary['total_omset'] += $omsetValue;
-                    // Tidak ada sisa tagihan karena sudah lunas
-
-                    Log::info("Service Selesai (Lunas): {$service->nama_pelanggan} - Omset: {$omsetValue} - Sisa: 0");
+                $completedServices++;
+                if ($sisaBayar <= 0) {
+                    // Selesai dan lunas
+                    $totalOmset += $totalBiaya;
                 } else {
                     // Selesai tapi belum lunas
-                    $omsetValue = $dp; // Uang masuk = DP saja
-                    $summary['completed_omset'] += $omsetValue;
-                    $summary['total_omset'] += $omsetValue;
-                    $summary['total_remaining_payment'] += $sisaBayar; // Ada sisa tagihan
-
-                    Log::info("Service Selesai (Belum Lunas): {$service->nama_pelanggan} - Omset: {$omsetValue} - Sisa: {$sisaBayar}");
+                    $totalOmset += $dp;
+                    $totalRemainingPayment += $sisaBayar;
                 }
             }
+
+            $totalDpCollected += $dp;
         }
 
-        // VALIDASI: Pastikan tidak ada sisa tagihan jika semua service diambil
-        if ($summary['taken_services'] > 0 && $summary['completed_services'] == 0 && $summary['total_remaining_payment'] > 0) {
-            Log::warning("INCONSISTENCY: Ada service diambil tapi masih ada sisa tagihan!");
-            // Reset sisa tagihan jika hanya ada service diambil
-            $summary['total_remaining_payment'] = 0;
-        }
-
-        Log::info("Summary Calculation:", $summary);
-
-        return $summary;
+        return [
+            'total_services' => $completedServices + $takenServices,
+            'completed_services' => $completedServices,
+            'taken_services' => $takenServices,
+            'total_omset' => $totalOmset,
+            'total_dp_collected' => $totalDpCollected,
+            'total_remaining_payment' => $totalRemainingPayment,
+        ];
     } catch (\Exception $e) {
         Log::error("Calculate Daily Summary Error: " . $e->getMessage());
         return [
@@ -1576,8 +1817,6 @@ private function calculateDailySummary($date_from, $date_to)
             'completed_services' => 0,
             'taken_services' => 0,
             'total_omset' => 0,
-            'completed_omset' => 0,
-            'taken_omset' => 0,
             'total_dp_collected' => 0,
             'total_remaining_payment' => 0,
         ];

@@ -188,11 +188,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/financial-report/technician-analysis', [FinancialReportApiController::class, 'getTechnicianProfitAnalysis']);
     Route::post('/financial-report/export', [FinancialReportApiController::class, 'exportFinancialReport']);
 
-    Route::prefix('device-statistics')->group(function () {
-        Route::get('/', [FinancialReportApiController::class, 'getDeviceStatistics']);
-        Route::get('/trends', [FinancialReportApiController::class, 'getDeviceTrends']);
-        Route::get('/comparison', [FinancialReportApiController::class, 'getDeviceComparison']);
-    });
+    // Route::prefix('device-statistics')->group(function () {
+    //     Route::get('/', [FinancialReportApiController::class, 'getDeviceStatistics']);
+    //     Route::get('/trends', [FinancialReportApiController::class, 'getDeviceTrends']);
+    //     Route::get('/comparison', [FinancialReportApiController::class, 'getDeviceComparison']);
+    // });
+
+    // Daily Device Monitoring Routes
+    Route::get('/financial-report/daily-device-monitoring', [FinancialReportApiController::class, 'getDailyDeviceMonitoring']);
+    Route::get('/financial-report/device-pickup-alerts', [FinancialReportApiController::class, 'getDevicePickupAlerts']);
+    Route::post('/financial-report/update-device-pickup-status', [FinancialReportApiController::class, 'updateDevicePickupStatus']);
 
     // Or add them to the existing financial-report group:
     Route::get('/financial-report/device-statistics', [FinancialReportApiController::class, 'getDeviceStatistics']);

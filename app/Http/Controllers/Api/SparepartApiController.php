@@ -658,7 +658,11 @@ class SparepartApiController extends Controller
             $fix_profit = 0;
 
             if ($presentaseSetting && $presentaseSetting->compensation_type == 'percentage') {
-                $fix_profit = $profit * $presentaseSetting->percentage_value / 100;
+                if ($profit < 0) {
+                    $fix_profit = $profit * $presentaseSetting->max_percentage / 100;
+                } else {
+                    $fix_profit = $profit * $presentaseSetting->percentage_value / 100;
+                }
             }
             Log::info("Internal: New calculated profit: {$fix_profit} for Technician ID: {$id_teknisi}");
 
@@ -671,6 +675,7 @@ class SparepartApiController extends Controller
                     'kode_user' => $id_teknisi,
                     'profit' => $fix_profit,
                     'saldo' => $teknisi->saldo + $fix_profit, // Provisional saldo
+                    'profit_toko'=>$profit-$fix_profit,
                 ]
             );
 

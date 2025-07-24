@@ -613,6 +613,7 @@ class EmployeeManagementController extends Controller
 
             if ($request->compensation_type == 'fixed') {
                 $data['basic_salary'] = (float) $request->basic_salary;
+                $data['max_salary'] = (float) $request->basic_salary;
                 $data['service_percentage'] = (int) $request->service_percentage;
                 $data['target_bonus'] = (float) $request->target_bonus;
                 $data['monthly_target'] = (int) $request->monthly_target;
@@ -620,6 +621,7 @@ class EmployeeManagementController extends Controller
             } else {
                 // Untuk tipe percentage, set field fixed salary ke 0
                 $data['percentage_value'] = (float) $request->percentage_value;
+                $data['max_percentage'] = (float) $request->percentage_value;
                 $data['basic_salary'] = 0;
                 $data['service_percentage'] = 0;
                 $data['target_bonus'] = 0;
