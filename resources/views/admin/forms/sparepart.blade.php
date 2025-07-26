@@ -4,23 +4,21 @@
 @include('admin.component.navbar')
 @include('admin.component.sidebar')
 
-<!-- Content Wrapper. Contains page content -->
 <div class="content-wrapper">
-    <!-- Content Header (Page header) -->
     <div class="content-header">
         <div class="container-fluid">
             <div class="row mb-2">
                 <div class="col-sm-6">
                     <h1 class="m-0">@yield('page')</h1>
-                </div><!-- /.col -->
+                </div>
                 <div class="col-sm-6">
                     <ol class="breadcrumb float-sm-right">
                         <li class="breadcrumb-item"><a href="{{ route('dashboard') }}">Home</a></li>
                         <li class="breadcrumb-item active">@yield('page')</li>
                     </ol>
-                </div><!-- /.col -->
-            </div><!-- /.row -->
-        </div><!-- /.container-fluid -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <section class="content">
@@ -90,13 +88,12 @@
                                             <select name="kode_kategori" id="kode_kategori" class="form-control">
                                                 @forelse ($kategori as $item)
                                                     <option value="{{ $item->id }}"
-                                                        {{ isset($data) != null && $data->kategori_barang == $item->id ? 'selected' : '' }}>
+                                                        {{ isset($data) != null && $data->kode_kategori == $item->id ? 'selected' : '' }}>
                                                         {{ $item->nama_kategori }}</option>
                                                 @empty
                                                 @endforelse
                                             </select>
                                         </div>
-                                        <!-- Add this new field for subcategory -->
                                         <div class="form-group">
                                             <label for="kode_sub_kategori">Sub Kategori Sparepart</label>
                                             <select name="kode_sub_kategori" id="kode_sub_kategori"
@@ -167,6 +164,68 @@
                                         </div>
 
                                     </div>
+                                </div>
+
+                                <div class="card card-outline card-info mt-3">
+                                    <div class="card-header">
+                                        <h3 class="card-title">Harga Khusus & Diskon (Opsional)</h3>
+                                        <div class="card-tools">
+                                            <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                                                <i class="fas fa-minus"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label>Harga Khusus Toko (Internal)</label>
+                                                    <input type="text" name="harga_khusus_toko"
+                                                        value="{{ isset($data) && $data->hargaKhusus->first() ? $data->hargaKhusus->first()->harga_toko : '0' }}"
+                                                        id="harga_khusus_toko" class="form-control" hidden>
+                                                    <input type="text" name="in_harga_khusus_toko"
+                                                        placeholder="Harga Khusus Toko" id="in_harga_khusus_toko"
+                                                        class="form-control">
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label>Harga Khusus Satuan (Jual)</label>
+                                                    <input type="text" name="harga_khusus_satuan"
+                                                        value="{{ isset($data) && $data->hargaKhusus->first() ? $data->hargaKhusus->first()->harga_satuan : '0' }}"
+                                                        id="harga_khusus_satuan" class="form-control" hidden>
+                                                    <input type="text" name="in_harga_khusus_satuan"
+                                                        placeholder="Harga Khusus Satuan" id="in_harga_khusus_satuan"
+                                                        class="form-control">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label>Tipe Diskon</label>
+                                                    <select name="diskon_tipe" id="diskon_tipe" class="form-control">
+                                                        <option value="">Tidak Ada Diskon</option>
+                                                        <option value="persentase"
+                                                            {{ isset($data) && $data->hargaKhusus->first() && $data->hargaKhusus->first()->diskon_tipe == 'persentase' ? 'selected' : '' }}>
+                                                            Persentase (%)</option>
+                                                        <option value="potongan"
+                                                            {{ isset($data) && $data->hargaKhusus->first() && $data->hargaKhusus->first()->diskon_tipe == 'potongan' ? 'selected' : '' }}>
+                                                            Potongan (Rp)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label>Nilai Diskon</label>
+                                                    <input type="number" name="diskon_nilai"
+                                                        value="{{ isset($data) && $data->hargaKhusus->first() ? $data->hargaKhusus->first()->diskon_nilai : '0' }}"
+                                                        placeholder="Nilai Diskon" id="diskon_nilai"
+                                                        class="form-control" min="0">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <div class="card-footer">
                                         <button type="submit" class="btn btn-success">Simpan</button>
                                         <a href="{{ route('sparepart') }}" class="btn btn-danger">Kembali</a>
@@ -181,7 +240,6 @@
             </div>
         </div>
     </section>
-    <!-- /.content -->
 </div>
 @section('content-script')
     <script>
@@ -192,6 +250,9 @@
 
     <script>
         function formatRupiah(angka, prefix) {
+            if (angka === null || isNaN(angka)) {
+                return "";
+            }
             var number_string = angka.toString().replace(/[^,\d]/g, "");
             var split = number_string.split(",");
             var sisa = split[0].length % 3;
@@ -203,90 +264,118 @@
                 rupiah += separator + ribuan.join(".");
             }
 
-            rupiah = split[1] != undefined ? rupiah + ',' + split[1] :
-                rupiah; // Tambahkan kondisi untuk menghilangkan angka 0 di depan jika tidak ada koma
+            rupiah = split[1] != undefined ? rupiah + ',' + split[1] : rupiah;
             return prefix == undefined ? rupiah : (rupiah ? 'Rp. ' + rupiah : '');
         }
 
         function getNumericValue(rupiah) {
-            var numericValue = rupiah.replace(/[^0-9]/g, "");
-            return numericValue;
+            if (typeof rupiah !== 'string') return "";
+            return rupiah.replace(/[^0-9]/g, "");
         }
 
-        var HbInput = document.getElementById("in_harga_beli");
-        var Hbhidden = document.getElementById("harga_beli");
+        document.addEventListener("DOMContentLoaded", function() {
+            var HbInput = document.getElementById("in_harga_beli");
+            var Hbhidden = document.getElementById("harga_beli");
 
-        var HjInput = document.getElementById("in_harga_jual");
-        var Hjhidden = document.getElementById("harga_jual");
+            var HjInput = document.getElementById("in_harga_jual");
+            var Hjhidden = document.getElementById("harga_jual");
 
-        var HpInput = document.getElementById("in_harga_pasang");
-        var Hphidden = document.getElementById("harga_pasang");
+            var HpInput = document.getElementById("in_harga_pasang");
+            var Hphidden = document.getElementById("harga_pasang");
 
+            var HktInput = document.getElementById("in_harga_khusus_toko");
+            var Hkthidden = document.getElementById("harga_khusus_toko");
 
-        HbInput.addEventListener("input", function(e) {
-            var biaya = e.target.value;
-            var rupiah = formatRupiah(biaya);
-            var numericValue = getNumericValue(biaya);
-            e.target.value = rupiah;
-            Hbhidden.value = numericValue;
-        });
+            var HksInput = document.getElementById("in_harga_khusus_satuan");
+            var Hkshidde = document.getElementById("harga_khusus_satuan");
 
-        HjInput.addEventListener("input", function(e) {
-            var biaya = e.target.value;
-            var rupiah = formatRupiah(biaya);
-            var numericValue = getNumericValue(biaya);
-            e.target.value = rupiah;
-            Hjhidden.value = numericValue;
-        });
+            // Initialize display values on page load
+            HbInput.value = formatRupiah(Hbhidden.value);
+            HjInput.value = formatRupiah(Hjhidden.value);
+            HpInput.value = formatRupiah(Hphidden.value);
+            HktInput.value = formatRupiah(Hkthidden.value);
+            HksInput.value = formatRupiah(Hkshidden.value);
 
-        HpInput.addEventListener("input", function(e) {
-            var biaya = e.target.value;
-            var rupiah = formatRupiah(biaya);
-            var numericValue = getNumericValue(biaya);
-            e.target.value = rupiah;
-            Hphidden.value = numericValue;
+            // Event Listeners
+            HbInput.addEventListener("input", function(e) {
+                var biaya = e.target.value;
+                var rupiah = formatRupiah(biaya);
+                var numericValue = getNumericValue(biaya);
+                e.target.value = rupiah;
+                Hbhidden.value = numericValue;
+            });
+
+            HjInput.addEventListener("input", function(e) {
+                var biaya = e.target.value;
+                var rupiah = formatRupiah(biaya);
+                var numericValue = getNumericValue(biaya);
+                e.target.value = rupiah;
+                Hjhidden.value = numericValue;
+            });
+
+            HpInput.addEventListener("input", function(e) {
+                var biaya = e.target.value;
+                var rupiah = formatRupiah(biaya);
+                var numericValue = getNumericValue(biaya);
+                e.target.value = rupiah;
+                Hphidden.value = numericValue;
+            });
+
+            HktInput.addEventListener("input", function(e) {
+                var biaya = e.target.value;
+                var rupiah = formatRupiah(biaya);
+                var numericValue = getNumericValue(biaya);
+                e.target.value = rupiah;
+                Hkthidden.value = numericValue;
+            });
+
+            HksInput.addEventListener("input", function(e) {
+                var biaya = e.target.value;
+                var rupiah = formatRupiah(biaya);
+                var numericValue = getNumericValue(biaya);
+                e.target.value = rupiah;
+                Hkshidden.value = numericValue;
+            });
         });
     </script>
 
 
-    <!-- Add this script to your @push('scripts') section -->
+    <script>
+        $(document).ready(function() {
+            // When category changes, load subcategories
+            $('#kode_kategori').change(function() {
+                var kategoriId = $(this).val();
+                var subKategoriSelect = $('#kode_sub_kategori');
 
-        <script>
-            $(document).ready(function() {
-                // When category changes, load subcategories
-                $('#kode_kategori').change(function() {
-                    var kategoriId = $(this).val();
-                    var subKategoriSelect = $('#kode_sub_kategori');
+                // Clear current options
+                subKategoriSelect.empty();
+                subKategoriSelect.append('<option value="">Pilih Sub Kategori</option>');
 
-                    // Clear current options
-                    subKategoriSelect.empty();
-                    subKategoriSelect.append('<option value="">Pilih Sub Kategori</option>');
-
-                    if (kategoriId) {
-                        // Get subcategories via AJAX
-                        $.ajax({
-                            url: '{{ url('/admin/get-sub-kategori') }}/' + kategoriId,
-                            type: 'GET',
-                            dataType: 'json',
-                            success: function(data) {
-                                if (data.length > 0) {
-                                    // Add options
-                                    $.each(data, function(key, value) {
-                                        subKategoriSelect.append('<option value="' + value
-                                            .id + '">' + value.nama_sub_kategori +
-                                            '</option>');
-                                    });
-                                }
+                if (kategoriId) {
+                    // Get subcategories via AJAX
+                    $.ajax({
+                        url: '{{ url('/admin/get-sub-kategori') }}/' + kategoriId,
+                        type: 'GET',
+                        dataType: 'json',
+                        success: function(data) {
+                            if (data.length > 0) {
+                                // Add options
+                                $.each(data, function(key, value) {
+                                    subKategoriSelect.append('<option value="' + value
+                                        .id + '">' + value.nama_sub_kategori +
+                                        '</option>');
+                                });
                             }
-                        });
-                    }
-                });
-
-                // Trigger change on page load if editing
-                @if (isset($data) && $data->kode_kategori)
-                    $('#kode_kategori').trigger('change');
-                @endif
+                        }
+                    });
+                }
             });
-        </script>
-    @endsection
-    @include('admin.component.footer')
+
+            // Trigger change on page load if editing
+            @if (isset($data) && $data->kode_kategori)
+                $('#kode_kategori').trigger('change');
+            @endif
+        });
+    </script>
+@endsection
+@include('admin.component.footer')

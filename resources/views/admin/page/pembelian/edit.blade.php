@@ -121,7 +121,6 @@
                         <span>Mencari...</span>
                     </div>
                     <div id="search_results_list" class="list-group">
-                        <!-- Hasil pencarian akan ditampilkan di sini -->
                     </div>
                 </div>
             </div>
@@ -701,8 +700,22 @@
                             const listItem = document.createElement('a');
                             listItem.href = '#';
                             listItem.className = 'list-group-item list-group-item-action';
-                            listItem.innerHTML =
-                                `${item.nama_sparepart} <span class="badge badge-info">Stok: ${item.stok_sparepart}</span>`;
+                            console.log(item);
+                            // MODIFIED: Add subcategory information to the search result
+                            const subKategoriHtml = item.nama_sub_kategori ?
+                                `<small class="text-muted d-block">${item.nama_sub_kategori}</small>` :
+                                '';
+
+                            listItem.innerHTML = `
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        ${item.nama_sparepart}
+                                        ${subKategoriHtml}
+                                    </div>
+                                    <span class="badge badge-info">Stok: ${item.stok_sparepart}</span>
+                                </div>
+                            `;
+
                             listItem.addEventListener('click', function(e) {
                                 e.preventDefault();
                                 selectSparepart(item);

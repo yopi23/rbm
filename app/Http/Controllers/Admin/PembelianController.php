@@ -122,49 +122,72 @@ class PembelianController extends Controller
      * Method helper untuk pencarian sparepart
      */
     private function searchSpareparts($searchTerm)
-    {
-        $search_results = [];
+{
+    try {
+        // Baris ini tetap sama, mencoba mengambil data dari API terlebih dahulu
+        $response = Http::get('/spareparts/search', [
+            'search' => $searchTerm
+        ]);
 
-        try {
-            // Gunakan URL endpoint API yang sesuai dengan sistem Anda
-            $response = Http::get('/spareparts/search', [
-                'search' => $searchTerm
-            ]);
-
-            // Jika response berhasil dan memiliki format yang diharapkan
-            if ($response->successful() && $response->json('status') === 'success') {
-                $search_results = $response->json('data');
-            }
-        } catch (\Exception $e) {
-            // Fallback ke query database langsung jika API gagal
-            $keywords = array_filter(explode(' ', strtolower(trim($searchTerm))));
-
-            $query = DB::table('spareparts')
-                ->where('kode_owner', '=', $this->getThisUser()->id_upline);
-
-            foreach ($keywords as $keyword) {
-                $query->where(function ($q) use ($keyword) {
-                    $q->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', '%' . $keyword . '%')
-                      ->orWhere(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%');
-                });
-            }
-
-            $search_results = $query->select([
-                'id',
-                'kode_sparepart',
-                'nama_sparepart',
-                'harga_beli',
-                'harga_jual',
-                'harga_ecer',
-                'harga_pasang',
-                'stok_sparepart',
-                'created_at',
-                'updated_at'
-            ])->get()->toArray();
+        if ($response->successful() && $response->json('status') === 'success') {
+            return $response->json('data');
         }
-
-        return $search_results;
+    } catch (\Exception $e) {
+        // Jika API gagal, blok ini akan dieksekusi
     }
+
+    // Fallback ke query database langsung jika API gagal atau tidak berhasil
+    $keywords = array_filter(explode(' ', strtolower(trim($searchTerm))));
+
+    $query = DB::table('spareparts')
+        // Tambahkan JOIN ke tabel kategori dan subkategori
+        ->leftJoin('kategori_spareparts', 'spareparts.kode_kategori', '=', 'kategori_spareparts.id')
+        ->leftJoin('sub_kategori_spareparts', 'spareparts.kode_sub_kategori', '=', 'sub_kategori_spareparts.id')
+        ->where('spareparts.kode_owner', '=', $this->getThisUser()->id_upline);
+
+    foreach ($keywords as $keyword) {
+        $query->where(function ($q) use ($keyword) {
+            // Menambahkan nama tabel untuk menghindari error kolom ambigu
+            $q->where(DB::raw('LOWER(spareparts.nama_sparepart)'), 'LIKE', '%' . $keyword . '%')
+                ->orWhere(DB::raw('LOWER(spareparts.kode_sparepart)'), 'LIKE', '%' . $keyword . '%');
+        });
+    }
+
+    $spareparts = $query->select([
+        // Pilih kolom yang dibutuhkan dari semua tabel
+        'spareparts.id',
+        'spareparts.kode_sparepart',
+        'spareparts.nama_sparepart',
+        'spareparts.harga_beli',
+        'spareparts.harga_jual',
+        'spareparts.harga_ecer',
+        'spareparts.harga_pasang',
+        'spareparts.stok_sparepart',
+        'spareparts.kode_kategori',
+        'spareparts.kode_sub_kategori',
+        'kategori_spareparts.nama_kategori', // Ambil nama kategori
+        'sub_kategori_spareparts.nama_sub_kategori' // Ambil nama subkategori
+    ])->take(10)->get(); // Tambahkan take() untuk membatasi hasil
+
+    // Map hasil agar konsisten dengan yang diharapkan oleh frontend
+    // Ini juga akan memastikan frontend menerima 'harga_khusus'
+    return $spareparts->map(function ($item) {
+        return [
+            'id' => $item->id,
+            'nama_sparepart' => $item->nama_sparepart,
+            'stok_sparepart' => $item->stok_sparepart,
+            'harga_beli' => $item->harga_beli,
+            'harga_jual' => $item->harga_jual,
+            'harga_ecer' => $item->harga_ecer,
+            'harga_pasang' => $item->harga_pasang,
+            'kode_kategori' => $item->kode_kategori,
+            'kode_sub_kategori' => $item->kode_sub_kategori,
+            'nama_kategori' => $item->nama_kategori,
+            'nama_sub_kategori' => $item->nama_sub_kategori,
+            'harga_khusus' => [], // Placeholder, karena query ini tidak join ke harga khusus
+        ];
+    });
+}
 
     /**
      * Display the specified resource.

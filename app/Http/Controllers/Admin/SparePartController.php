@@ -10,6 +10,7 @@ use App\Models\RestokSparepart;
 use App\Models\ReturSparepart;
 use App\Models\Sparepart;
 use App\Models\Hutang;
+use App\Models\HargaKhusus;
 use App\Models\SparepartRusak;
 use App\Models\Supplier;
 use App\Models\Order;
@@ -242,7 +243,19 @@ class SparePartController extends Controller
                 'harga_pasang' => $request->harga_pasang,
                 'kode_owner' => $this->getThisUser()->id_upline
             ]);
+
             if ($create) {
+                // Create Harga Khusus if provided
+                if ($request->filled('harga_khusus_toko') || $request->filled('harga_khusus_satuan') || $request->filled('diskon_nilai')) {
+                    HargaKhusus::create([
+                        'id_sp' => $create->id,
+                        'harga_toko' => $request->harga_khusus_toko,
+                        'harga_satuan' => $request->harga_khusus_satuan,
+                        'diskon_tipe' => $request->diskon_tipe,
+                        'diskon_nilai' => $request->diskon_nilai,
+                    ]);
+                }
+
                 return redirect()->route('sparepart')
                     ->with([
                         'success' => 'Sparepart Berhasil Ditambahkan'
@@ -286,7 +299,7 @@ class SparePartController extends Controller
     {
         $page = "Edit Sparepart";
         $kategori = KategoriSparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
-        $data = Sparepart::findOrFail($id);
+        $data = Sparepart::with('hargaKhusus')->findOrFail($id);
 
         // Get subcategories for the selected category
         $sub_kategori = SubKategoriSparepart::where('kategori_id', $data->kode_kategori)
@@ -332,6 +345,25 @@ class SparePartController extends Controller
                 'harga_pasang' => $request->harga_pasang,
             ]);
             if ($update) {
+                // Update or create harga khusus
+                if ($request->filled('harga_khusus_toko') || $request->filled('harga_khusus_satuan') || $request->filled('diskon_nilai')) {
+                    HargaKhusus::updateOrCreate(
+                        ['id_sp' => $update->id],
+                        [
+                            'harga_toko' => $request->harga_khusus_toko,
+                            'harga_satuan' => $request->harga_khusus_satuan,
+                            'diskon_tipe' => $request->diskon_tipe,
+                            'diskon_nilai' => $request->diskon_nilai,
+                        ]
+                    );
+                } else {
+                    // If all fields are empty, delete the existing record
+                    $hargaKhusus = HargaKhusus::where('id_sp', $update->id)->first();
+                    if ($hargaKhusus) {
+                        $hargaKhusus->delete();
+                    }
+                }
+
                 return redirect()->route('sparepart')
                     ->with([
                         'success' => 'Sparepart Berhasil DiUpdate'
