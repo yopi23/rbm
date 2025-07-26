@@ -182,10 +182,10 @@
                                                     <label>Harga Khusus Toko (Internal)</label>
                                                     <input type="text" name="harga_khusus_toko"
                                                         value="{{ isset($data) && $data->hargaKhusus->first() ? $data->hargaKhusus->first()->harga_toko : '0' }}"
-                                                        id="harga_khusus_toko" class="form-control" hidden>
-                                                    <input type="text" name="in_harga_khusus_toko"
+                                                        id="harga_khusus_toko" class="form-control">
+                                                    {{-- <input type="text" name="in_harga_khusus_toko"
                                                         placeholder="Harga Khusus Toko" id="in_harga_khusus_toko"
-                                                        class="form-control">
+                                                        class="form-control"> --}}
                                                 </div>
                                             </div>
                                             <div class="col-md-6">
@@ -193,10 +193,10 @@
                                                     <label>Harga Khusus Satuan (Jual)</label>
                                                     <input type="text" name="harga_khusus_satuan"
                                                         value="{{ isset($data) && $data->hargaKhusus->first() ? $data->hargaKhusus->first()->harga_satuan : '0' }}"
-                                                        id="harga_khusus_satuan" class="form-control" hidden>
-                                                    <input type="text" name="in_harga_khusus_satuan"
+                                                        id="harga_khusus_satuan" class="form-control">
+                                                    {{-- <input type="text" name="in_harga_khusus_satuan"
                                                         placeholder="Harga Khusus Satuan" id="in_harga_khusus_satuan"
-                                                        class="form-control">
+                                                        class="form-control"> --}}
                                                 </div>
                                             </div>
                                         </div>
