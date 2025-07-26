@@ -12,6 +12,7 @@ use App\Models\DetailCatatanService;
 use App\Models\Garansi;
 use App\Models\SalarySetting;
 use App\Models\ProfitPresentase;
+use App\Models\HargaKhusus;
 use App\Models\User; // Ensure User model is imported for teknisi name
 use App\Models\UserDetail; // Ensure UserDetail model is imported for teknisi saldo/details
 use App\Services\WhatsAppService;
@@ -63,48 +64,61 @@ class SparepartApiController extends Controller
 
         // Cek apakah input dimulai dengan "part"
         if (str_starts_with($command, 'part')) {
-            // Tangkap kata kunci setelah "part"
             $pattern = '/^part[\s,:-]*(.+)$/';
             if (preg_match($pattern, $command, $matches)) {
                 $searchQuery = trim($matches[1]);
-
-                // Pisahkan input menjadi kata-kata berdasarkan spasi
                 $keywords = array_filter(explode(' ', strtolower($searchQuery)));
 
-                // Buat query pencarian menggunakan DB builder seperti function search
+                // Query dengan LEFT JOIN harga_khususes
                 $queryBuilder = DB::table('spareparts')
-                    ->where('kode_owner', '=', $this->getThisUser()->id_upline);
+                    ->leftJoin('harga_khususes', 'spareparts.id', '=', 'harga_khususes.id_sp')
+                    ->where('spareparts.kode_owner', '=', $this->getThisUser()->id_upline);
 
-                // Gunakan subquery untuk setiap keyword
+                // Filtering berdasarkan kata kunci
                 foreach ($keywords as $keyword) {
                     $queryBuilder->where(function ($q) use ($keyword) {
-                        $q->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', '%' . $keyword . '%');
+                        $q->where(DB::raw('LOWER(spareparts.nama_sparepart)'), 'LIKE', '%' . $keyword . '%');
                     });
                 }
 
-                // Eksekusi query dengan select fields yang diperlukan
+                // Select kolom yang diperlukan
                 $results = $queryBuilder->select([
-                    'id',
-                    'kode_sparepart',
-                    'nama_sparepart',
-                    'kode_kategori',
-                    'kode_sub_kategori',
-                    'harga_beli',
-                    'harga_jual',
-                    'harga_ecer',
-                    'harga_pasang',
-                    'stok_sparepart',
-                    'created_at',
-                    'updated_at'
+                    'spareparts.id',
+                    'spareparts.kode_sparepart',
+                    'spareparts.nama_sparepart',
+                    'spareparts.kode_kategori',
+                    'spareparts.kode_sub_kategori',
+                    'spareparts.harga_beli',
+                    'spareparts.harga_jual',
+                    'spareparts.harga_ecer',
+                    'spareparts.harga_pasang',
+                    'spareparts.stok_sparepart',
+                    'harga_khususes.harga_toko as harga_khusus_toko',
+                    'harga_khususes.harga_satuan as harga_khusus_satuan',
+                    'harga_khususes.diskon_tipe',
+                    'harga_khususes.diskon_nilai',
+                    'spareparts.created_at',
+                    'spareparts.updated_at'
                 ])->get();
 
-                // Enhance data dengan category dan subcategory names
-                $enhancedResults = $results->map(function($item) {
+                // Format data JSON
+                $enhancedResults = $results->map(function ($item) {
                     $category = KategoriSparepart::find($item->kode_kategori);
                     $subcategory = SubKategoriSparepart::find($item->kode_sub_kategori);
 
                     $item->kategori_nama = $category ? $category->nama_kategori : null;
                     $item->sub_kategori_nama = $subcategory ? $subcategory->nama_sub_kategori : null;
+
+                    // Format harga_khusus sebagai sub-objek
+                    $item->harga_khusus = $item->harga_khusus_toko || $item->harga_khusus_satuan || $item->diskon_nilai ? [
+                        'harga_toko' => $item->harga_khusus_toko,
+                        'harga_satuan' => $item->harga_khusus_satuan,
+                        'diskon_tipe' => $item->diskon_tipe,
+                        'diskon_nilai' => $item->diskon_nilai
+                    ] : null;
+
+                    // Hapus kolom harga_khusus_* agar tidak duplikat
+                    unset($item->harga_khusus_toko, $item->harga_khusus_satuan, $item->diskon_tipe, $item->diskon_nilai);
 
                     return $item;
                 });
@@ -122,6 +136,7 @@ class SparepartApiController extends Controller
                 ]);
             }
         }
+
 
             // Cek apakah input dimulai dengan "wa"
             if (str_starts_with($command, 'wa')) {
@@ -304,7 +319,7 @@ class SparepartApiController extends Controller
                         'detail_part_id' => $item->detail_part_id,
                         'qty_part' => $item->qty_part,
                         // Ensure 'harga_jual' is prioritized from the spareparts table for display consistency
-                        'harga_jual' => $item->harga_jual ?? $item->detail_harga_part_service,
+                        'harga_jual' =>  $item->detail_harga_part_service ?? $item->harga_jual,
                         'nama_sparepart' => $item->nama_sparepart ?? 'Unknown Part',
                         'kode_sparepart' => $item->kode_sparepart ?? 'Unknown Code',
                         'stok_sparepart' => $item->stok_sparepart, // Pass through stock for UI
@@ -1128,113 +1143,134 @@ class SparepartApiController extends Controller
 
     // Generic function to add/update store parts (for uncompleted or initial assignment)
     public function storeSparepartToko(Request $request) // Original name retained for generic use
-    {
-        try {
-            $validator = Validator::make($request->all(), [
-                'kode_services' => 'required',
-                'kode_sparepart' => 'required',
-                'qty_part' => 'required|integer|min:1'
-            ]);
+{
+    try {
+        $validator = Validator::make($request->all(), [
+            'kode_services' => 'required',
+            'kode_sparepart' => 'required',
+            'qty_part' => 'required|integer|min:1'
+        ]);
 
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validation error',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
-            $sparepart = Sparepart::find($request->kode_sparepart);
-            if (!$sparepart) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Sparepart not found'
-                ], 404);
-            }
-
-            DB::beginTransaction();
-            try {
-                $cek = DetailPartServices::where([
-                    ['kode_services', '=', $request->kode_services],
-                    ['kode_sparepart', '=', $request->kode_sparepart]
-                ])->first();
-
-                $currentStockInDb = (int) $sparepart->stok_sparepart;
-
-                if ($cek) {
-                    $oldQtyForService = (int) $cek->qty_part;
-                    $newTotalQtyForService = $oldQtyForService + $request->qty_part;
-                    $projectedNewOverallStock = $currentStockInDb - $request->qty_part; // Only deduct the *newly added* quantity
-
-                    if ($projectedNewOverallStock < 0) {
-                         DB::rollBack();
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Gagal ditambahkan karna Stock: ' . $currentStockInDb
-                        ], 400);
-                    }
-
-                    $cek->update([
-                        'qty_part' => $newTotalQtyForService,
-                        'user_input' => auth()->user()->id,
-                    ]);
-                    $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
-
-                } else {
-                    $projectedNewOverallStock = $currentStockInDb - $request->qty_part;
-
-                    if ($projectedNewOverallStock < 0) {
-                        DB::rollBack();
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Stock tidak Cukup: ' . $currentStockInDb
-                        ], 400);
-                    }
-
-                    DetailPartServices::create([
-                        'kode_services' => $request->kode_services,
-                        'kode_sparepart' => $request->kode_sparepart,
-                        'detail_modal_part_service' => $sparepart->harga_beli,
-                        'detail_harga_part_service' => $sparepart->harga_jual,
-                        'qty_part' => $request->qty_part,
-                        'user_input' => auth()->user()->id,
-                    ]);
-                    $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
-                }
-
-                // IMPORTANT: This generic storeSparepartToko DOES NOT trigger recalculation here.
-                // Recalculation is triggered when service status changes to 'Selesai' or through explicit 'recalculateCommission' endpoint.
-                // Or via the addPartTokoToCompletedService method for already completed services.
-
-                DB::commit();
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Sparepart transaction successful',
-                    'data' => [
-                        'kode_services' => $request->kode_services,
-                        'kode_sparepart' => $request->kode_sparepart,
-                        'qty' => $request->qty_part,
-                        'remaining_stock' => $sparepart->stok_sparepart // Use the updated stock
-                    ]
-                ], 200);
-            } catch (\Exception $e) {
-                DB::rollBack();
-                Log::error("Store Sparepart Toko Error: " . $e->getMessage());
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Transaction failed: ' . $e->getMessage(),
-                    'error' => $e->getMessage()
-                ], 500);
-            }
-        } catch (\Exception $e) {
+        if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Server error: ' . $e->getMessage(),
+                'message' => 'Validation error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $sparepart = Sparepart::find($request->kode_sparepart);
+        if (!$sparepart) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Sparepart not found'
+            ], 404);
+        }
+
+        DB::beginTransaction();
+        try {
+            $cek = DetailPartServices::where([
+                ['kode_services', '=', $request->kode_services],
+                ['kode_sparepart', '=', $request->kode_sparepart]
+            ])->first();
+
+            $currentStockInDb = (int) $sparepart->stok_sparepart;
+
+            // ============================================================
+            // NEW: Cek apakah ada harga khusus untuk sparepart ini
+            // ============================================================
+            $hargaKhusus = DB::table('harga_khususes')
+                ->where('id_sp', $request->kode_sparepart)
+                ->first();
+
+            // Tentukan harga yang akan digunakan
+            $hargaPartService = $sparepart->harga_jual; // Default harga normal
+
+            if ($hargaKhusus) {
+                // Jika ada harga khusus, gunakan harga_toko sebagai harga jual
+                $hargaPartService = $hargaKhusus->harga_toko;
+            }
+            // ============================================================
+
+            if ($cek) {
+                $oldQtyForService = (int) $cek->qty_part;
+                $newTotalQtyForService = $oldQtyForService + $request->qty_part;
+                $projectedNewOverallStock = $currentStockInDb - $request->qty_part; // Only deduct the *newly added* quantity
+
+                if ($projectedNewOverallStock < 0) {
+                     DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Gagal ditambahkan karna Stock: ' . $currentStockInDb
+                    ], 400);
+                }
+
+                // UPDATE: Gunakan harga yang sudah ditentukan (normal atau khusus)
+                $cek->update([
+                    'qty_part' => $newTotalQtyForService,
+                    'detail_harga_part_service' => $hargaPartService, // Update harga juga
+                    'user_input' => auth()->user()->id,
+                ]);
+                $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
+
+            } else {
+                $projectedNewOverallStock = $currentStockInDb - $request->qty_part;
+
+                if ($projectedNewOverallStock < 0) {
+                    DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Stock tidak Cukup: ' . $currentStockInDb
+                    ], 400);
+                }
+
+                // CREATE: Gunakan harga yang sudah ditentukan (normal atau khusus)
+                DetailPartServices::create([
+                    'kode_services' => $request->kode_services,
+                    'kode_sparepart' => $request->kode_sparepart,
+                    'detail_modal_part_service' => $sparepart->harga_beli,
+                    'detail_harga_part_service' => $hargaPartService, // Gunakan harga khusus jika ada
+                    'qty_part' => $request->qty_part,
+                    'user_input' => auth()->user()->id,
+                ]);
+                $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
+            }
+
+            // IMPORTANT: This generic storeSparepartToko DOES NOT trigger recalculation here.
+            // Recalculation is triggered when service status changes to 'Selesai' or through explicit 'recalculateCommission' endpoint.
+            // Or via the addPartTokoToCompletedService method for already completed services.
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Sparepart transaction successful',
+                'data' => [
+                    'kode_services' => $request->kode_services,
+                    'kode_sparepart' => $request->kode_sparepart,
+                    'qty' => $request->qty_part,
+                    'remaining_stock' => $sparepart->stok_sparepart, // Use the updated stock
+                    'harga_used' => $hargaPartService, // Info harga yang digunakan
+                    'is_harga_khusus' => $hargaKhusus ? true : false // Info apakah menggunakan harga khusus
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Store Sparepart Toko Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Transaction failed: ' . $e->getMessage(),
                 'error' => $e->getMessage()
             ], 500);
         }
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Server error: ' . $e->getMessage(),
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
 
 
     // Generic function to delete store parts (for uncompleted or general use)

@@ -329,7 +329,7 @@ class PenaltyRulesController extends Controller
     public function seed()
     {
         try {
-            $ownerCode=$this->getThisUser()->id_upline;
+            $ownerCode = $this->getThisUser()->id_upline;
             if (!$ownerCode) {
                 return response()->json([
                     'success' => false,
@@ -340,9 +340,39 @@ class PenaltyRulesController extends Controller
             DB::beginTransaction();
 
             $defaultRules = PenaltyRule::getDefaultRules($ownerCode);
+
+            // Tambahkan default rules untuk alpha/absence
+            $alphaRules = [
+                [
+                    'kode_owner' => $ownerCode,
+                    'rule_type' => 'absence',
+                    'compensation_type' => 'fixed',
+                    'min_minutes' => 0,
+                    'max_minutes' => null,
+                    'penalty_amount' => 50000,
+                    'penalty_percentage' => 0,
+                    'description' => 'Alpha/Tidak masuk kerja - Gaji Tetap (Rp 50.000)',
+                    'priority' => 1,
+                    'created_by' => auth()->id()
+                ],
+                [
+                    'kode_owner' => $ownerCode,
+                    'rule_type' => 'absence',
+                    'compensation_type' => 'percentage',
+                    'min_minutes' => 0,
+                    'max_minutes' => null,
+                    'penalty_amount' => 0,
+                    'penalty_percentage' => 10,
+                    'description' => 'Alpha/Tidak masuk kerja - Sistem Persentase (10%)',
+                    'priority' => 1,
+                    'created_by' => auth()->id()
+                ]
+            ];
+
+            $allRules = array_merge($defaultRules, $alphaRules);
             $createdCount = 0;
 
-            foreach ($defaultRules as $ruleData) {
+            foreach ($allRules as $ruleData) {
                 // Check if similar rule already exists for this owner
                 $exists = PenaltyRule::forOwner($ownerCode)
                     ->where('rule_type', $ruleData['rule_type'])
@@ -354,8 +384,7 @@ class PenaltyRulesController extends Controller
                 if (!$exists) {
                     PenaltyRule::create(array_merge($ruleData, [
                         'is_active' => true,
-                        'metadata' => null,
-                        'created_by' => auth()->id()
+                        'metadata' => null
                     ]));
                     $createdCount++;
                 }
@@ -363,7 +392,7 @@ class PenaltyRulesController extends Controller
 
             DB::commit();
 
-            Log::info('Default penalty rules seeded', [
+            Log::info('Default penalty rules seeded including alpha rules', [
                 'owner_code' => $ownerCode,
                 'created_count' => $createdCount,
                 'seeded_by' => auth()->id()
@@ -371,7 +400,7 @@ class PenaltyRulesController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => "Berhasil menambahkan {$createdCount} aturan default",
+                'message' => "Berhasil menambahkan {$createdCount} aturan default (termasuk aturan alpha)",
                 'created_count' => $createdCount
             ]);
 
@@ -385,6 +414,7 @@ class PenaltyRulesController extends Controller
             ], 500);
         }
     }
+
 
     /**
      * Check for overlapping rules within owner scope
@@ -553,6 +583,117 @@ class PenaltyRulesController extends Controller
         } catch (\Exception $e) {
             Log::error('Error exporting penalty rules: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Gagal export data');
+        }
+    }
+
+    public static function getApplicablePenaltyForAbsence($compensationType, $ownerCode)
+    {
+        try {
+            Log::info('=== GET APPLICABLE PENALTY FOR ABSENCE START ===', [
+                'compensation_type' => $compensationType,
+                'owner_code' => $ownerCode
+            ]);
+
+            if (!$ownerCode) {
+                \Log::warning('No owner code available for absence penalty calculation');
+
+                // Return default penalty instead of failing - SELALU BERIKAN PENALTY UNTUK ALPHA
+                return [
+                    'success' => true, // Changed to true untuk memberikan default penalty
+                    'penalty_amount' => 50000, // Default Rp 50.000 untuk alpha
+                    'penalty_percentage' => 15, // Default 15%
+                    'should_create_violation' => true, // SELALU buat violation untuk alpha
+                    'penalty_description' => 'Alpha (tidak hadir tanpa keterangan) - Default penalty (no owner)',
+                    'rule_id' => null,
+                    'owner_code' => null
+                ];
+            }
+
+            // Cari rule untuk absence/alpha dengan compensation type yang spesifik
+            $rule = \App\Models\PenaltyRule::where('rule_type', 'absence')
+                ->where('compensation_type', $compensationType)
+                ->where('is_active', true)
+                ->where('kode_owner', $ownerCode) // Gunakan where langsung karena forOwner mungkin belum ada
+                ->orderBy('priority', 'asc')
+                ->first();
+
+            // Jika tidak ada, cari rule 'both'
+            if (!$rule) {
+                $rule = \App\Models\PenaltyRule::where('rule_type', 'absence')
+                    ->where('compensation_type', 'both')
+                    ->where('is_active', true)
+                    ->where('kode_owner', $ownerCode)
+                    ->orderBy('priority', 'asc')
+                    ->first();
+            }
+
+            if ($rule) {
+                \Log::info('Alpha penalty rule found from database', [
+                    'rule_id' => $rule->id,
+                    'compensation_type' => $compensationType,
+                    'penalty_amount' => $rule->penalty_amount,
+                    'penalty_percentage' => $rule->penalty_percentage,
+                    'description' => $rule->description,
+                    'owner_code' => $ownerCode
+                ]);
+
+                return [
+                    'success' => true,
+                    'penalty_amount' => $rule->penalty_amount,
+                    'penalty_percentage' => $rule->penalty_percentage,
+                    'should_create_violation' => true, // Alpha selalu buat violation
+                    'penalty_description' => $rule->description,
+                    'rule_id' => $rule->id,
+                    'owner_code' => $ownerCode
+                ];
+            } else {
+                \Log::info('No specific alpha rule found, using default penalty', [
+                    'compensation_type' => $compensationType,
+                    'owner_code' => $ownerCode
+                ]);
+
+                // ALWAYS return default penalty untuk alpha - tidak seperti late yang bisa skip
+                if ($compensationType === 'fixed') {
+                    return [
+                        'success' => true,
+                        'penalty_amount' => 0, // Akan dihitung sebagai gaji harian
+                        'penalty_percentage' => 100, // 100% dari gaji harian
+                        'should_create_violation' => true,
+                        'penalty_description' => 'Alpha (tidak hadir tanpa keterangan) - Potong gaji harian (default)',
+                        'rule_id' => null,
+                        'owner_code' => $ownerCode
+                    ];
+                } else {
+                    return [
+                        'success' => true,
+                        'penalty_amount' => 0,
+                        'penalty_percentage' => 15, // Default 15% penalty untuk alpha
+                        'should_create_violation' => true,
+                        'penalty_description' => 'Alpha (tidak hadir tanpa keterangan) - Penalty 15% (default)',
+                        'rule_id' => null,
+                        'owner_code' => $ownerCode
+                    ];
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::error('Error getting applicable penalty for absence: ' . $e->getMessage(), [
+                'compensation_type' => $compensationType,
+                'owner_code' => $ownerCode,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            // Even on error, return default penalty untuk alpha - jangan fail
+            return [
+                'success' => true, // Changed to true
+                'penalty_amount' => 50000, // Default amount
+                'penalty_percentage' => 15, // Default percentage
+                'should_create_violation' => true, // SELALU buat violation untuk alpha
+                'penalty_description' => 'Alpha (tidak hadir tanpa keterangan) - Emergency default penalty',
+                'rule_id' => null,
+                'owner_code' => $ownerCode,
+                'error_occurred' => true,
+                'error_message' => $e->getMessage()
+            ];
         }
     }
 }

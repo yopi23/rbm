@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Penjualan;
 use App\Models\Sparepart;
+use App\Models\HargaKhusus;
 use App\Models\DetailSparepartPenjualan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -229,33 +230,39 @@ private function buildAllKeywordsMatch($keywords)
         // Tentukan apakah pencarian bisa menggunakan cache
         $shouldCache = strlen($searchInput) < 10 && !preg_match('/\d/', $searchInput) && !$categoryId && !$subcategoryId;
 
-        // Gunakan cache jika aman
         $cacheKey = 'search_detail_' . md5(json_encode($request->all()) . '_' . $userId);
+
         $searchFunction = function () use ($searchInput, $categoryId, $subcategoryId, $limit, $offset, $userId) {
-            // Bersihkan input dan pisahkan keyword
             $cleanInput = preg_replace('/[^\w\s\/-]/', '', $searchInput);
             $keywords = array_filter(array_map('trim', explode(' ', strtolower($cleanInput))));
             $exactMatch = strtolower($cleanInput);
 
-            $query = DB::table('spareparts')->where('kode_owner', $userId);
+            // Query utama
+           $query = DB::table('spareparts')
+            ->leftJoin('harga_khususes', function ($join) {
+                // Cukup join berdasarkan ID sparepart
+                $join->on('spareparts.id', '=', 'harga_khususes.id_sp');
+            })
+            // Filter utama untuk data milik user sudah ada di sini, dan ini sudah cukup
+            ->where('spareparts.kode_owner', $userId);
 
             if ($categoryId) {
-                $query->where('kode_kategori', $categoryId);
+                $query->where('spareparts.kode_kategori', $categoryId);
             }
 
             if ($subcategoryId) {
-                $query->where('kode_sub_kategori', $subcategoryId);
+                $query->where('spareparts.kode_sub_kategori', $subcategoryId);
             }
 
             $query->where(function ($q) use ($keywords, $exactMatch) {
-                $q->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', "%{$exactMatch}%")
-                  ->orWhere(DB::raw('LOWER(kode_sparepart)'), 'LIKE', "%{$exactMatch}%");
+                $q->where(DB::raw('LOWER(spareparts.nama_sparepart)'), 'LIKE', "%{$exactMatch}%")
+                  ->orWhere(DB::raw('LOWER(spareparts.kode_sparepart)'), 'LIKE', "%{$exactMatch}%");
 
                 if (count($keywords) > 1) {
                     $q->orWhere(function ($subQ) use ($keywords) {
                         foreach ($keywords as $keyword) {
                             if (strlen($keyword) > 2) {
-                                $subQ->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', "%{$keyword}%");
+                                $subQ->where(DB::raw('LOWER(spareparts.nama_sparepart)'), 'LIKE', "%{$keyword}%");
                             }
                         }
                     });
@@ -265,36 +272,63 @@ private function buildAllKeywordsMatch($keywords)
             $totalCount = $query->count();
 
             $data = $query->select([
-                'id',
-                'kode_sparepart',
-                'nama_sparepart',
-                'kode_kategori',
-                'kode_sub_kategori',
-                'harga_beli',
-                'harga_jual',
-                'harga_ecer',
-                'harga_pasang',
-                'stok_sparepart',
-                'created_at',
-                'updated_at'
+                'spareparts.id',
+                'spareparts.kode_sparepart',
+                'spareparts.nama_sparepart',
+                'spareparts.kode_kategori',
+                'spareparts.kode_sub_kategori',
+                'spareparts.harga_beli',
+                'spareparts.harga_jual',
+                'spareparts.harga_ecer',
+                'spareparts.harga_pasang',
+                'spareparts.stok_sparepart',
+                'spareparts.created_at',
+                'spareparts.updated_at',
+                'harga_khususes.harga_toko',
+                'harga_khususes.harga_satuan'
             ])
             ->orderByRaw("
                 CASE
-                    WHEN LOWER(nama_sparepart) LIKE '{$exactMatch}%' THEN 1
-                    WHEN LOWER(kode_sparepart) LIKE '{$exactMatch}%' THEN 2
-                    WHEN LOWER(nama_sparepart) LIKE '%{$exactMatch}%' THEN 3
+                    WHEN LOWER(spareparts.nama_sparepart) LIKE '{$exactMatch}%' THEN 1
+                    WHEN LOWER(spareparts.kode_sparepart) LIKE '{$exactMatch}%' THEN 2
+                    WHEN LOWER(spareparts.nama_sparepart) LIKE '%{$exactMatch}%' THEN 3
                     ELSE 4
-                END, nama_sparepart ASC
+                END, spareparts.nama_sparepart ASC
             ")
             ->offset($offset)
             ->limit($limit)
             ->get();
 
-            $enhancedData = $data->map(function($item) {
+            $enhancedData = $data->map(function ($item) {
+                // Menambahkan properti baru dari data yang sudah ada
                 $item->kategori_nama = optional(KategoriSparepart::find($item->kode_kategori))->nama_kategori;
                 $item->sub_kategori_nama = optional(SubKategoriSparepart::find($item->kode_sub_kategori))->nama_sub_kategori;
                 $item->stock_status = $item->stok_sparepart > 0 ? 'available' : 'out_of_stock';
                 $item->low_stock = $item->stok_sparepart > 0 && $item->stok_sparepart <= 5;
+
+                // 1. Buat object harga_khusus jika datanya ada
+                if (!is_null($item->harga_toko) || !is_null($item->harga_satuan)) {
+                    $item->harga_khusus = (object)[
+                        'harga_toko' => $item->harga_toko,
+                        'harga_satuan' => $item->harga_satuan,
+                    ];
+
+                    // 2. Timpa harga_jual / harga_pasang dari object baru
+                    if (!is_null($item->harga_khusus->harga_toko)) {
+                        $item->harga_jual = $item->harga_khusus->harga_toko;
+                    }
+                    if (!is_null($item->harga_khusus->harga_satuan)) {
+                        $item->harga_pasang = $item->harga_khusus->harga_satuan;
+                    }
+
+                } else {
+                    $item->harga_khusus = null;
+                }
+
+                // 3. Hapus properti lama dari level atas untuk kebersihan data
+                unset($item->harga_toko);
+                unset($item->harga_satuan);
+
                 return $item;
             });
 
@@ -317,7 +351,7 @@ private function buildAllKeywordsMatch($keywords)
         };
 
         return $shouldCache
-            ? Cache::remember($cacheKey, 900, $searchFunction)
+            ? Cache::remember($cacheKey, 900, $searchFunction) // Cache selama 15 menit
             : $searchFunction();
 
     } catch (\Exception $e) {

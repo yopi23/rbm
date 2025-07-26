@@ -44,6 +44,12 @@ class Sparepart extends Model
         return $this->hasMany(StockNotification::class);
     }
 
+    // Relasi dengan harga khusus
+    public function hargaKhusus()
+    {
+        return $this->hasMany(HargaKhusus::class, 'id_sp');
+    }
+
     /**
      * Method untuk mencatat perubahan stok
      */

@@ -38,6 +38,11 @@
                         <i class="fas fa-sign-out-alt"></i> Izin Keluar Kantor
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="absence-tab" data-toggle="tab" href="#absence" role="tab">
+                        <i class="fas fa-user-times"></i> Alpha/Tidak Masuk
+                    </a>
+                </li>
             </ul>
 
             <div class="tab-content mt-3" id="ruleTypeTabsContent">
@@ -104,10 +109,61 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- Tab Absence/Alpha Rules -->
+                <div class="tab-pane fade" id="absence" role="tabpanel">
+                    <h5 class="text-danger">Aturan Alpha/Tidak Masuk Kerja</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-info">Aturan untuk Gaji Tetap</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th>Penalty</th>
+                                            <th>Status</th>
+                                            <th>Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="absence-fixed-rules-tbody">
+                                        <!-- Will be populated by JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <h6 class="text-success">Aturan untuk Sistem Persentase</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th>Penalty</th>
+                                            <th>Status</th>
+                                            <th>Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="absence-percentage-rules-tbody">
+                                        <!-- Will be populated by JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info mt-3">
+                        <h6><i class="fas fa-info-circle"></i> Catatan Aturan Alpha:</h6>
+                        <ul class="mb-0 small">
+                            <li><strong>Gaji Tetap:</strong> Penalty biasanya berupa potong gaji harian (100% dari gaji
+                                harian)</li>
+                            <li><strong>Sistem Persentase:</strong> Penalty berupa persentase dari komisi bulanan</li>
+                            <li>Aturan alpha akan diterapkan otomatis oleh sistem cron job setiap hari</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
-</div>
 </div>
 
 <!-- Modal Add/Edit Rule -->
@@ -132,6 +188,7 @@
                                 <select name="rule_type" id="rule_type" class="form-control" required>
                                     <option value="attendance_late">Keterlambatan Absensi</option>
                                     <option value="outside_office_late">Terlambat Kembali Izin Keluar</option>
+                                    <option value="absence">Alpha/Tidak Masuk Kerja</option>
                                 </select>
                             </div>
                         </div>
@@ -139,7 +196,8 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <label>Berlaku Untuk <span class="text-danger">*</span></label>
-                                <select name="compensation_type" id="compensation_type" class="form-control" required>
+                                <select name="compensation_type" id="compensation_type" class="form-control"
+                                    required>
                                     <option value="fixed">Gaji Tetap Saja</option>
                                     <option value="percentage">Sistem Persentase Saja</option>
                                     <option value="both">Keduanya</option>
@@ -148,13 +206,15 @@
                         </div>
                     </div>
 
-                    <div class="row">
+                    <div class="row time-range-row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>Waktu Minimum (menit) <span class="text-danger">*</span></label>
+                                <label>Waktu Minimum (menit) <span class="text-danger"
+                                        id="min-minutes-required">*</span></label>
                                 <input type="number" name="min_minutes" id="min_minutes" class="form-control"
                                     required min="0">
-                                <small class="text-muted">Contoh: 6 (untuk 6 menit ke atas)</small>
+                                <small class="text-muted" id="min-minutes-help">Contoh: 6 (untuk 6 menit ke
+                                    atas)</small>
                             </div>
                         </div>
 
@@ -163,7 +223,8 @@
                                 <label>Waktu Maksimum (menit)</label>
                                 <input type="number" name="max_minutes" id="max_minutes" class="form-control"
                                     min="1">
-                                <small class="text-muted">Kosongkan jika tidak ada batas maksimal</small>
+                                <small class="text-muted" id="max-minutes-help">Kosongkan jika tidak ada batas
+                                    maksimal</small>
                             </div>
                         </div>
                     </div>
@@ -222,6 +283,8 @@
                             </li>
                             <li>Untuk sistem persentase: isi <strong>Penalty Persentase</strong>, kosongkan Penalty
                                 Nominal</li>
+                            <li>Untuk aturan alpha: biasanya 100% gaji harian (gaji tetap) atau 15% komisi (persentase)
+                            </li>
                             <li>Pastikan tidak ada overlap rentang waktu untuk jenis aturan yang sama</li>
                             <li>Prioritas menentukan urutan evaluasi aturan</li>
                         </ul>
@@ -240,22 +303,6 @@
 </div>
 
 <script>
-    $(document).ready(function() {
-        loadRules();
-
-        // Form submission
-        $('#ruleForm').on('submit', function(e) {
-            e.preventDefault();
-            saveRule();
-        });
-
-        // Auto-generate description
-        $('#rule_type, #compensation_type, #min_minutes, #max_minutes, #penalty_amount, #penalty_percentage')
-            .on('change input', function() {
-                generateDescription();
-            });
-    });
-
     $(document).ready(function() {
         // Pastikan CSRF token tersedia
         const csrfToken = $('meta[name="csrf-token"]').attr('content');
@@ -284,6 +331,29 @@
                 generateDescription();
             });
 
+        // Handle rule type change for UI adjustments
+        $('#rule_type').on('change', function() {
+            const ruleType = $(this).val();
+            if (ruleType === 'absence') {
+                // Hide time fields for absence rules
+                $('#min_minutes, #max_minutes').prop('required', false);
+                $('#min_minutes').val('0');
+                $('#max_minutes').val('');
+                $('#min-minutes-required').hide();
+                $('#min-minutes-help').text('Tidak berlaku untuk aturan alpha');
+                $('#max-minutes-help').text('Tidak berlaku untuk aturan alpha');
+                $('.time-range-row').addClass('d-none');
+            } else {
+                // Show time fields for time-based rules
+                $('#min_minutes').prop('required', true);
+                $('#min-minutes-required').show();
+                $('#min-minutes-help').text('Contoh: 6 (untuk 6 menit ke atas)');
+                $('#max-minutes-help').text('Kosongkan jika tidak ada batas maksimal');
+                $('.time-range-row').removeClass('d-none');
+            }
+            generateDescription();
+        });
+
         // Reset form when modal closes
         $('#modalAddRule').on('hidden.bs.modal', function() {
             resetForm();
@@ -294,7 +364,7 @@
         $.get('{{ route('admin.penalty-rules.list') }}', function(data) {
             if (data.success) {
                 populateRulesTable(data.rules);
-                // TAMBAHAN: Show owner info
+                // Show owner info
                 if (data.owner_code) {
                     $('#owner-info').text('(Owner: ' + data.owner_code + ')');
                 }
@@ -312,19 +382,27 @@
 
     function populateRulesTable(rules) {
         // Clear existing data
-        $('#fixed-rules-tbody, #percentage-rules-tbody, #outside-rules-tbody').empty();
+        $('#fixed-rules-tbody, #percentage-rules-tbody, #outside-rules-tbody, #absence-fixed-rules-tbody, #absence-percentage-rules-tbody')
+            .empty();
 
         rules.forEach(function(rule) {
-            const row = createRuleRow(rule);
-
             if (rule.rule_type === 'attendance_late') {
+                const row = createRuleRow(rule);
                 if (rule.compensation_type === 'fixed') {
                     $('#fixed-rules-tbody').append(row);
                 } else if (rule.compensation_type === 'percentage') {
                     $('#percentage-rules-tbody').append(row);
                 }
             } else if (rule.rule_type === 'outside_office_late') {
+                const row = createRuleRow(rule);
                 $('#outside-rules-tbody').append(row);
+            } else if (rule.rule_type === 'absence') {
+                const row = createAbsenceRuleRow(rule);
+                if (rule.compensation_type === 'fixed') {
+                    $('#absence-fixed-rules-tbody').append(row);
+                } else if (rule.compensation_type === 'percentage') {
+                    $('#absence-percentage-rules-tbody').append(row);
+                }
             }
         });
     }
@@ -364,10 +442,42 @@
     `;
     }
 
+    function createAbsenceRuleRow(rule) {
+        const statusBadge = rule.is_active ?
+            '<span class="badge badge-success">Aktif</span>' :
+            '<span class="badge badge-secondary">Tidak Aktif</span>';
+
+        const penalty = rule.penalty_amount > 0 ?
+            'Rp ' + new Intl.NumberFormat('id-ID').format(rule.penalty_amount) :
+            rule.penalty_percentage + '%';
+
+        return `
+        <tr>
+            <td><strong>${penalty}</strong><br><small class="text-muted">${rule.description}</small></td>
+            <td>${statusBadge}</td>
+            <td>
+                <button class="btn btn-xs btn-warning" onclick="editRule(${rule.id})">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-xs btn-danger" onclick="deleteRule(${rule.id})">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `;
+    }
+
     function resetForm() {
         $('#ruleForm')[0].reset();
         $('#rule_id').val('');
         $('#modal-title').text('Tambah Aturan Penalty');
+
+        // Show time range fields by default
+        $('.time-range-row').removeClass('d-none');
+        $('#min_minutes').prop('required', true);
+        $('#min-minutes-required').show();
+        $('#min-minutes-help').text('Contoh: 6 (untuk 6 menit ke atas)');
+        $('#max-minutes-help').text('Kosongkan jika tidak ada batas maksimal');
 
         // Reset validation state
         $('#ruleForm').removeClass('was-validated');
@@ -375,7 +485,6 @@
         $('#ruleForm .invalid-feedback').remove();
     }
 
-    // ===== BAGIAN 4: Fungsi editRule yang diperbaiki =====
     function editRule(id) {
         $.get('{{ route('admin.penalty-rules.show', ':id') }}'.replace(':id', id), function(data) {
             if (data.success) {
@@ -392,6 +501,9 @@
                 $('#description').val(rule.description);
                 $('#priority').val(rule.priority);
                 $('#is_active').val(rule.is_active ? '1' : '0');
+
+                // Trigger rule type change to adjust UI
+                $('#rule_type').trigger('change');
 
                 $('#modalAddRule').modal('show');
             } else {
@@ -417,6 +529,9 @@
                     } else {
                         alert('Error: ' + data.message);
                     }
+                },
+                error: function(xhr) {
+                    alert('Gagal menghapus aturan: ' + (xhr.responseJSON?.message || 'Unknown error'));
                 }
             });
         }
@@ -435,15 +550,9 @@
         const isEdit = $('#rule_id').val() !== '';
         const ruleId = $('#rule_id').val();
 
-        // Debug form data sebelum dikirim
-        debugFormData();
-
         // Gunakan FormData untuk handling yang lebih baik
         const form = $('#ruleForm')[0];
         const formData = new FormData(form);
-
-        // Override nilai is_active untuk memastikan boolean
-        // formData.set('is_active', $('#is_active').val() === '1');
 
         // Set null values untuk field kosong
         if (!$('#max_minutes').val()) {
@@ -474,15 +583,6 @@
         const originalText = submitBtn.html();
         submitBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Menyimpan...');
 
-        // Log data yang akan dikirim untuk debugging
-        console.log('Sending FormData URL:', url);
-        console.log('Is Edit:', isEdit);
-
-        // Debug FormData content
-        for (let pair of formData.entries()) {
-            console.log(pair[0] + ': ' + pair[1] + ' (type: ' + typeof pair[1] + ')');
-        }
-
         $.ajax({
             url: url,
             method: 'POST',
@@ -494,8 +594,6 @@
                 'Accept': 'application/json'
             },
             success: function(response) {
-                console.log('Success response:', response);
-
                 if (response.success) {
                     // Tampilkan notifikasi sukses
                     if (typeof toastr !== 'undefined') {
@@ -519,13 +617,6 @@
                 }
             },
             error: function(xhr, status, error) {
-                console.error('AJAX Error Details:', {
-                    status: xhr.status,
-                    statusText: xhr.statusText,
-                    responseText: xhr.responseText,
-                    error: error
-                });
-
                 let errorMessage = 'Terjadi kesalahan saat menyimpan';
 
                 try {
@@ -578,16 +669,37 @@
     }
 
     function seedDefaultRules() {
-        if (confirm('Ini akan menambahkan aturan default. Lanjutkan?')) {
+        if (confirm('Ini akan menambahkan aturan default (termasuk aturan alpha). Lanjutkan?')) {
+            const btn = $('button[onclick="seedDefaultRules()"]');
+            const originalText = btn.html();
+            btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Loading...');
+
             $.post('{{ route('admin.penalty-rules.seed') }}', {
                 _token: '{{ csrf_token() }}'
             }, function(data) {
                 if (data.success) {
-                    alert('Default rules berhasil dimuat');
+                    if (typeof toastr !== 'undefined') {
+                        toastr.success(data.message);
+                    } else {
+                        alert(data.message);
+                    }
                     loadRules();
                 } else {
-                    alert('Error: ' + data.message);
+                    if (typeof toastr !== 'undefined') {
+                        toastr.error('Error: ' + data.message);
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
                 }
+            }).fail(function(xhr) {
+                const errorMsg = xhr.responseJSON?.message || 'Gagal memuat default rules';
+                if (typeof toastr !== 'undefined') {
+                    toastr.error(errorMsg);
+                } else {
+                    alert('Error: ' + errorMsg);
+                }
+            }).always(function() {
+                btn.prop('disabled', false).html(originalText);
             });
         }
     }
@@ -600,36 +712,56 @@
         const penaltyAmount = $('#penalty_amount').val();
         const penaltyPercentage = $('#penalty_percentage').val();
 
-        if (!minMinutes) return;
-
         let range = '';
-        if (maxMinutes) {
-            range = `${minMinutes}-${maxMinutes} menit`;
-        } else {
-            range = `>${minMinutes} menit`;
-        }
-
         let penaltyText = '';
-        if (penaltyAmount && penaltyAmount > 0) {
-            penaltyText = `Denda Rp ${new Intl.NumberFormat('id-ID').format(penaltyAmount)}`;
-        } else if (penaltyPercentage && penaltyPercentage > 0) {
-            penaltyText = `Penalty ${penaltyPercentage}%`;
-        }
-
         let typeText = '';
-        if (ruleType === 'attendance_late') {
-            typeText = 'Keterlambatan absensi';
-        } else if (ruleType === 'outside_office_late') {
-            typeText = 'Terlambat kembali dari izin keluar';
+
+        // Handle absence rules differently (no time ranges)
+        if (ruleType === 'absence') {
+            typeText = 'Alpha/Tidak masuk kerja';
+
+            if (penaltyAmount && penaltyAmount > 0) {
+                penaltyText = `Denda Rp ${new Intl.NumberFormat('id-ID').format(penaltyAmount)}`;
+            } else if (penaltyPercentage && penaltyPercentage > 0) {
+                if (compensationType === 'fixed' && penaltyPercentage == 100) {
+                    penaltyText = `Potong gaji harian`;
+                } else {
+                    penaltyText = `Penalty ${penaltyPercentage}%`;
+                }
+            }
+        } else {
+            // Handle time-based rules
+            if (!minMinutes && minMinutes !== '0') return;
+
+            if (maxMinutes) {
+                range = `${minMinutes}-${maxMinutes} menit`;
+            } else {
+                range = `>${minMinutes} menit`;
+            }
+
+            if (penaltyAmount && penaltyAmount > 0) {
+                penaltyText = `Denda Rp ${new Intl.NumberFormat('id-ID').format(penaltyAmount)}`;
+            } else if (penaltyPercentage && penaltyPercentage > 0) {
+                penaltyText = `Penalty ${penaltyPercentage}%`;
+            }
+
+            if (ruleType === 'attendance_late') {
+                typeText = 'Keterlambatan absensi';
+            } else if (ruleType === 'outside_office_late') {
+                typeText = 'Terlambat kembali dari izin keluar';
+            }
         }
 
         if (typeText && penaltyText) {
-            const description = `${typeText} (${range}) - ${penaltyText}`;
+            const description = ruleType === 'absence' ?
+                `${typeText} - ${penaltyText}` :
+                `${typeText} (${range}) - ${penaltyText}`;
             $('#description').val(description);
         }
     }
 
     function validateFormData() {
+        const ruleType = $('#rule_type').val();
         const penaltyAmount = $('#penalty_amount').val();
         const penaltyPercentage = $('#penalty_percentage').val();
 
@@ -639,23 +771,24 @@
             return false;
         }
 
-        // Validasi rentang waktu
-        const minMinutes = parseInt($('#min_minutes').val());
-        const maxMinutes = $('#max_minutes').val() ? parseInt($('#max_minutes').val()) : null;
+        // Validasi rentang waktu (kecuali untuk absence rules)
+        if (ruleType !== 'absence') {
+            const minMinutes = parseInt($('#min_minutes').val());
+            const maxMinutes = $('#max_minutes').val() ? parseInt($('#max_minutes').val()) : null;
 
-        if (maxMinutes && maxMinutes <= minMinutes) {
-            alert('Waktu maksimum harus lebih besar dari waktu minimum');
-            return false;
+            if (!minMinutes && minMinutes !== 0) {
+                alert('Waktu minimum harus diisi untuk aturan berbasis waktu');
+                return false;
+            }
+
+            if (maxMinutes && maxMinutes <= minMinutes) {
+                alert('Waktu maksimum harus lebih besar dari waktu minimum');
+                return false;
+            }
         }
 
         return true;
     }
-    // Reset form when modal closes
-    $('#modalAddRule').on('hidden.bs.modal', function() {
-        $('#ruleForm')[0].reset();
-        $('#rule_id').val('');
-        $('#modal-title').text('Tambah Aturan Penalty');
-    });
 
     function debugFormData() {
         console.log('=== DEBUG FORM DATA ===');
@@ -672,3 +805,173 @@
         console.log('=======================');
     }
 </script>
+
+<style>
+    /* Custom styles for penalty rules page */
+    .card-outline.card-warning {
+        border-top: 3px solid #ffc107;
+    }
+
+    .nav-tabs .nav-link {
+        border: 1px solid transparent;
+        border-top-left-radius: 0.25rem;
+        border-top-right-radius: 0.25rem;
+    }
+
+    .nav-tabs .nav-link:hover {
+        border-color: #e9ecef #e9ecef #dee2e6;
+    }
+
+    .nav-tabs .nav-link.active {
+        color: #495057;
+        background-color: #fff;
+        border-color: #dee2e6 #dee2e6 #fff;
+    }
+
+    .table-responsive {
+        border-radius: 0.25rem;
+    }
+
+    .table thead th {
+        border-bottom: 2px solid #dee2e6;
+        font-weight: 600;
+    }
+
+    .badge {
+        font-size: 0.75em;
+    }
+
+    .btn-xs {
+        padding: 0.125rem 0.25rem;
+        font-size: 0.75rem;
+        border-radius: 0.15rem;
+    }
+
+    .modal-lg {
+        max-width: 900px;
+    }
+
+    .alert-info {
+        background-color: #d1ecf1;
+        border-color: #bee5eb;
+        color: #0c5460;
+    }
+
+    .text-info {
+        color: #17a2b8 !important;
+    }
+
+    .text-success {
+        color: #28a745 !important;
+    }
+
+    .text-warning {
+        color: #ffc107 !important;
+    }
+
+    .text-danger {
+        color: #dc3545 !important;
+    }
+
+    /* Loading state styles */
+    .btn:disabled {
+        opacity: 0.65;
+    }
+
+    .fa-spinner {
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* Form validation styles */
+    .is-invalid {
+        border-color: #dc3545;
+    }
+
+    .invalid-feedback {
+        display: block;
+        width: 100%;
+        margin-top: 0.25rem;
+        font-size: 0.875em;
+        color: #dc3545;
+    }
+
+    /* Tab content spacing */
+    .tab-content {
+        padding-top: 1rem;
+    }
+
+    /* Table hover effects */
+    .table tbody tr:hover {
+        background-color: rgba(0, 0, 0, .05);
+    }
+
+    /* Modal form spacing */
+    .modal-body .form-group {
+        margin-bottom: 1rem;
+    }
+
+    .modal-body .row {
+        margin-left: -5px;
+        margin-right: -5px;
+    }
+
+    .modal-body .row>[class*="col-"] {
+        padding-left: 5px;
+        padding-right: 5px;
+    }
+
+    /* Alert styling */
+    .alert ul {
+        margin-bottom: 0;
+        padding-left: 1.5rem;
+    }
+
+    .alert li {
+        margin-bottom: 0.25rem;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .card-tools .btn {
+            margin-bottom: 0.25rem;
+        }
+
+        .table-responsive {
+            font-size: 0.875rem;
+        }
+
+        .btn-xs {
+            padding: 0.1rem 0.2rem;
+            font-size: 0.7rem;
+        }
+
+        .modal-lg {
+            max-width: 95%;
+            margin: 1rem auto;
+        }
+    }
+
+    /* Hide elements with d-none class */
+    .d-none {
+        display: none !important;
+    }
+
+    /* Success/Error message styling */
+    .toastr-success {
+        background-color: #28a745;
+    }
+
+    .toastr-error {
+        background-color: #dc3545;
+    }
+</style>

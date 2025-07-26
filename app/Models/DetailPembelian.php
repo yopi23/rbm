@@ -21,6 +21,8 @@ class DetailPembelian extends Model
         'is_new_item',
         'item_kategori',
        'item_sub_kategori',
+       'harga_khusus_toko',
+       'harga_khusus_satuan',
     ];
 
     public function pembelian()

@@ -3,6 +3,7 @@
 
 <div class="row">
     <div class="col-md-5">
+        {{-- Card Detail Pembelian --}}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Detail Pembelian</h3>
@@ -28,10 +29,12 @@
                         <select name="supplier" id="supplier" class="form-control">
                             <option value="">--- Pilih ---</option>
                             @foreach ($supplier as $item)
-                                <option value="{{ $item->id }}">{{ $item->nama_supplier }}</option>
+                                <option value="{{ $item->id }}"
+                                    {{ $pembelian->supplier == $item->nama_supplier ? 'selected' : '' }}>
+                                    {{ $item->nama_supplier }}
+                                </option>
                             @endforeach
                         </select>
-
                     </dd>
 
                     <dt class="col-sm-4">Kategori:</dt>
@@ -91,7 +94,7 @@
             </div>
         </div>
 
-        <!-- Card Pencarian Sparepart -->
+        {{-- Card Pencarian Sparepart --}}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Cari Sparepart</h3>
@@ -126,10 +129,10 @@
     </div>
 
     <div class="col-md-7">
-        <!-- Perbaikan pada Form Tambah/Edit Item -->
+        {{-- Form Tambah/Edit Item --}}
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">Tambah Item</h3>
+                <h3 class="card-title" id="formItemTitle">Tambah Item</h3>
             </div>
             <div class="card-body">
                 @if (session('success'))
@@ -140,18 +143,20 @@
                     </div>
                 @endif
 
-                @if (session('error') || $errors->any())
+                @if ($errors->any())
                     <div class="alert alert-danger alert-dismissible">
                         <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
                         <h5><i class="icon fas fa-ban"></i> Error!</h5>
-                        {{ session('error') ?? $errors->first() }}
+                        <ul>
+                            @foreach ($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
                     </div>
                 @endif
 
-                {{-- Form item dengan sub kategori per item --}}
                 <form action="{{ route('pembelian.add-item', $pembelian->id) }}" method="POST" id="formAddItem">
                     @csrf
-                    <!-- Tambahkan input hidden untuk mode edit -->
                     <input type="hidden" name="edit_mode" id="edit_mode" value="0">
                     <input type="hidden" id="edit_detail_id" name="edit_detail_id">
 
@@ -175,7 +180,6 @@
                         <input type="text" class="form-control" id="nama_item" name="nama_item" required>
                     </div>
 
-                    <!-- Tambahkan field untuk kategori dan sub kategori pada form item -->
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
@@ -240,7 +244,7 @@
                                             </div>
                                             <input type="number" class="form-control" id="harga_beli"
                                                 name="harga_beli" min="0" required
-                                                onchange="updateHargaOtomatis(); hitungTotal();">
+                                                oninput="updateHargaOtomatis()">
                                         </div>
                                     </div>
                                 </div>
@@ -292,24 +296,48 @@
                         </div>
                     </div>
 
+                    <div class="card card-outline card-info">
+                        <div class="card-header">
+                            <h3 class="card-title">Harga Khusus (Opsional)</h3>
+                            <div class="card-tools">
+                                <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                                    <i class="fas fa-minus"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="harga_khusus_toko">Harga Toko (Internal)</label>
+                                        <input type="number" class="form-control" id="harga_khusus_toko"
+                                            name="harga_khusus_toko" min="0">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="harga_khusus_satuan">Harga Satuan (Jual)</label>
+                                        <input type="number" class="form-control" id="harga_khusus_satuan"
+                                            name="harga_khusus_satuan" min="0">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="row">
                         <div class="col-12">
-                            <!-- Tombol submit dengan id dinamis -->
                             <button type="submit" class="btn btn-primary btn-block" id="submitButton">Tambah
                                 Item</button>
-
-                            <!-- Tombol batal yang hanya muncul pada mode edit -->
                             <button type="button" class="btn btn-secondary btn-block mt-2" id="cancelButton"
-                                style="display: none;" onclick="cancelEdit()">
-                                Batal Edit
-                            </button>
+                                style="display: none;" onclick="cancelEdit()">Batal Edit</button>
                         </div>
                     </div>
                 </form>
             </div>
         </div>
 
-        {{-- Perbaikan tabel Daftar Item dengan kolom Sub Kategori --}}
+        {{-- Tabel Daftar Item --}}
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Daftar Item</h3>
@@ -320,10 +348,9 @@
                         <tr>
                             <th style="width: 10px">#</th>
                             <th>Nama Item</th>
-                            <th>Kategori</th>
-                            <th>Sub Kategori</th>
-                            <th>Jumlah</th>
+                            <th>Jml</th>
                             <th>Harga Beli</th>
+                            <th>Harga Khusus</th>
                             <th>Total</th>
                             <th style="width: 85px">Aksi</th>
                         </tr>
@@ -332,50 +359,36 @@
                         @forelse($details as $index => $detail)
                             <tr>
                                 <td>{{ $index + 1 }}</td>
-                                <td>{{ $detail->nama_item }}</td>
                                 <td>
-                                    @if ($detail->sparepart && $detail->sparepart->kode_kategori)
-                                        {{ \App\Models\KategoriSparepart::find($detail->sparepart->kode_kategori)->nama_kategori ?? '-' }}
-                                    @elseif($detail->item_kategori)
-                                        {{ \App\Models\KategoriSparepart::find($detail->item_kategori)->nama_kategori ?? '-' }}
-                                    @else
-                                        -
-                                    @endif
-                                </td>
-                                <td>
-                                    @if ($detail->sparepart && $detail->sparepart->kode_sub_kategori)
-                                        {{ \App\Models\SubKategoriSparepart::find($detail->sparepart->kode_sub_kategori)->nama_sub_kategori ?? '-' }}
-                                    @elseif($detail->item_sub_kategori)
-                                        {{ \App\Models\SubKategoriSparepart::find($detail->item_sub_kategori)->nama_sub_kategori ?? '-' }}
-                                    @else
-                                        -
+                                    {{ $detail->nama_item }}
+                                    @if ($detail->harga_khusus_toko || $detail->harga_khusus_satuan)
+                                        <br><small class="badge bg-info">Punya Harga Khusus</small>
                                     @endif
                                 </td>
                                 <td>{{ $detail->jumlah }}</td>
-                                <td>Rp {{ number_format($detail->harga_beli, 0, ',', '.') }}</td>
-                                <td>Rp {{ number_format($detail->total, 0, ',', '.') }}</td>
+                                <td>{{ number_format($detail->harga_beli, 0, ',', '.') }}</td>
                                 <td>
-                                    <!-- Edit Button -->
-                                    <button type="button" class="btn btn-primary btn-sm mr-1 my-2"
-                                        onclick="editItem({{ $detail->id }},
-                                '{{ $detail->nama_item }}',
-                                {{ $detail->jumlah }},
-                                {{ $detail->harga_beli }},
-                                {{ $detail->harga_jual ?? 0 }},
-                                {{ $detail->harga_ecer ?? 0 }},
-                                {{ $detail->harga_pasang ?? 0 }},
-                                {{ $detail->item_kategori ?? 'null' }},
-                                {{ $detail->item_sub_kategori ?? 'null' }})">
+                                    @if ($detail->harga_khusus_toko)
+                                        <small>Toko:
+                                            {{ number_format($detail->harga_khusus_toko, 0, ',', '.') }}</small><br>
+                                    @endif
+                                    @if ($detail->harga_khusus_satuan)
+                                        <small>Satuan:
+                                            {{ number_format($detail->harga_khusus_satuan, 0, ',', '.') }}</small>
+                                    @endif
+                                </td>
+                                <td>{{ number_format($detail->total, 0, ',', '.') }}</td>
+                                <td>
+                                    <button type="button" class="btn btn-primary btn-sm mr-1 my-1"
+                                        onclick="editItem({{ json_encode($detail) }})">
                                         <i class="fas fa-edit"></i>
                                     </button>
-
-                                    <!-- Delete Button -->
                                     <form action="{{ route('pembelian.remove-item', $detail->id) }}" method="POST"
                                         onsubmit="return confirm('Yakin hapus item ini?')"
                                         style="display: inline-block;">
                                         @csrf
                                         @method('DELETE')
-                                        <button type="submit" class="btn btn-danger btn-sm">
+                                        <button type="submit" class="btn btn-danger btn-sm my-1">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </form>
@@ -383,7 +396,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="text-center">Belum ada item</td>
+                                <td colspan="7" class="text-center">Belum ada item</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -395,7 +408,6 @@
 
 <script>
     $(function() {
-        // Initialize DataTable
         $('#daftarItemTable').DataTable({
             "paging": true,
             "lengthChange": true,
@@ -404,30 +416,13 @@
             "info": true,
             "autoWidth": false,
             "responsive": true,
-            "pageLength": 10,
-            "lengthMenu": [
-                [10, 25, 50, 100, -1],
-                [10, 25, 50, 100, "Semua"]
-            ],
-            "language": {
-                "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Indonesian.json"
-            },
-            // "columnDefs": [{
-            //         "orderable": false,
-            //         "targets": 9
-            //     } // Disable sorting on actions column
-            // ]
         });
     });
 
-    // Function to load sub-categories based on selected category
-    // Perbaikan fungsi loadSubKategori() pada edit.blade.php
-
+    // --- FUNGSI YANG DIKEMBALIKAN ---
     function loadSubKategori() {
         const kategoriId = document.getElementById('kategori').value;
         const subKategoriSelect = document.getElementById('sub_kategori');
-
-        // Clear current options and show loading indicator
         subKategoriSelect.innerHTML = '<option value="">--- Loading... ---</option>';
 
         if (!kategoriId) {
@@ -435,41 +430,11 @@
             return;
         }
 
-        // Pastikan URL yang benar dengan menggunakan URL lengkap
         const url = "{{ url('/admin/pembelian/get-sub-kategori') }}/" + kategoriId;
-
-        // Log untuk debugging
-        console.log("Fetching from: " + url);
-
-        // Buat headers dengan CSRF token
-        const headers = {
-            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        };
-
-        // Lakukan request AJAX dengan headers
-        fetch(url, {
-                method: 'GET',
-                headers: headers,
-                credentials: 'same-origin'
-            })
-            .then(response => {
-                // Log status response untuk debugging
-                console.log("Response status:", response.status);
-
-                if (!response.ok) {
-                    throw new Error('Network response was not ok, status: ' + response.status);
-                }
-                return response.json();
-            })
+        fetch(url)
+            .then(response => response.json())
             .then(data => {
-                // Log data response untuk debugging
-                console.log("Data received:", data);
-
-                // Populate sub kategori dropdown
                 subKategoriSelect.innerHTML = '<option value="">--- Pilih Sub Kategori ---</option>';
-
                 if (data.success && data.data) {
                     data.data.forEach(subKategori => {
                         const option = document.createElement('option');
@@ -477,36 +442,18 @@
                         option.textContent = subKategori.nama_sub_kategori;
                         subKategoriSelect.appendChild(option);
                     });
-
-                    if (data.data.length === 0) {
-                        subKategoriSelect.innerHTML = '<option value="">--- Tidak Ada Sub Kategori ---</option>';
-                    }
-                } else {
-                    subKategoriSelect.innerHTML = '<option value="">--- Error Format Data ---</option>';
-                    console.error("Format data tidak sesuai:", data);
                 }
             })
             .catch(error => {
-                // Log error untuk debugging
                 console.error("Error fetching sub kategori:", error);
-                subKategoriSelect.innerHTML = '<option value="">--- Error Loading Sub Kategori ---</option>';
-
-                // Tampilkan sweet alert untuk error
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: 'Gagal memuat sub kategori: ' + error.message,
-                    confirmButtonText: 'OK'
-                });
+                subKategoriSelect.innerHTML = '<option value="">--- Gagal Memuat ---</option>';
             });
     }
 
-    // Function to load sub-categories for item form
+    // --- FUNGSI YANG DIKEMBALIKAN ---
     function loadItemSubKategori() {
         const kategoriId = document.getElementById('item_kategori').value;
         const subKategoriSelect = document.getElementById('item_sub_kategori');
-
-        // Clear current options and show loading indicator
         subKategoriSelect.innerHTML = '<option value="">--- Loading... ---</option>';
 
         if (!kategoriId) {
@@ -514,32 +461,11 @@
             return;
         }
 
-        // Gunakan URL lengkap dengan helper Laravel
         const url = "{{ url('/admin/pembelian/get-sub-kategori') }}/" + kategoriId;
-
-        // Log untuk debugging
-        console.log("Fetching sub categories from: " + url);
-
-        fetch(url, {
-                method: 'GET',
-                headers: {
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                credentials: 'same-origin'
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok, status: ' + response.status);
-                }
-                return response.json();
-            })
+        fetch(url)
+            .then(response => response.json())
             .then(data => {
-                console.log("Data received for item sub kategori:", data);
-
                 subKategoriSelect.innerHTML = '<option value="">--- Pilih Sub Kategori ---</option>';
-
                 if (data.success && data.data) {
                     data.data.forEach(subKategori => {
                         const option = document.createElement('option');
@@ -547,222 +473,240 @@
                         option.textContent = subKategori.nama_sub_kategori;
                         subKategoriSelect.appendChild(option);
                     });
-
-                    if (data.data.length === 0) {
-                        subKategoriSelect.innerHTML = '<option value="">--- Tidak Ada Sub Kategori ---</option>';
-                    }
-                } else {
-                    subKategoriSelect.innerHTML = '<option value="">--- Error Format Data ---</option>';
-                    console.error("Format data tidak sesuai:", data);
                 }
             })
             .catch(error => {
-                console.error("Error fetching sub kategori:", error);
-                subKategoriSelect.innerHTML = '<option value="">--- Error Loading Sub Kategori ---</option>';
-
-                // Tampilkan SweetAlert untuk error
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: 'Gagal memuat sub kategori: ' + error.message,
-                    confirmButtonText: 'OK'
-                });
+                console.error("Error fetching item sub kategori:", error);
+                subKategoriSelect.innerHTML = '<option value="">--- Gagal Memuat ---</option>';
             });
     }
 
-    // Update the editItem function to include kategori and sub_kategori
-    function editItem(id, nama, jumlah, hargaBeli, hargaJual, hargaEcer, hargaPasang, kategoriId, subKategoriId) {
-        // Set form to edit mode
+    function editItem(detail) {
+        document.getElementById('formItemTitle').textContent = 'Edit Item';
         document.getElementById('edit_mode').value = '1';
-        document.getElementById('edit_detail_id').value = id;
+        document.getElementById('edit_detail_id').value = detail.id;
+        document.getElementById('sparepart_id').value = detail.sparepart_id;
+        document.getElementById('nama_item').value = detail.nama_item;
+        document.getElementById('jumlah').value = detail.jumlah;
+        document.getElementById('harga_beli').value = detail.harga_beli;
+        document.getElementById('harga_jual').value = detail.harga_jual;
+        document.getElementById('harga_ecer').value = detail.harga_ecer;
+        document.getElementById('harga_pasang').value = detail.harga_pasang;
+        document.getElementById('harga_khusus_toko').value = detail.harga_khusus_toko;
+        document.getElementById('harga_khusus_satuan').value = detail.harga_khusus_satuan;
 
-        // Fill the form with the item's data
-        document.getElementById('nama_item').value = nama;
-        document.getElementById('nama_item').readOnly = false;
-        document.getElementById('jumlah').value = jumlah;
-        document.getElementById('harga_beli').value = hargaBeli;
-
-        // Set other price fields if they exist
-        if (hargaJual) document.getElementById('harga_jual').value = hargaJual;
-        if (hargaEcer) document.getElementById('harga_ecer').value = hargaEcer;
-        if (hargaPasang) document.getElementById('harga_pasang').value = hargaPasang;
-
-        // Set kategori if exists
-        if (kategoriId && kategoriId !== 'null') {
-            document.getElementById('item_kategori').value = kategoriId;
-
-            // Load subcategories
+        if (detail.item_kategori) {
+            document.getElementById('item_kategori').value = detail.item_kategori;
             loadItemSubKategori();
-
-            // We'll set sub kategori after a short delay to ensure subcategories are loaded
             setTimeout(() => {
-                if (subKategoriId && subKategoriId !== 'null') {
-                    document.getElementById('item_sub_kategori').value = subKategoriId;
+                if (detail.item_sub_kategori) {
+                    document.getElementById('item_sub_kategori').value = detail.item_sub_kategori;
                 }
             }, 500);
         }
 
-        // Update total and price differences
         hitungTotal();
         triggerPriceDifferenceUpdate();
-
-        // Change button text
         document.getElementById('submitButton').textContent = 'Perbarui Item';
         document.getElementById('cancelButton').style.display = 'block';
-
-        // Scroll to form
         document.getElementById('formAddItem').scrollIntoView({
             behavior: 'smooth'
         });
     }
 
-    // Update the cancelEdit function to reset kategori and sub kategori
     function cancelEdit() {
-        // Reset form to add mode
+        document.getElementById('formItemTitle').textContent = 'Tambah Item';
         document.getElementById('edit_mode').value = '0';
-        document.getElementById('edit_detail_id').value = '';
-
-        // Clear the form
         document.getElementById('formAddItem').reset();
         document.getElementById('sparepart_id').value = '';
-
-        // Reset kategori and sub kategori
-        document.getElementById('item_kategori').value = '';
         document.getElementById('item_sub_kategori').innerHTML =
-        '<option value="">--- Pilih Kategori Dulu ---</option>';
-
-        // Set restock radio button
+            '<option value="">--- Pilih Kategori Dulu ---</option>';
         document.getElementById('customRadio1').checked = true;
         toggleNewItem(false);
-
-        // Reset button text
         document.getElementById('submitButton').textContent = 'Tambah Item';
         document.getElementById('cancelButton').style.display = 'none';
+
+        document.getElementById('formAddItem').action = "{{ route('pembelian.add-item', $pembelian->id) }}";
+        const methodField = document.querySelector('input[name="_method"]');
+        if (methodField) {
+            methodField.remove();
+        }
     }
 
-    // Update selectSparepart function to set kategori and sub kategori
-    function selectSparepart(id, nama, harga, hargaJual, hargaEcer, hargaPasang, kategoriId, subKategoriId) {
-        document.getElementById('sparepart_id').value = id;
-        document.getElementById('nama_item').value = nama;
-        document.getElementById('harga_beli').value = harga;
+    function selectSparepart(item) {
+        document.getElementById('sparepart_id').value = item.id;
+        document.getElementById('nama_item').value = item.nama_sparepart;
+        document.getElementById('harga_beli').value = item.harga_beli;
+        document.getElementById('harga_jual').value = item.harga_jual;
+        document.getElementById('harga_ecer').value = item.harga_ecer;
+        document.getElementById('harga_pasang').value = item.harga_pasang;
 
-        // Set harga lainnya jika tersedia
-        if (hargaJual) document.getElementById('harga_jual').value = hargaJual;
-        if (hargaEcer) document.getElementById('harga_ecer').value = hargaEcer;
-        if (hargaPasang) document.getElementById('harga_pasang').value = hargaPasang;
+        const hargaKhusus = item.harga_khusus && item.harga_khusus.length > 0 ? item.harga_khusus[0] : null;
+        document.getElementById('harga_khusus_toko').value = hargaKhusus ? hargaKhusus.harga_toko : '';
+        document.getElementById('harga_khusus_satuan').value = hargaKhusus ? hargaKhusus.harga_satuan : '';
 
-        // Set kategori dan sub kategori jika tersedia
-        if (kategoriId) {
-            document.getElementById('item_kategori').value = kategoriId;
+        if (item.kode_kategori) {
+            document.getElementById('item_kategori').value = item.kode_kategori;
             loadItemSubKategori();
-
-            // Set sub kategori after subcategories are loaded
-            if (subKategoriId) {
+            if (item.kode_sub_kategori) {
                 setTimeout(() => {
-                    document.getElementById('item_sub_kategori').value = subKategoriId;
+                    document.getElementById('item_sub_kategori').value = item.kode_sub_kategori;
                 }, 500);
             }
         }
 
-        document.getElementById('nama_item').readOnly = false;
-        document.getElementById('customRadio1').checked = true; // Set sebagai restock
+        document.getElementById('nama_item').readOnly = true;
+        document.getElementById('customRadio1').checked = true;
+        toggleNewItem(false);
         hitungTotal();
         triggerPriceDifferenceUpdate();
-
-        // Sembunyikan hasil pencarian
         document.getElementById('search_results').style.display = 'none';
-
-        // Scroll ke form
         document.getElementById('formAddItem').scrollIntoView({
             behavior: 'smooth'
         });
     }
 
-    // Document ready
-    document.addEventListener('DOMContentLoaded', function() {
-        // Add event listener for item kategori change
-        document.getElementById('item_kategori').addEventListener('change', loadItemSubKategori);
-    });
-
-
-    // Fungsi untuk trigger update selisih dengan delay
-    function triggerPriceDifferenceUpdate() {
-        // Menggunakan setTimeout untuk memastikan nilai sudah terupdate
-        setTimeout(function() {
-            calculatePriceDifferences();
-        }, 50);
+    function hitungTotal() {
+        var jumlah = parseFloat(document.getElementById('jumlah').value) || 0;
+        var harga = parseFloat(document.getElementById('harga_beli').value) || 0;
+        var total = jumlah * harga;
+        document.getElementById('total').value = formatRp(total);
     }
 
+    function toggleNewItem(isNew) {
+        document.getElementById('nama_item').readOnly = !isNew;
+        if (isNew) {
+            document.getElementById('formAddItem').reset();
+            document.getElementById('customRadio2').checked = true;
+            document.getElementById('sparepart_id').value = '';
+        }
+        triggerPriceDifferenceUpdate();
+    }
+
+    function updateHargaOtomatis() {
+        const hargaBeli = parseFloat(document.getElementById('harga_beli').value) || 0;
+        const isNewItem = document.getElementById('customRadio2').checked;
+
+        if (isNewItem) {
+            document.getElementById('harga_jual').value = Math.round(hargaBeli * 1.2);
+            document.getElementById('harga_ecer').value = Math.round(hargaBeli * 1.3);
+            document.getElementById('harga_pasang').value = hargaBeli;
+        }
+
+        hitungTotal();
+        triggerPriceDifferenceUpdate();
+    }
+
+    function formatRp(angka) {
+        return new Intl.NumberFormat('id-ID').format(angka);
+    }
+
+    function triggerPriceDifferenceUpdate() {
+        setTimeout(calculatePriceDifferences, 50);
+    }
+
+    function calculatePriceDifferences() {
+        const hargaBeli = parseFloat(document.getElementById('harga_beli').value) || 0;
+        const priceFields = ['harga_jual', 'harga_ecer', 'harga_pasang'];
+
+        priceFields.forEach(id => {
+            const price = parseFloat(document.getElementById(id).value) || 0;
+            const diff = price - hargaBeli;
+            const diffElement = document.getElementById(`${id}_diff`);
+
+            if (diff >= 0) {
+                diffElement.textContent = `+Rp ${formatRp(diff)}`;
+                diffElement.style.color = '#28a745';
+            } else {
+                diffElement.textContent = `-Rp ${formatRp(Math.abs(diff))}`;
+                diffElement.style.color = '#dc3545';
+            }
+        });
+    }
+
+    function finalizeForm() {
+        const supplierId = document.getElementById('supplier').value;
+        const kategoriId = document.getElementById('kategori').value;
+        if (!supplierId || !kategoriId) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Perhatian',
+                text: 'Mohon pilih Supplier dan Kategori.'
+            });
+            return;
+        }
+        document.getElementById('finalize_supplier').value = supplierId;
+        document.getElementById('finalize_kategori').value = kategoriId;
+        Swal.fire({
+            title: 'Konfirmasi',
+            text: 'Anda yakin ingin menyelesaikan pembelian? Stok akan diupdate dan pembelian tidak dapat diedit lagi.',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Ya, Selesaikan',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                document.getElementById('finalize-form-{{ $pembelian->id }}').submit();
+            }
+        });
+    }
+
+    document.getElementById('formAddItem').addEventListener('submit', function(e) {
+        if (document.getElementById('edit_mode').value === '1') {
+            const detailId = document.getElementById('edit_detail_id').value;
+            this.action = "{{ url('admin/pembelian/update-item') }}/" + detailId;
+            if (!this.querySelector('input[name="_method"]')) {
+                const methodField = document.createElement('input');
+                methodField.type = 'hidden';
+                methodField.name = '_method';
+                methodField.value = 'PATCH';
+                this.appendChild(methodField);
+            }
+        }
+    });
+
     document.addEventListener('DOMContentLoaded', function() {
-        // Elemen-elemen yang diperlukan
+        // Event listener untuk pencarian (AJAX)
         const searchInput = document.getElementById('search_sparepart');
         const searchButton = document.getElementById('btn_search');
         const searchResults = document.getElementById('search_results');
         const searchResultsList = document.getElementById('search_results_list');
         const loadingIndicator = document.getElementById('loading_indicator');
-
-        // Variabel untuk timeout pencarian
         let searchTimeout = null;
 
-        // Fungsi untuk melakukan pencarian
         function performSearch() {
             const query = searchInput.value.trim();
-
-            // Minimal 2 karakter untuk pencarian
             if (query.length < 2) {
                 searchResults.style.display = 'none';
                 return;
             }
-
-            // Tampilkan loading indicator
             loadingIndicator.style.display = 'flex';
             searchResults.style.display = 'block';
             searchResultsList.innerHTML = '';
-
-            // URL untuk endpoint pencarian
             const searchUrl = '{{ route('pembelian.search-spareparts-ajax') }}';
-
-            const csrfToken = '{{ csrf_token() }}';
-            // Buat objek FormData untuk mengirim data
             const formData = new FormData();
             formData.append('search', query);
-            formData.append('_token', csrfToken);
+            formData.append('_token', '{{ csrf_token() }}');
 
-            // Lakukan request AJAX
             fetch(searchUrl, {
                     method: 'POST',
                     body: formData
                 })
                 .then(response => response.json())
                 .then(data => {
-                    // Sembunyikan loading indicator
                     loadingIndicator.style.display = 'none';
-
-                    // Tampilkan hasil pencarian
                     if (data.success && data.results && data.results.length > 0) {
                         searchResultsList.innerHTML = '';
-
-                        // Loop melalui hasil pencarian dan tampilkan dalam list
                         data.results.forEach(item => {
                             const listItem = document.createElement('a');
                             listItem.href = '#';
                             listItem.className = 'list-group-item list-group-item-action';
                             listItem.innerHTML =
-                                // `${item.kode_sparepart} - ${item.nama_sparepart} <span class="badge badge-info">Stok: ${item.stok_sparepart}</span>`;
                                 `${item.nama_sparepart} <span class="badge badge-info">Stok: ${item.stok_sparepart}</span>`;
-
-                            // Event listener untuk memilih sparepart
                             listItem.addEventListener('click', function(e) {
                                 e.preventDefault();
-                                selectSparepart(
-                                    item.id,
-                                    item.nama_sparepart,
-                                    item.harga_beli,
-                                    item.harga_jual, // Add this
-                                    item.harga_ecer, // Add this
-                                    item.harga_pasang);
+                                selectSparepart(item);
                             });
-
                             searchResultsList.appendChild(listItem);
                         });
                     } else {
@@ -774,299 +718,20 @@
                     console.error('Error:', error);
                     loadingIndicator.style.display = 'none';
                     searchResultsList.innerHTML =
-                        '<div class="alert alert-danger">Terjadi kesalahan saat mencari sparepart.</div>';
+                        '<div class="alert alert-danger">Terjadi kesalahan saat mencari.</div>';
                 });
         }
-
-        // Event listener untuk input pencarian (dengan debounce)
         searchInput.addEventListener('input', function() {
-            // Clear timeout sebelumnya
-            if (searchTimeout) {
-                clearTimeout(searchTimeout);
-            }
-
-            // Set timeout baru untuk mencegah terlalu banyak request
+            clearTimeout(searchTimeout);
             searchTimeout = setTimeout(performSearch, 500);
         });
-
-        // Event listener untuk tombol search
         searchButton.addEventListener('click', performSearch);
 
-        // Event listener untuk tombol Enter pada field pencarian
-        searchInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                performSearch();
-            }
-        });
-
-        // Inisialisasi form
-        hitungTotal();
-
-        // Tambahkan event listener untuk semua input harga
+        // Event listener untuk input harga agar memicu kalkulasi selisih
         const priceInputs = ['harga_beli', 'harga_jual', 'harga_ecer', 'harga_pasang'];
         priceInputs.forEach(inputId => {
             const input = document.getElementById(inputId);
-            // Input event (saat sedang mengetik)
             input.addEventListener('input', triggerPriceDifferenceUpdate);
-            // Change event (setelah selesai edit)
-            input.addEventListener('change', triggerPriceDifferenceUpdate);
-            // Blur event (saat input kehilangan fokus)
-            input.addEventListener('blur', triggerPriceDifferenceUpdate);
         });
-
-        // Tambahkan onchange event ke harga_beli
-        document.getElementById('harga_beli').addEventListener('input', updateHargaOtomatis);
-
-        // Hitung selisih harga setelah semua komponen dimuat
-        setTimeout(function() {
-            calculatePriceDifferences();
-        }, 300);
-    });
-
-    // Hitung total
-    function hitungTotal() {
-        var jumlah = parseFloat(document.getElementById('jumlah').value) || 0;
-        var harga = parseFloat(document.getElementById('harga_beli').value) || 0;
-        var total = jumlah * harga;
-        document.getElementById('total').value = formatRp(total);
-    }
-
-    // Format rupiah
-    function formatRp(angka) {
-        return new Intl.NumberFormat('id-ID').format(angka);
-    }
-
-    function updateHargaOtomatis() {
-        const hargaBeli = parseFloat(document.getElementById('harga_beli').value) || 0;
-        const isNewItem = document.getElementById('customRadio2').checked;
-
-        // Hanya update otomatis jika ini item baru
-        if (isNewItem) {
-            // Set nilai
-            document.getElementById('harga_jual').value = hargaBeli * 1.2; // Markup 20%
-            document.getElementById('harga_ecer').value = hargaBeli * 1.3; // Markup 30%
-            document.getElementById('harga_pasang').value = hargaBeli; // Default sama dengan harga beli
-
-            // Trigger event setelah nilai diupdate
-            triggerPriceDifferenceUpdate();
-        } else {
-            // Tetap hitung selisih untuk item restock
-            triggerPriceDifferenceUpdate();
-        }
-
-        // Update total juga
-        hitungTotal();
-    }
-
-    // Update event listener untuk select sparepart
-    $('#sparepart_id').on('change', function() {
-        var selectedOption = $(this).find('option:selected');
-        if (selectedOption.val() !== '') {
-            $('#nama_item').val(selectedOption.data('nama'));
-            $('#harga_beli').val(selectedOption.data('harga'));
-
-            // Tambahkan data harga lainnya jika ada di option
-            if (selectedOption.data('harga-jual')) {
-                $('#harga_jual').val(selectedOption.data('harga-jual'));
-            }
-            if (selectedOption.data('harga-ecer')) {
-                $('#harga_ecer').val(selectedOption.data('harga-ecer'));
-            }
-            if (selectedOption.data('harga-pasang')) {
-                $('#harga_pasang').val(selectedOption.data('harga-pasang'));
-            }
-
-            hitungTotal();
-            triggerPriceDifferenceUpdate(); // Hitung selisih harga setelah perubahan
-        }
-    });
-
-    // Fungsi untuk select sparepart dari hasil pencarian
-    function selectSparepart(id, nama, harga, hargaJual, hargaEcer, hargaPasang) {
-        document.getElementById('sparepart_id').value = id;
-        document.getElementById('nama_item').value = nama;
-        document.getElementById('harga_beli').value = harga;
-
-        // Set harga lainnya jika tersedia
-        if (hargaJual) document.getElementById('harga_jual').value = hargaJual;
-        if (hargaEcer) document.getElementById('harga_ecer').value = hargaEcer;
-        if (hargaPasang) document.getElementById('harga_pasang').value = hargaPasang;
-
-        document.getElementById('nama_item').readOnly = false;
-        document.getElementById('customRadio1').checked = true; // Set sebagai restock
-        hitungTotal();
-        triggerPriceDifferenceUpdate(); // Hitung selisih harga setelah memilih sparepart
-
-        // Sembunyikan hasil pencarian
-        document.getElementById('search_results').style.display = 'none';
-
-        // Scroll ke form
-        document.getElementById('formAddItem').scrollIntoView({
-            behavior: 'smooth'
-        });
-    }
-
-    // Update toggle function untuk item baru vs restock
-    function toggleNewItem(isNew) {
-        if (isNew) {
-            document.getElementById('sparepart_id').value = '';
-            document.getElementById('nama_item').value = '';
-            document.getElementById('harga_beli').value = '';
-            document.getElementById('harga_jual').value = '';
-            document.getElementById('harga_ecer').value = '';
-            document.getElementById('harga_pasang').value = '';
-            document.getElementById('nama_item').readOnly = false;
-        } else {
-            document.getElementById('nama_item').readOnly = true;
-        }
-
-        // Hitung selisih harga setelah toggle
-        triggerPriceDifferenceUpdate();
-    }
-
-    // Fungsi untuk menghitung dan menampilkan selisih harga
-    function calculatePriceDifferences() {
-        // Get the purchase price
-        const hargaBeli = parseFloat(document.getElementById('harga_beli').value) || 0;
-
-        // Price input fields and their respective difference display elements
-        const priceFields = [{
-                input: 'harga_jual',
-                diffElement: 'harga_jual_diff'
-            },
-            {
-                input: 'harga_ecer',
-                diffElement: 'harga_ecer_diff'
-            },
-            {
-                input: 'harga_pasang',
-                diffElement: 'harga_pasang_diff'
-            }
-        ];
-
-        // Calculate and display the difference for each price field
-        priceFields.forEach(field => {
-            const price = parseFloat(document.getElementById(field.input).value) || 0;
-            const diff = price - hargaBeli;
-            const diffElement = document.getElementById(field.diffElement);
-
-            // Format the difference with plus sign for positive values
-            let formattedDiff;
-            if (diff >= 0) {
-                formattedDiff = `+Rp ${formatRp(diff)}`;
-                diffElement.style.color = '#28a745'; // Green for positive
-            } else {
-                formattedDiff = `-Rp ${formatRp(Math.abs(diff))}`;
-                diffElement.style.color = '#dc3545'; // Red for negative
-            }
-
-            // Set the text
-            diffElement.textContent = formattedDiff;
-        });
-    }
-
-    function finalizeForm() {
-        // Get current values from selectors
-        const supplierId = document.getElementById('supplier').value;
-        const kategoriId = document.getElementById('kategori').value;
-
-        // Check if supplier and kategori are selected
-        if (!supplierId || !kategoriId) {
-            // Ganti alert biasa dengan Sweet Alert
-            Swal.fire({
-                icon: 'warning',
-                title: 'Perhatian',
-                text: 'Mohon pilih Supplier dan Kategori sebelum menyelesaikan pembelian.',
-                confirmButtonText: 'OK',
-                confirmButtonColor: '#3085d6'
-            });
-            return;
-        }
-
-        // Set values to hidden fields
-        document.getElementById('finalize_supplier').value = supplierId;
-        document.getElementById('finalize_kategori').value = kategoriId;
-
-        // Ganti confirm biasa dengan Sweet Alert
-        Swal.fire({
-            icon: 'question',
-            title: 'Konfirmasi',
-            text: 'Anda yakin ingin menyelesaikan pembelian? Ini akan memproses semua item ke dalam stok sparepart dan pembelian tidak dapat diedit lagi.',
-            showCancelButton: true,
-            confirmButtonText: 'Ya, Selesaikan',
-            cancelButtonText: 'Batal',
-            confirmButtonColor: '#3085d6',
-            cancelButtonColor: '#d33'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                document.getElementById('finalize-form-{{ $pembelian->id }}').submit();
-            }
-        });
-    }
-</script>
-{{-- untuk edit --}}
-<script>
-    function editItem(id, nama, jumlah, hargaBeli, hargaJual, hargaEcer, hargaPasang) {
-        // Set form to edit mode
-        document.getElementById('edit_mode').value = '1';
-        document.getElementById('edit_detail_id').value = id;
-
-        // Fill the form with the item's data
-        document.getElementById('nama_item').value = nama;
-        document.getElementById('nama_item').readOnly = false;
-        document.getElementById('jumlah').value = jumlah;
-        document.getElementById('harga_beli').value = hargaBeli;
-
-        // Set other price fields if they exist
-        if (hargaJual) document.getElementById('harga_jual').value = hargaJual;
-        if (hargaEcer) document.getElementById('harga_ecer').value = hargaEcer;
-        if (hargaPasang) document.getElementById('harga_pasang').value = hargaPasang;
-
-        // Update total and price differences
-        hitungTotal();
-        triggerPriceDifferenceUpdate();
-
-        // Change button text
-        document.getElementById('submitButton').textContent = 'Perbarui Item';
-        document.getElementById('cancelButton').style.display = 'block';
-
-        // Scroll to form
-        document.getElementById('formAddItem').scrollIntoView({
-            behavior: 'smooth'
-        });
-    }
-
-    function cancelEdit() {
-        // Reset form to add mode
-        document.getElementById('edit_mode').value = '0';
-        document.getElementById('edit_detail_id').value = '';
-
-        // Clear the form
-        document.getElementById('formAddItem').reset();
-        document.getElementById('sparepart_id').value = '';
-
-        // Set restock radio button
-        document.getElementById('customRadio1').checked = true;
-        toggleNewItem(false);
-
-        // Reset button text
-        document.getElementById('submitButton').textContent = 'Tambah Item';
-        document.getElementById('cancelButton').style.display = 'none';
-    }
-
-    // Add an event listener to the form submission
-    document.getElementById('formAddItem').addEventListener('submit', function(e) {
-        // If in edit mode, change the form action
-        if (document.getElementById('edit_mode').value === '1') {
-            const detailId = document.getElementById('edit_detail_id').value;
-            this.action = "{{ route('pembelian.index') }}/update-item/" + detailId;
-            // Add method override for PUT/PATCH
-            const methodField = document.createElement('input');
-            methodField.type = 'hidden';
-            methodField.name = '_method';
-            methodField.value = 'PATCH';
-            this.appendChild(methodField);
-        }
     });
 </script>

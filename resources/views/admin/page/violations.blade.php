@@ -547,12 +547,11 @@
         // 1. INISIALISASI DATATABLES YANG BENAR (client-side only)
         if ($('#violationsTable').length) {
             $('#violationsTable').DataTable({
-                // HAPUS serverSide dan processing
                 responsive: true,
                 pageLength: 25,
-                order: [
-                    [1, 'desc']
-                ], // Sort by tanggal
+                // HAPUS order untuk mempertahankan urutan dari server
+                // order: [[1, 'desc']], // HAPUS BARIS INI
+                ordering: false, // TAMBAHKAN INI - disable semua sorting
                 columnDefs: [{
                         orderable: false,
                         targets: [8]
