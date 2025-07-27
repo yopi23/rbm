@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\File;
 use Milon\Barcode\Facades\DNS1DFacade;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Models\SubKategoriSparepart;
+use Illuminate\Support\Facades\DB;
 
 class SparePartController extends Controller
 {
@@ -27,7 +28,7 @@ class SparePartController extends Controller
 
     public function getTable($thead = '<th>No</th><th>Aksi</th>', $tbody = '')
     {
-        $result = '<div class="table-responsive"><table class="table" id="dataTable">';
+        $result = '<div class="table-responsive"><table class="table" id="dataEditTable">';
         $result .= '<thead>' . $thead . '</thead>';
         $result .= '<tbody>' . $tbody . '</body>';
         $result .= '</table></div>';
@@ -44,60 +45,116 @@ class SparePartController extends Controller
     {
         $page = "Data Sparepart";
         $link_tambah = route('create_sparepart');
-        $thead = '<th width="5%">No</th>
-                    <th>Kode Sparepart</th>
+
+        // Definisikan header tabel dengan kolom checkbox
+        $thead = '<th width="1%"><input type="checkbox" id="select-all-checkbox"></th>
+                    <th width="5%">No</th>
+                    <th>Kode</th>
                     <th>Nama Sparepart</th>
                     <th>Sub Kategori</th>
                     <th>Harga Beli</th>
                     <th>Harga Jual</th>
-                    <th>Harga Pasang</th>
                     <th>Stok</th>
                     <th>Aksi</th>';
-        $sparepart = Sparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest('updated_at')->get();
+
+        $sparepart_data = Sparepart::with(['subKategori'])->where('kode_owner', '=', $this->getThisUser()->id_upline)->latest('updated_at')->get();
+
+        // Buat body tabel dengan baris checkbox
         $tbody = '';
         $no = 1;
-        foreach ($sparepart as $item) {
-            $edit = Request::create(route('EditSparepart', $item->id));
-            $delete = Request::create(route('DeleteSparepart', $item->id));
-            $foto = '<img src="' . asset('public/img/no_image.png') . '" width="100%" height="100%" class="img" id="view-img">';
-            if ($item->foto_sparepart != '-') {
-                $foto =  '<img src="' . asset('public/uploads/' . $item->foto_sparepart) . '" class="img" width="100%" height="100%">';
-            }
-
-            // Get category name
-            $kategori_name = KategoriSparepart::find($item->kode_kategori)->nama_kategori ?? '-';
-
-            // Get subcategory name
-            $sub_kategori_name = '-';
-            if ($item->kode_sub_kategori) {
-                $sub_kategori = SubKategoriSparepart::find($item->kode_sub_kategori);
-                if ($sub_kategori) {
-                    $sub_kategori_name = $sub_kategori->nama_sub_kategori;
-                }
-            }
-
-            $qr = DNS1DFacade::getBarcodeHTML($item->kode_sparepart, "C39", 1, 100);
+        foreach ($sparepart_data as $item) {
+            $edit_route = route('EditSparepart', $item->id);
+            $delete_route = route('DeleteSparepart', $item->id);
+            $sub_kategori_name = $item->subKategori->nama_sub_kategori ?? '-';
             $tbody .= '<tr>
+                            <td><input type="checkbox" class="item-checkbox" value="' . $item->id . '"></td>
                             <td>' . $no++ . '</td>
                             <td>' . $item->kode_sparepart . '</td>
                             <td>' . $item->nama_sparepart . '</td>
                             <td>' . $sub_kategori_name . '</td>
                             <td>Rp.' . number_format($item->harga_beli) . '</td>
                             <td>Rp.' . number_format($item->harga_jual) . '</td>
-                            <td>Rp.' . number_format($item->harga_pasang) . '</td>
                             <td>' . $item->stok_sparepart . '</td>
                             <td>
-                                <form action="' . $delete->url() . '" onsubmit="' . "return confirm('Apakah Anda yakin ?')" . '" method="POST">
+                                <form action="' . $delete_route . '" onsubmit="return confirm(\'Anda yakin?\')" method="POST" style="display:inline;">
                                     ' . $this->getHiddenItemForm('DELETE') . '
-                                    <a href="' . $edit->url() . '" class="btn btn-sm btn-warning my-2"><i class="fas fa-edit"></i></a>
-                                    <button type="submit" class="btn btn-sm btn-danger my-2"><i class="fas fa-trash"></i></button>
+                                    <a href="' . $edit_route . '" class="btn btn-sm btn-warning my-1"><i class="fas fa-edit"></i></a>
+                                    <button type="submit" class="btn btn-sm btn-danger my-1"><i class="fas fa-trash"></i></button>
                                 </form>
-                                <a href="' . route('Barcode_barang', $item->id) . '" target="_blank" class="btn btn-sm btn-primary mt-2"><i class="fas fa-print"></i></a>
                             </td>
-                            </tr>';
+                        </tr>';
         }
+
         $data = $this->getTable($thead, $tbody);
-        return view('admin.layout.card_layout', compact(['page', 'data', 'link_tambah']));
+        $kategori = KategoriSparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->get();
+
+        // Render view konten (index.blade.php) ke dalam layout utama 'blank_page'
+        $content = view('admin.page.sparepart.index', compact('page', 'link_tambah', 'data', 'kategori'))->render();
+        return view('admin.layout.blank_page', compact('page', 'content'));
+    }
+
+
+    // FUNGSI 2: Untuk mengambil data item yang akan diedit
+    public function getDetailsForEdit(Request $request)
+    {
+         $request->validate(['ids' => 'required|array']);
+
+        // TAMBAHKAN 'hargaKhusus' untuk mengambil data harga spesial
+        $spareparts = Sparepart::with(['kategori', 'subKategori', 'hargaKhusus'])
+            ->whereIn('id', $request->ids)
+            ->get();
+
+        return response()->json($spareparts);
+    }
+
+
+    // FUNGSI 3: Untuk menyimpan semua perubahan dari modal
+    public function bulkUpdate(Request $request)
+    {
+        $request->validate(['items' => 'required|array']);
+        $itemsData = $request->input('items');
+
+        try {
+            DB::beginTransaction();
+
+            foreach ($itemsData as $id => $data) {
+                $sparepart = Sparepart::find($id);
+                if ($sparepart) {
+                    // 1. Pisahkan data untuk tabel spareparts
+                    $sparepartData = [
+                        'harga_beli' => $data['harga_beli'] ?? $sparepart->harga_beli,
+                        'harga_jual' => $data['harga_jual'] ?? $sparepart->harga_jual,
+                        'harga_pasang' => $data['harga_pasang'] ?? $sparepart->harga_pasang,
+                        'stok_sparepart' => $data['stok_sparepart'] ?? $sparepart->stok_sparepart,
+                    ];
+                    $sparepart->update($sparepartData);
+
+                    // 2. Siapkan data untuk tabel harga_khususes
+                    $hargaKhususData = [
+                        'harga_toko' => $data['harga_khusus_toko'] ?? 0,
+                        'harga_satuan' => $data['harga_khusus_satuan'] ?? 0,
+                        'diskon_tipe' => $data['diskon_tipe'] ?? null,
+                        'diskon_nilai' => $data['diskon_nilai'] ?? 0,
+                    ];
+
+                    // 3. Gunakan updateOrCreate untuk membuat atau memperbarui harga khusus
+                    // Ini akan mencari harga khusus dengan id_sp = $id,
+                    // jika ada akan di-update, jika tidak ada akan dibuat baru.
+                    \App\Models\HargaKhusus::updateOrCreate(
+                        ['id_sp' => $id],
+                        $hargaKhususData
+                    );
+                }
+            }
+
+            DB::commit();
+            return response()->json(['message' => 'Sebanyak ' . count($itemsData) . ' item berhasil diperbarui.']);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Bulk update error: ' . $e->getMessage());
+            return response()->json(['message' => 'Terjadi kesalahan pada server: ' . $e->getMessage()], 500);
+        }
     }
     public function view_kategori(Request $request)
     {
@@ -183,10 +240,7 @@ class SparePartController extends Controller
 
         return redirect()->back();
     }
-
     //update stock opname
-
-
     //Create Functions
     public function create_sparepart(Request $request)
     {
@@ -200,7 +254,6 @@ class SparePartController extends Controller
         $page = "Tambah Kategori Sparepart";
         return view('admin.forms.kategori_sparepart', compact(['page']));
     }
-
      // Function to get subcategories by category ID (for AJAX)
      public function get_sub_kategori_by_kategori($kategori_id)
      {

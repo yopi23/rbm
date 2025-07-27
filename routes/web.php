@@ -151,6 +151,8 @@ Route::group(['middleware' => ['auth']], function () {
         Route::post('sparepart/store', [SparePartController::class, 'store_sparepart'])->name('StoreSparepart');
         Route::put('sparepart/{id}/update', [SparePartController::class, 'update_sparepart'])->name('UpdateSparepart');
         Route::delete('sparepart/{id}/destroy', [SparePartController::class, 'delete_sparepart'])->name('DeleteSparepart');
+        Route::post('/spareparts/bulk-update', [SparePartController::class, 'bulkUpdate'])->name('spareparts.bulk-update');
+        Route::post('/spareparts/get-details', [SparePartController::class, 'getDetailsForEdit'])->name('spareparts.get-details');
 
         //Kategori Sparepart
         Route::get('/kategori_sparepart', [SparePartController::class, 'view_kategori'])->name('kategori_sparepart');
