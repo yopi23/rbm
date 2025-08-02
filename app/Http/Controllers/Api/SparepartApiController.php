@@ -611,107 +611,209 @@ class SparepartApiController extends Controller
      * This method is transactional and expects to be called within an existing transaction
      * or to start its own if not. It's safer if the caller manages the transaction.
      */
-    private function performCommissionRecalculation($serviceId)
-    {
-        Log::info("Internal: Starting performCommissionRecalculation for Service ID: $serviceId");
-        // NOTE: This method now expects a transaction to be started by the calling public method.
-        // If it's to be called directly, consider adding DB::beginTransaction() and DB::commit()/rollback() here.
+    // private function performCommissionRecalculation($serviceId)
+    // {
+    //     Log::info("Internal: Starting performCommissionRecalculation for Service ID: $serviceId");
+    //     // NOTE: This method now expects a transaction to be started by the calling public method.
+    //     // If it's to be called directly, consider adding DB::beginTransaction() and DB::commit()/rollback() here.
 
-        $service = modelServices::findOrFail($serviceId);
+    //     $service = modelServices::findOrFail($serviceId);
 
-        // Fetch all associated spare parts (toko and luar)
-        $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
-            ->where('detail_part_services.kode_services', $serviceId)
-            ->get(['detail_part_services.detail_harga_part_service', 'detail_part_services.qty_part']);
+    //     // Fetch all associated spare parts (toko and luar)
+    //     $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+    //         ->where('detail_part_services.kode_services', $serviceId)
+    //         ->get(['detail_part_services.detail_harga_part_service', 'detail_part_services.qty_part']);
 
-        $part_luar_toko_service = DetailPartLuarService::where('kode_services', $serviceId)->get(['harga_part', 'qty_part']);
+    //     $part_luar_toko_service = DetailPartLuarService::where('kode_services', $serviceId)->get(['harga_part', 'qty_part']);
 
-        // Recalculate total_part (harga_sp)
-        $total_part = 0;
-        foreach ($part_toko_service as $part) {
-            $total_part += $part->detail_harga_part_service * $part->qty_part;
-        }
-        foreach ($part_luar_toko_service as $part) {
-            $total_part += $part->harga_part * $part->qty_part;
-        }
+    //     // Recalculate total_part (harga_sp)
+    //     $total_part = 0;
+    //     foreach ($part_toko_service as $part) {
+    //         $total_part += $part->detail_harga_part_service * $part->qty_part;
+    //     }
+    //     foreach ($part_luar_toko_service as $part) {
+    //         $total_part += $part->harga_part * $part->qty_part;
+    //     }
 
-        // Update the service's harga_sp
-        $service->update(['harga_sp' => $total_part]);
-        Log::info("Internal: Service Harga SP updated to: $total_part for Service ID: $serviceId");
+    //     // Update the service's harga_sp
+    //     $service->update(['harga_sp' => $total_part]);
+    //     Log::info("Internal: Service Harga SP updated to: $total_part for Service ID: $serviceId");
 
-        // Recalculate technician profit ONLY if service is "Selesai" and a technician is assigned
-        if ($service->status_services == 'Selesai' && $service->id_teknisi) {
-            $id_teknisi = $service->id_teknisi;
-            $presentaseSetting = SalarySetting::where('user_id', $id_teknisi)->first();
-            $teknisi = UserDetail::where('kode_user', $id_teknisi)->first();
+    //     // Recalculate technician profit ONLY if service is "Selesai" and a technician is assigned
+    //     if ($service->status_services == 'Selesai' && $service->id_teknisi) {
+    //         $id_teknisi = $service->id_teknisi;
+    //         $presentaseSetting = SalarySetting::where('user_id', $id_teknisi)->first();
+    //         $teknisi = UserDetail::where('kode_user', $id_teknisi)->first();
 
-            if (!$teknisi) {
-                Log::warning("Internal: Technician not found for ID: {$id_teknisi} for Service ID: $serviceId. Commission not updated.");
-                return [
-                    'service_id' => $service->id,
-                    'new_harga_sp' => $service->harga_sp,
-                    'new_profit' => 0,
-                    'warning' => 'Technician not found, commission skipped.'
-                ];
-            }
+    //         if (!$teknisi) {
+    //             Log::warning("Internal: Technician not found for ID: {$id_teknisi} for Service ID: $serviceId. Commission not updated.");
+    //             return [
+    //                 'service_id' => $service->id,
+    //                 'new_harga_sp' => $service->harga_sp,
+    //                 'new_profit' => 0,
+    //                 'warning' => 'Technician not found, commission skipped.'
+    //             ];
+    //         }
 
-            // Retrieve old profit if it exists for this service
-            $oldProfitPresentase = ProfitPresentase::where('kode_service', $serviceId)->first();
-            $oldProfitAmount = 0;
+    //         // Retrieve old profit if it exists for this service
+    //         $oldProfitPresentase = ProfitPresentase::where('kode_service', $serviceId)->first();
+    //         $oldProfitAmount = 0;
 
-            if ($oldProfitPresentase) {
-                $oldProfitAmount = $oldProfitPresentase->profit;
-                // Deduct old profit from technician's current saldo before calculating new profit
-                $teknisi->update([
-                    'saldo' => $teknisi->saldo - $oldProfitAmount,
-                ]);
-                Log::info("Internal: Old profit deducted: {$oldProfitAmount} from Technician ID: {$id_teknisi}");
-            }
+    //         if ($oldProfitPresentase) {
+    //             $oldProfitAmount = $oldProfitPresentase->profit;
+    //             // Deduct old profit from technician's current saldo before calculating new profit
+    //             $teknisi->update([
+    //                 'saldo' => $teknisi->saldo - $oldProfitAmount,
+    //             ]);
+    //             Log::info("Internal: Old profit deducted: {$oldProfitAmount} from Technician ID: {$id_teknisi}");
+    //         }
 
-            // Calculate new profit
-            $profit = $service->total_biaya - $total_part;
-            $fix_profit = 0;
+    //         // Calculate new profit
+    //         $profit = $service->total_biaya - $total_part;
+    //         $fix_profit = 0;
 
-            if ($presentaseSetting && $presentaseSetting->compensation_type == 'percentage') {
-                if ($profit < 0) {
-                    $fix_profit = $profit * $presentaseSetting->max_percentage / 100;
-                } else {
-                    $fix_profit = $profit * $presentaseSetting->percentage_value / 100;
-                }
-            }
-            Log::info("Internal: New calculated profit: {$fix_profit} for Technician ID: {$id_teknisi}");
+    //         if ($presentaseSetting && $presentaseSetting->compensation_type == 'percentage') {
+    //             if ($profit < 0) {
+    //                 $fix_profit = $profit * $presentaseSetting->max_percentage / 100;
+    //             } else {
+    //                 $fix_profit = $profit * $presentaseSetting->percentage_value / 100;
+    //             }
+    //         }
+    //         Log::info("Internal: New calculated profit: {$fix_profit} for Technician ID: {$id_teknisi}");
 
-            // Update or create ProfitPresentase record
-            $komisi = ProfitPresentase::updateOrCreate(
-                ['kode_service' => $serviceId],
-                [
-                    'tgl_profit' => now(),
-                    'kode_presentase' => $presentaseSetting ? $presentaseSetting->id : null,
-                    'kode_user' => $id_teknisi,
-                    'profit' => $fix_profit,
-                    'saldo' => $teknisi->saldo + $fix_profit, // Provisional saldo
-                    'profit_toko'=>$profit-$fix_profit,
-                ]
-            );
+    //         // Update or create ProfitPresentase record
+    //         $komisi = ProfitPresentase::updateOrCreate(
+    //             ['kode_service' => $serviceId],
+    //             [
+    //                 'tgl_profit' => now(),
+    //                 'kode_presentase' => $presentaseSetting ? $presentaseSetting->id : null,
+    //                 'kode_user' => $id_teknisi,
+    //                 'profit' => $fix_profit,
+    //                 'saldo' => $teknisi->saldo + $fix_profit, // Provisional saldo
+    //                 'profit_toko'=>$profit-$fix_profit,
+    //             ]
+    //         );
 
-            // Add the new profit to the technician's saldo
-            $teknisi->update([
-                'saldo' => $teknisi->saldo + $fix_profit,
-            ]);
-            Log::info("Internal: Technician new saldo: {$teknisi->saldo} for Technician ID: {$id_teknisi}");
+    //         // Add the new profit to the technician's saldo
+    //         $teknisi->update([
+    //             'saldo' => $teknisi->saldo + $fix_profit,
+    //         ]);
+    //         Log::info("Internal: Technician new saldo: {$teknisi->saldo} for Technician ID: {$id_teknisi}");
 
-            // Update ProfitPresentase 'saldo' to final value after technician's saldo is updated
-            $komisi->update(['saldo' => $teknisi->saldo]);
-        }
-        Log::info("Internal: performCommissionRecalculation finished for Service ID: $serviceId");
+    //         // Update ProfitPresentase 'saldo' to final value after technician's saldo is updated
+    //         $komisi->update(['saldo' => $teknisi->saldo]);
+    //     }
+    //     Log::info("Internal: performCommissionRecalculation finished for Service ID: $serviceId");
 
-        return [
-            'service_id' => $service->id,
-            'new_harga_sp' => $service->harga_sp,
-            'new_profit' => isset($fix_profit) ? $fix_profit : 0,
-        ];
+    //     return [
+    //         'service_id' => $service->id,
+    //         'new_harga_sp' => $service->harga_sp,
+    //         'new_profit' => isset($fix_profit) ? $fix_profit : 0,
+    //     ];
+    // }
+private function performCommissionRecalculation($serviceId)
+{
+    Log::info("Internal: Starting performCommissionRecalculation for Service ID: $serviceId");
+
+    $service = modelServices::findOrFail($serviceId);
+
+    // Fetch all associated spare parts (toko and luar)
+    $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+        ->where('detail_part_services.kode_services', $serviceId)
+        ->get(['detail_part_services.detail_harga_part_service', 'detail_part_services.qty_part']);
+
+    $part_luar_toko_service = DetailPartLuarService::where('kode_services', $serviceId)->get(['harga_part', 'qty_part']);
+
+    // Recalculate total_part (harga_sp)
+    $total_part = 0;
+    foreach ($part_toko_service as $part) {
+        $total_part += $part->detail_harga_part_service * $part->qty_part;
+    }
+    foreach ($part_luar_toko_service as $part) {
+        $total_part += $part->harga_part * $part->qty_part;
     }
 
+    // Update the service's harga_sp
+    $service->update(['harga_sp' => $total_part]);
+    Log::info("Internal: Service Harga SP updated to: $total_part for Service ID: $serviceId");
+
+    // Recalculate profit ONLY if service is "Selesai" and a technician is assigned
+    if ($service->status_services == 'Selesai' && $service->id_teknisi) {
+        $id_teknisi = $service->id_teknisi;
+        $presentaseSetting = SalarySetting::where('user_id', $id_teknisi)->first();
+        $teknisi = UserDetail::where('kode_user', $id_teknisi)->first();
+
+        if (!$teknisi || !$presentaseSetting) { // Pastikan teknisi dan setting gajinya ada
+            Log::warning("Internal: Technician or SalarySetting not found for ID: {$id_teknisi}. Commission not updated.");
+            return [
+                'service_id' => $service->id,
+                'new_harga_sp' => $service->harga_sp,
+                'new_profit' => 0,
+                'warning' => 'Technician or salary setting not found, commission skipped.'
+            ];
+        }
+
+        // Ambil profit lama (jika ada) untuk dikoreksi pada saldo teknisi
+        $oldProfitPresentase = ProfitPresentase::where('kode_service', $serviceId)->first();
+        if ($oldProfitPresentase) {
+            $teknisi->decrement('saldo', $oldProfitPresentase->profit);
+            Log::info("Internal: Old profit deducted: {$oldProfitPresentase->profit} from Technician ID: {$id_teknisi}");
+        }
+
+        // Hitung total profit dari service
+        $total_service_profit = $service->total_biaya - $total_part;
+
+        // DIUBAH: Inisialisasi variabel untuk profit teknisi dan toko
+        $fix_profit_teknisi = 0;
+        $profit_untuk_toko = 0;
+
+        // DIUBAH: Gunakan if-else untuk menentukan nilai profit berdasarkan tipe gaji
+        if ($presentaseSetting->compensation_type == 'percentage') {
+            // Logika untuk teknisi persentase
+            if ($total_service_profit < 0) { // Jika rugi
+                $fix_profit_teknisi = $total_service_profit * $presentaseSetting->max_percentage / 100;
+            } else { // Jika untung
+                $fix_profit_teknisi = $total_service_profit * $presentaseSetting->percentage_value / 100;
+            }
+            $profit_untuk_toko = $total_service_profit - $fix_profit_teknisi;
+            Log::info("Internal (Percentage): New calculated profit: {$fix_profit_teknisi} for Technician ID: {$id_teknisi}");
+
+        } else { // 'fixed'
+            // Logika untuk teknisi gaji tetap
+            $fix_profit_teknisi = 0; // Komisi dari service adalah 0
+            $profit_untuk_toko = $total_service_profit; // Semua profit masuk ke toko
+            Log::info("Internal (Fixed): Profit generated for store: {$profit_untuk_toko} by Technician ID: {$id_teknisi}");
+        }
+
+        // DIUBAH: 'updateOrCreate' sekarang dijalankan untuk SEMUA tipe gaji
+        $komisi = ProfitPresentase::updateOrCreate(
+            ['kode_service' => $serviceId],
+            [
+                'tgl_profit' => now(),
+                'kode_presentase' => $presentaseSetting->id,
+                'kode_user' => $id_teknisi,
+                'profit' => $fix_profit_teknisi, // Akan 0 jika gaji tetap
+                'profit_toko' => $profit_untuk_toko, // Akan terisi sesuai perhitungan di atas
+                'saldo' => $teknisi->fresh()->saldo + $fix_profit_teknisi, // Saldo sementara
+            ]
+        );
+
+        // Tambahkan profit baru (yang mungkin 0) ke saldo teknisi
+        $teknisi->increment('saldo', $fix_profit_teknisi);
+        Log::info("Internal: Technician new saldo: {$teknisi->fresh()->saldo} for Technician ID: {$id_teknisi}");
+
+        // Update saldo final di record komisi
+        $komisi->update(['saldo' => $teknisi->fresh()->saldo]);
+    }
+
+    Log::info("Internal: performCommissionRecalculation finished for Service ID: $serviceId");
+
+    return [
+        'service_id' => $service->id,
+        'new_harga_sp' => $service->harga_sp,
+        'new_profit' => isset($fix_profit_teknisi) ? $fix_profit_teknisi : 0,
+    ];
+}
 
     /**
      * Functions for COMPLETED Services - Sparepart Toko (Store Parts)
