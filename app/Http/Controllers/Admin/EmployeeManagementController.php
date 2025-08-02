@@ -627,7 +627,7 @@ class EmployeeManagementController extends Controller
                 $data['service_percentage'] = 0;
                 $data['target_bonus'] = 0;
                 $data['monthly_target'] = 0;
-            }
+            } 
 
             // Debug: Log data yang akan disimpan
             \Log::info('Salary Settings Store - Data to be saved:', $data);
