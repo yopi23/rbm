@@ -110,52 +110,63 @@ class SparePartController extends Controller
 
     // FUNGSI 3: Untuk menyimpan semua perubahan dari modal
     public function bulkUpdate(Request $request)
-    {
-        $request->validate(['items' => 'required|array']);
-        $itemsData = $request->input('items');
+{
+    $request->validate(['items' => 'required|array']);
+    $itemsData = $request->input('items');
 
-        try {
-            DB::beginTransaction();
+    try {
+        DB::beginTransaction();
 
-            foreach ($itemsData as $id => $data) {
-                $sparepart = Sparepart::find($id);
-                if ($sparepart) {
-                    // 1. Pisahkan data untuk tabel spareparts
-                    $sparepartData = [
-                        'harga_beli' => $data['harga_beli'] ?? $sparepart->harga_beli,
-                        'harga_jual' => $data['harga_jual'] ?? $sparepart->harga_jual,
-                        'harga_pasang' => $data['harga_pasang'] ?? $sparepart->harga_pasang,
-                        'stok_sparepart' => $data['stok_sparepart'] ?? $sparepart->stok_sparepart,
-                    ];
-                    $sparepart->update($sparepartData);
+        foreach ($itemsData as $id => $data) {
+            $sparepart = Sparepart::find($id);
+            if ($sparepart) {
+                // 1. Update data utama sparepart
+                $sparepart->update([
+                    'harga_beli' => $data['harga_beli'] ?? $sparepart->harga_beli,
+                    'harga_jual' => $data['harga_jual'] ?? $sparepart->harga_jual,
+                    'harga_pasang' => $data['harga_pasang'] ?? $sparepart->harga_pasang,
+                    'stok_sparepart' => $data['stok_sparepart'] ?? $sparepart->stok_sparepart,
+                ]);
 
-                    // 2. Siapkan data untuk tabel harga_khususes
-                    $hargaKhususData = [
-                        'harga_toko' => $data['harga_khusus_toko'] ?? 0,
-                        'harga_satuan' => $data['harga_khusus_satuan'] ?? 0,
-                        'diskon_tipe' => $data['diskon_tipe'] ?? null,
-                        'diskon_nilai' => $data['diskon_nilai'] ?? 0,
-                    ];
+                // 2. Ambil nilai harga khusus dari data input, default ke 0 jika tidak ada
+                $hargaToko = $data['harga_khusus_toko'] ?? 0;
+                $hargaSatuan = $data['harga_khusus_satuan'] ?? 0;
+                $diskonNilai = $data['diskon_nilai'] ?? 0;
 
-                    // 3. Gunakan updateOrCreate untuk membuat atau memperbarui harga khusus
-                    // Ini akan mencari harga khusus dengan id_sp = $id,
-                    // jika ada akan di-update, jika tidak ada akan dibuat baru.
+                // 3. Cek apakah ada nilai harga khusus yang valid (lebih dari 0)
+                $hasHargaKhusus = $hargaToko > 0 || $hargaSatuan > 0 || $diskonNilai > 0;
+
+                if ($hasHargaKhusus) {
+                    // 4a. Jika ada, buat atau update data HargaKhusus
                     \App\Models\HargaKhusus::updateOrCreate(
-                        ['id_sp' => $id],
-                        $hargaKhususData
+                        ['id_sp' => $id], // Kondisi pencarian
+                        [                 // Data untuk disimpan
+                            'harga_toko' => $hargaToko,
+                            'harga_satuan' => $hargaSatuan,
+                            'diskon_tipe' => $data['diskon_tipe'] ?? null,
+                            'diskon_nilai' => $diskonNilai,
+                        ]
                     );
+                } else {
+                    // 4b. Jika tidak ada, hapus data HargaKhusus yang mungkin sudah ada
+                    // Ini memungkinkan pengguna untuk menghapus harga khusus dengan mengosongkan input
+                    $hargaKhusus = \App\Models\HargaKhusus::where('id_sp', $id)->first();
+                    if ($hargaKhusus) {
+                        $hargaKhusus->delete();
+                    }
                 }
             }
-
-            DB::commit();
-            return response()->json(['message' => 'Sebanyak ' . count($itemsData) . ' item berhasil diperbarui.']);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            \Log::error('Bulk update error: ' . $e->getMessage());
-            return response()->json(['message' => 'Terjadi kesalahan pada server: ' . $e->getMessage()], 500);
         }
+
+        DB::commit();
+        return response()->json(['message' => 'Sebanyak ' . count($itemsData) . ' item berhasil diperbarui.']);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        \Log::error('Bulk update error: ' . $e->getMessage());
+        return response()->json(['message' => 'Terjadi kesalahan pada server: ' . $e->getMessage()], 500);
     }
+}
     public function view_kategori(Request $request)
     {
         $page = "Data Kategori Sparepart";
@@ -266,86 +277,69 @@ class SparePartController extends Controller
 
     // Store Functions
     public function store_sparepart(Request $request)
-    {
-        $validate = $request->validate([
-            'nama_sparepart' => ['required'],
-            'kode_kategori' => ['required'],
-            'stok_sparepart' => ['required'],
-            'harga_beli' => ['required'],
-            'harga_jual' => ['required'],
-            'harga_pasang' => ['required'],
-        ]);
-        if ($validate) {
-            $file = $request->file('foto_sparepart');
-            $foto = $file != null ? date('Ymdhis') . $file->getClientOriginalName() : '-';
-            if ($file != null) {
-                $file->move('public/uploads/', $foto);
-            }
-            $count = Sparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get()->count();
-            $kode_sparepart = 'SP' . date('Ymdhis') . $count;
-            $create = Sparepart::create([
-                'foto_sparepart' => $foto,
-                'kode_sparepart' => $kode_sparepart,
-                'nama_sparepart' => $request->nama_sparepart,
-                'desc_sparepart' => $request->desc_sparepart,
-                'kode_kategori' => $request->kode_kategori,
-                'kode_sub_kategori' => $request->kode_sub_kategori,//sub kaegori
-                'stok_sparepart' => $request->stok_sparepart,
-                'harga_beli' => $request->harga_beli,
-                'harga_jual' => $request->harga_jual,
-                'harga_pasang' => $request->harga_pasang,
-                'kode_owner' => $this->getThisUser()->id_upline
-            ]);
+{
+    $validate = $request->validate([
+        'nama_sparepart' => ['required'],
+        'kode_kategori' => ['required'],
+        'stok_sparepart' => ['required'],
+        'harga_beli' => ['required'],
+        'harga_jual' => ['required'],
+        'harga_pasang' => ['required'],
+    ]);
 
-            if ($create) {
-                // Create Harga Khusus if provided
-                if ($request->filled('harga_khusus_toko') || $request->filled('harga_khusus_satuan') || $request->filled('diskon_nilai')) {
-                    HargaKhusus::create([
-                        'id_sp' => $create->id,
-                        'harga_toko' => $request->harga_khusus_toko,
-                        'harga_satuan' => $request->harga_khusus_satuan,
-                        'diskon_tipe' => $request->diskon_tipe,
-                        'diskon_nilai' => $request->diskon_nilai,
-                    ]);
-                }
+    if ($validate) {
+        $file = $request->file('foto_sparepart');
+        $foto = $file != null ? date('Ymdhis') . $file->getClientOriginalName() : '-';
 
-                return redirect()->route('sparepart')
-                    ->with([
-                        'success' => 'Sparepart Berhasil Ditambahkan'
-                    ]);
-            }
-            return redirect()->back()->with('error', "Oops, Something Went Wrong");
-        } else {
-            return redirect()->back()->with('error', "Validating Error, Please Fill Required Field");
+        if ($file != null) {
+            $file->move('public/uploads/', $foto);
         }
-    }
-    public function store_kategori_sparepart(Request $request)
-    {
-        $validate = $request->validate([
-            'nama_kategori' => ['required'],
+
+        $count = Sparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get()->count();
+        $kode_sparepart = 'SP' . date('Ymdhis') . $count;
+
+        $create = Sparepart::create([
+            'foto_sparepart' => $foto,
+            'kode_sparepart' => $kode_sparepart,
+            'nama_sparepart' => $request->nama_sparepart,
+            'desc_sparepart' => $request->desc_sparepart,
+            'kode_kategori' => $request->kode_kategori,
+            'kode_sub_kategori' => $request->kode_sub_kategori,
+            'stok_sparepart' => $request->stok_sparepart,
+            'harga_beli' => $request->harga_beli,
+            'harga_jual' => $request->harga_jual,
+            'harga_pasang' => $request->harga_pasang,
+            'kode_owner' => $this->getThisUser()->id_upline
         ]);
-        if ($validate) {
-            $file = $request->file('foto_kategori');
-            $foto = $file != null ? date('Ymdhis') . $file->getClientOriginalName() : '-';
-            if ($file != null) {
-                $file->move('public/uploads/', $foto);
+
+        if ($create) {
+            // MODIFIED: Check if any special price value is greater than 0
+            $hasHargaKhusus = ($request->filled('harga_khusus_toko') && $request->harga_khusus_toko > 0) ||
+                             ($request->filled('harga_khusus_satuan') && $request->harga_khusus_satuan > 0) ||
+                             ($request->filled('diskon_nilai') && $request->diskon_nilai > 0);
+
+            // Create Harga Khusus only if there is valid input
+            if ($hasHargaKhusus) {
+                HargaKhusus::create([
+                    'id_sp' => $create->id,
+                    'harga_toko' => $request->harga_khusus_toko ?? 0,
+                    'harga_satuan' => $request->harga_khusus_satuan ?? 0,
+                    'diskon_tipe' => $request->diskon_tipe,
+                    'diskon_nilai' => $request->diskon_nilai ?? 0,
+                ]);
             }
-            $create = KategoriSparepart::create([
-                'foto_kategori' => $foto,
-                'nama_kategori' => $request->nama_kategori,
-                'kode_owner' => $this->getThisUser()->id_upline
-            ]);
-            if ($create) {
-                return redirect()->route('kategori_sparepart')
-                    ->with([
-                        'success' => 'Kategori Sparepart Berhasil Ditambahkan'
-                    ]);
-            }
-            return redirect()->back()->with('error', "Oops, Something Went Wrong");
-        } else {
-            return redirect()->back()->with('error', "Validating Error, Please Fill Required Field");
+
+            return redirect()->route('sparepart')
+                ->with([
+                    'success' => 'Sparepart Berhasil Ditambahkan'
+                ]);
         }
+
+        return redirect()->back()->with('error', "Oops, Something Went Wrong");
+    } else {
+        return redirect()->back()->with('error', "Validating Error, Please Fill Required Field");
     }
+}
 
     //Edit Functions
     public function edit_sparepart(Request $request, $id)
@@ -370,63 +364,74 @@ class SparePartController extends Controller
 
     // Update Functions
     public function update_sparepart(Request $request, $id)
-    {
-        $validate = $request->validate([
-            'nama_sparepart' => ['required'],
-            'kode_kategori' => ['required'],
-            'stok_sparepart' => ['required'],
-            'harga_beli' => ['required'],
-            'harga_jual' => ['required'],
-            'harga_pasang' => ['required'],
-        ]);
-        if ($validate) {
-            $update = Sparepart::findOrFail($id);
-            $file = $request->file('foto_sparepart');
-            $foto = $file != null ? date('Ymdhis') . $file->getClientOriginalName() : $update->foto_sparepart;
-            if ($file != null) {
-                $file->move('public/uploads/', $foto);
-            }
-            $update->update([
-                'foto_sparepart' => $foto,
-                'nama_sparepart' => $request->nama_sparepart,
-                'desc_sparepart' => $request->desc_sparepart,
-                'kode_kategori' => $request->kode_kategori,
-                'kode_sub_kategori' => $request->kode_sub_kategori,
-                'stok_sparepart' => $request->stok_sparepart,
-                'harga_beli' => $request->harga_beli,
-                'harga_jual' => $request->harga_jual,
-                'harga_pasang' => $request->harga_pasang,
-            ]);
-            if ($update) {
-                // Update or create harga khusus
-                if ($request->filled('harga_khusus_toko') || $request->filled('harga_khusus_satuan') || $request->filled('diskon_nilai')) {
-                    HargaKhusus::updateOrCreate(
-                        ['id_sp' => $update->id],
-                        [
-                            'harga_toko' => $request->harga_khusus_toko,
-                            'harga_satuan' => $request->harga_khusus_satuan,
-                            'diskon_tipe' => $request->diskon_tipe,
-                            'diskon_nilai' => $request->diskon_nilai,
-                        ]
-                    );
-                } else {
-                    // If all fields are empty, delete the existing record
-                    $hargaKhusus = HargaKhusus::where('id_sp', $update->id)->first();
-                    if ($hargaKhusus) {
-                        $hargaKhusus->delete();
-                    }
-                }
+{
+    $validate = $request->validate([
+        'nama_sparepart' => ['required'],
+        'kode_kategori' => ['required'],
+        'stok_sparepart' => ['required'],
+        'harga_beli' => ['required'],
+        'harga_jual' => ['required'],
+        'harga_pasang' => ['required'],
+    ]);
 
-                return redirect()->route('sparepart')
-                    ->with([
-                        'success' => 'Sparepart Berhasil DiUpdate'
-                    ]);
-            }
-            return redirect()->back()->with('error', "Oops, Something Went Wrong");
-        } else {
-            return redirect()->back()->with('error', "Validating Error, Please Fill Required Field");
+    if ($validate) {
+        $update = Sparepart::findOrFail($id);
+        $file = $request->file('foto_sparepart');
+        $foto = $file != null ? date('Ymdhis') . $file->getClientOriginalName() : $update->foto_sparepart;
+
+        if ($file != null) {
+            $file->move('public/uploads/', $foto);
         }
+
+        $update->update([
+            'foto_sparepart' => $foto,
+            'nama_sparepart' => $request->nama_sparepart,
+            'desc_sparepart' => $request->desc_sparepart,
+            'kode_kategori' => $request->kode_kategori,
+            'kode_sub_kategori' => $request->kode_sub_kategori,
+            'stok_sparepart' => $request->stok_sparepart,
+            'harga_beli' => $request->harga_beli,
+            'harga_jual' => $request->harga_jual,
+            'harga_pasang' => $request->harga_pasang,
+        ]);
+
+        if ($update) {
+            // MODIFIED: Check if any special price value is greater than 0
+            $hasHargaKhusus = ($request->filled('harga_khusus_toko') && $request->harga_khusus_toko > 0) ||
+                             ($request->filled('harga_khusus_satuan') && $request->harga_khusus_satuan > 0) ||
+                             ($request->filled('diskon_nilai') && $request->diskon_nilai > 0);
+
+            if ($hasHargaKhusus) {
+                // Update or create special price only if there is valid input
+                HargaKhusus::updateOrCreate(
+                    ['id_sp' => $update->id],
+                    [
+                        'harga_toko' => $request->harga_khusus_toko ?? 0,
+                        'harga_satuan' => $request->harga_khusus_satuan ?? 0,
+                        'diskon_tipe' => $request->diskon_tipe,
+                        'diskon_nilai' => $request->diskon_nilai ?? 0,
+                    ]
+                );
+            } else {
+                // If special price fields are empty or 0, delete the existing record
+                $hargaKhusus = HargaKhusus::where('id_sp', $update->id)->first();
+                if ($hargaKhusus) {
+                    $hargaKhusus->delete();
+                }
+            }
+
+            return redirect()->route('sparepart')
+                ->with([
+                    'success' => 'Sparepart Berhasil DiUpdate'
+                ]);
+        }
+
+        return redirect()->back()->with('error', "Oops, Something Went Wrong");
+    } else {
+        return redirect()->back()->with('error', "Validating Error, Please Fill Required Field");
     }
+}
+
     public function update_kategori_sparepart(Request $request, $id)
     {
         $validate = $request->validate([
@@ -738,6 +743,7 @@ class SparePartController extends Controller
         $sparepart = Sparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
         return view('admin.forms.sparepart_rusak', compact(['page', 'sparepart', 'data']));
     }
+
     public function store_sparepart_rusak(Request $request)
     {
         $data_barang = Sparepart::findOrFail($request->kode_barang);
@@ -768,6 +774,7 @@ class SparePartController extends Controller
         }
         return redirect()->route('stok_sparepart')->with('error', "Oops, Something Went Wrong");
     }
+
     public function update_sparepart_rusak(Request $request, $id)
     {
 
