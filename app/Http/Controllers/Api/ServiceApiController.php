@@ -1943,4 +1943,516 @@ public function getDailyReportGrouped(Request $request)
     }
 }
 
+public function searchServiceExtended(Request $request)
+    {
+        try {
+            $search = $request->input('search');
+            $page = $request->get('page', 1);
+            $limit = min($request->get('limit', 20), 50);
+            $status = $request->get('status'); // Optional status filter
+            $technician_id = $request->get('technician_id'); // Optional technician filter
+            $sort_by = $request->get('sort_by', 'created_at'); // created_at, tgl_service, updated_at
+            $sort_order = $request->get('sort_order', 'desc'); // asc, desc
+
+            // Validation
+            if (empty($search) || strlen($search) < 2) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Kata kunci pencarian minimal 2 karakter.',
+                    'data' => [],
+                    'pagination' => null
+                ], 400);
+            }
+
+            // Calculate date range: current year + last 3 months of previous year
+            $currentYear = date('Y');
+            $previousYear = $currentYear - 1;
+
+            // Start from October 1st of previous year (last 3 months)
+            $dateFrom = Carbon::create($previousYear, 10, 1)->startOfDay();
+            // End at December 31st of current year
+            $dateTo = Carbon::create($currentYear, 12, 31)->endOfDay();
+
+            $cacheKey = "search_extended_{$this->getThisUser()->id_upline}_" .
+                    md5($search . $page . $limit . $status . $technician_id . $sort_by . $sort_order);
+
+            $result = Cache::remember($cacheKey, 300, function () use (
+                $search, $page, $limit, $status, $technician_id, $sort_by, $sort_order, $dateFrom, $dateTo
+            ) {
+                $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+                    ->whereBetween('sevices.created_at', [$dateFrom, $dateTo])
+                    ->leftJoin('users', 'sevices.id_teknisi', '=', 'users.id')
+                    ->select(
+                        'sevices.*',
+                        'users.name as teknisi',
+                        DB::raw('CASE
+                            WHEN sevices.created_at >= "' . date('Y-01-01') . '" THEN "current_year"
+                            ELSE "previous_year_last_quarter"
+                        END as period_category')
+                    );
+
+                // Enhanced search conditions
+                $query->where(function ($q) use ($search) {
+                    // Search by customer name (primary)
+                    $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
+                    // Search by device type
+                    ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
+                    // Search by service code
+                    ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
+                    // Search by phone number (if exists in your schema)
+                    ->orWhere('sevices.no_telp', 'LIKE', "%$search%")
+                    // Search by description/problem
+                    ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
+                    // Search by address (if exists)
+                    // ->orWhere('sevices.alamat', 'LIKE', "%$search%");
+                });
+
+                // Apply filters
+                if ($status) {
+                    $query->where('sevices.status_services', $status);
+                }
+
+                if ($technician_id) {
+                    $query->where('sevices.id_teknisi', $technician_id);
+                }
+
+                // Validate sort column
+                $allowedSortColumns = ['created_at', 'tgl_service', 'updated_at', 'total_biaya', 'nama_pelanggan'];
+                if (!in_array($sort_by, $allowedSortColumns)) {
+                    $sort_by = 'created_at';
+                }
+
+                $sort_order = in_array(strtolower($sort_order), ['asc', 'desc']) ? $sort_order : 'desc';
+
+                $totalCount = $query->count();
+
+                $services = $query->orderBy("sevices.{$sort_by}", $sort_order)
+                                ->orderBy('sevices.id', 'desc') // Secondary sort for consistency
+                                ->offset(($page - 1) * $limit)
+                                ->limit($limit)
+                                ->get();
+
+                // Enhance results with additional data
+                $services = $services->map(function ($service) {
+                    // Check warranty status
+                    $warranty = Garansi::where('kode_garansi', $service->kode_service)
+                        ->where('type_garansi', 'service')
+                        ->first();
+
+                    $service->warranty_info = null;
+                    if ($warranty) {
+                        $service->warranty_info = [
+                            'exists' => true,
+                            'expiry_date' => $warranty->tgl_exp_garansi,
+                            'status' => $this->getWarrantyStatus($warranty->tgl_exp_garansi),
+                            'days_remaining' => now()->diffInDays($warranty->tgl_exp_garansi, false)
+                        ];
+                    } else {
+                        $service->warranty_info = ['exists' => false];
+                    }
+
+                    // Count parts used
+                    $service->parts_count = [
+                        'toko' => DetailPartServices::where('kode_services', $service->id)->count(),
+                        'luar' => DetailPartLuarService::where('kode_services', $service->id)->count()
+                    ];
+
+                    // Check if has notes
+                    $service->has_notes = DetailCatatanService::where('kode_services', $service->id)->exists();
+
+                    // Calculate payment status
+                    $totalBiaya = (float) $service->total_biaya;
+                    $dp = (float) $service->dp;
+                    $sisaBayar = $totalBiaya - $dp;
+
+                    $service->payment_info = [
+                        'total_biaya' => $totalBiaya,
+                        'dp_paid' => $dp,
+                        'remaining' => $sisaBayar,
+                        'is_fully_paid' => $sisaBayar <= 0 || $service->status_services === 'Diambil',
+                        'payment_percentage' => $totalBiaya > 0 ? round(($dp / $totalBiaya) * 100, 2) : 0
+                    ];
+
+                    // Calculate service duration (if completed)
+                    if ($service->status_services === 'Selesai' && $service->tgl_service) {
+                        $service->completion_time = [
+                            'hours' => Carbon::parse($service->created_at)
+                                    ->diffInHours(Carbon::parse($service->tgl_service)),
+                            'days' => Carbon::parse($service->created_at)
+                                ->diffInDays(Carbon::parse($service->tgl_service))
+                        ];
+                    }
+
+                    return $service;
+                });
+
+                return [
+                    'data' => $services,
+                    'pagination' => [
+                        'current_page' => (int) $page,
+                        'per_page' => (int) $limit,
+                        'total' => (int) $totalCount,
+                        'total_pages' => ceil($totalCount / $limit),
+                        'has_next_page' => $page < ceil($totalCount / $limit),
+                        'has_previous_page' => $page > 1,
+                    ]
+                ];
+            });
+
+            // Generate search statistics
+            $searchStats = $this->generateSearchStatistics($search, $dateFrom, $dateTo);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Ditemukan {$result['pagination']['total']} layanan yang cocok dengan pencarian.",
+                'data' => $result['data'],
+                'pagination' => $result['pagination'],
+                'search_info' => [
+                    'query' => $search,
+                    'period' => [
+                        'from' => $dateFrom->format('Y-m-d'),
+                        'to' => $dateTo->format('Y-m-d'),
+                        'description' => "Tahun {$currentYear} dan 3 bulan terakhir tahun " . ($currentYear - 1)
+                    ],
+                    'filters' => [
+                        'status' => $status,
+                        'technician_id' => $technician_id,
+                        'sort_by' => $sort_by,
+                        'sort_order' => $sort_order
+                    ]
+                ],
+                'statistics' => $searchStats
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error("Search Service Extended Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan saat melakukan pencarian: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate search statistics for the extended search
+     */
+    private function generateSearchStatistics($search, $dateFrom, $dateTo)
+    {
+        try {
+            $baseQuery = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+                ->whereBetween('created_at', [$dateFrom, $dateTo]);
+
+            // Search results breakdown
+            $searchQuery = clone $baseQuery;
+            $searchQuery->where(function ($q) use ($search) {
+                $q->where('nama_pelanggan', 'LIKE', "%$search%")
+                ->orWhere('type_unit', 'LIKE', "%$search%")
+                ->orWhere('kode_service', 'LIKE', "%$search%")
+                ->orWhere('no_hp', 'LIKE', "%$search%")
+                ->orWhere('keterangan', 'LIKE', "%$search%")
+                ->orWhere('alamat', 'LIKE', "%$search%");
+            });
+
+            $totalMatches = $searchQuery->count();
+
+            // Status breakdown
+            $statusBreakdown = $searchQuery
+                ->selectRaw('status_services, COUNT(*) as count')
+                ->groupBy('status_services')
+                ->pluck('count', 'status_services')
+                ->toArray();
+
+            // Period breakdown
+            $currentYear = date('Y');
+            $currentYearCount = clone $searchQuery;
+            $currentYearCount = $currentYearCount->whereYear('created_at', $currentYear)->count();
+
+            $previousYearCount = $totalMatches - $currentYearCount;
+
+            // Device type breakdown
+            $deviceTypeBreakdown = $searchQuery
+                ->selectRaw('type_unit, COUNT(*) as count')
+                ->groupBy('type_unit')
+                ->orderByDesc('count')
+                ->limit(5)
+                ->pluck('count', 'type_unit')
+                ->toArray();
+
+            // Average service value in search results
+            $avgServiceValue = $searchQuery->where('status_services', 'Selesai')
+                ->avg('total_biaya');
+
+            return [
+                'total_matches' => $totalMatches,
+                'period_breakdown' => [
+                    'current_year' => $currentYearCount,
+                    'previous_year_last_quarter' => $previousYearCount
+                ],
+                'status_breakdown' => $statusBreakdown,
+                'top_device_types' => $deviceTypeBreakdown,
+                'average_service_value' => round($avgServiceValue ?? 0, 2),
+                'search_scope' => [
+                    'total_services_in_period' => $baseQuery->count(),
+                    'match_percentage' => $baseQuery->count() > 0 ?
+                        round(($totalMatches / $baseQuery->count()) * 100, 2) : 0
+                ]
+            ];
+
+        } catch (\Exception $e) {
+            Log::error("Generate Search Statistics Error: " . $e->getMessage());
+            return [
+                'total_matches' => 0,
+                'error' => 'Unable to generate statistics'
+            ];
+        }
+    }
+
+    /**
+     * Quick search for autocomplete suggestions
+     */
+    public function quickSearchSuggestions(Request $request)
+    {
+        try {
+            $search = $request->input('q', '');
+            $limit = min($request->get('limit', 10), 20);
+
+            if (strlen($search) < 2) {
+                return response()->json([
+                    'success' => true,
+                    'suggestions' => []
+                ]);
+            }
+
+            // Calculate the same date range as extended search
+            $currentYear = date('Y');
+            $previousYear = $currentYear - 1;
+            $dateFrom = Carbon::create($previousYear, 10, 1)->startOfDay();
+            $dateTo = Carbon::create($currentYear, 12, 31)->endOfDay();
+
+            $cacheKey = "quick_search_{$this->getThisUser()->id_upline}_" . md5($search . $limit);
+
+            $suggestions = Cache::remember($cacheKey, 180, function () use ($search, $limit, $dateFrom, $dateTo) {
+                // Customer names
+                $customerSuggestions = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+                    ->whereBetween('created_at', [$dateFrom, $dateTo])
+                    ->where('nama_pelanggan', 'LIKE', "%$search%")
+                    ->distinct()
+                    ->limit($limit)
+                    ->pluck('nama_pelanggan')
+                    ->map(function ($name) {
+                        return ['type' => 'customer', 'value' => $name, 'label' => "Pelanggan: {$name}"];
+                    });
+
+                // Device types
+                $deviceSuggestions = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+                    ->whereBetween('created_at', [$dateFrom, $dateTo])
+                    ->where('type_unit', 'LIKE', "%$search%")
+                    ->distinct()
+                    ->limit($limit)
+                    ->pluck('type_unit')
+                    ->map(function ($device) {
+                        return ['type' => 'device', 'value' => $device, 'label' => "Perangkat: {$device}"];
+                    });
+
+                // Service codes (exact match priority)
+                $serviceCodes = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+                    ->whereBetween('created_at', [$dateFrom, $dateTo])
+                    ->where('kode_service', 'LIKE', "%$search%")
+                    ->limit($limit)
+                    ->pluck('kode_service')
+                    ->map(function ($code) {
+                        return ['type' => 'service_code', 'value' => $code, 'label' => "Kode: {$code}"];
+                    });
+
+                return $customerSuggestions->concat($deviceSuggestions)
+                                        ->concat($serviceCodes)
+                                        ->take($limit)
+                                        ->values();
+            });
+
+            return response()->json([
+                'success' => true,
+                'suggestions' => $suggestions
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Quick Search Suggestions Error: " . $e->getMessage());
+            return response()->json([
+                'success' => true,
+                'suggestions' => []
+            ]);
+        }
+    }
+
+    /**
+     * Advanced search with multiple criteria
+     */
+    public function advancedSearchServices(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'customer_name' => 'nullable|string|min:2',
+                'device_type' => 'nullable|string|min:2',
+                'phone_number' => 'nullable|string|min:3',
+                'service_code' => 'nullable|string',
+                'status' => 'nullable|in:Antri,Proses,Selesai,Diambil,Batal',
+                'technician_id' => 'nullable|integer|exists:users,id',
+                'date_from' => 'nullable|date',
+                'date_to' => 'nullable|date|after_or_equal:date_from',
+                'min_amount' => 'nullable|numeric|min:0',
+                'max_amount' => 'nullable|numeric|min:0',
+                'has_warranty' => 'nullable|boolean',
+                'payment_status' => 'nullable|in:paid,partial,unpaid',
+                'page' => 'nullable|integer|min:1',
+                'limit' => 'nullable|integer|min:1|max:100'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $filters = $request->only([
+                'customer_name', 'device_type', 'phone_number', 'service_code',
+                'status', 'technician_id', 'date_from', 'date_to',
+                'min_amount', 'max_amount', 'has_warranty', 'payment_status'
+            ]);
+
+            $page = $request->get('page', 1);
+            $limit = min($request->get('limit', 20), 100);
+
+            // If no date range specified, use the extended range
+            if (!$filters['date_from'] && !$filters['date_to']) {
+                $currentYear = date('Y');
+                $previousYear = $currentYear - 1;
+                $filters['date_from'] = Carbon::create($previousYear, 10, 1)->format('Y-m-d');
+                $filters['date_to'] = Carbon::create($currentYear, 12, 31)->format('Y-m-d');
+            }
+
+            $cacheKey = "advanced_search_{$this->getThisUser()->id_upline}_" . md5(serialize($filters) . $page . $limit);
+
+            $result = Cache::remember($cacheKey, 300, function () use ($filters, $page, $limit) {
+                $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+                    ->leftJoin('users', 'sevices.id_teknisi', '=', 'users.id')
+                    ->select('sevices.*', 'users.name as teknisi');
+
+                // Apply filters
+                if (!empty($filters['customer_name'])) {
+                    $query->where('sevices.nama_pelanggan', 'LIKE', '%' . $filters['customer_name'] . '%');
+                }
+
+                if (!empty($filters['device_type'])) {
+                    $query->where('sevices.type_unit', 'LIKE', '%' . $filters['device_type'] . '%');
+                }
+
+                if (!empty($filters['phone_number'])) {
+                    $query->where('sevices.no_hp', 'LIKE', '%' . $filters['phone_number'] . '%');
+                }
+
+                if (!empty($filters['service_code'])) {
+                    $query->where('sevices.kode_service', 'LIKE', '%' . $filters['service_code'] . '%');
+                }
+
+                if (!empty($filters['status'])) {
+                    $query->where('sevices.status_services', $filters['status']);
+                }
+
+                if (!empty($filters['technician_id'])) {
+                    $query->where('sevices.id_teknisi', $filters['technician_id']);
+                }
+
+                if (!empty($filters['date_from'])) {
+                    $query->whereDate('sevices.created_at', '>=', $filters['date_from']);
+                }
+
+                if (!empty($filters['date_to'])) {
+                    $query->whereDate('sevices.created_at', '<=', $filters['date_to']);
+                }
+
+                if (!empty($filters['min_amount'])) {
+                    $query->where('sevices.total_biaya', '>=', $filters['min_amount']);
+                }
+
+                if (!empty($filters['max_amount'])) {
+                    $query->where('sevices.total_biaya', '<=', $filters['max_amount']);
+                }
+
+                // Warranty filter
+                if (isset($filters['has_warranty'])) {
+                    if ($filters['has_warranty']) {
+                        $query->whereExists(function ($q) {
+                            $q->select(DB::raw(1))
+                            ->from('garansis')
+                            ->whereRaw('garansis.kode_garansi = sevices.kode_service')
+                            ->where('garansis.type_garansi', 'service');
+                        });
+                    } else {
+                        $query->whereNotExists(function ($q) {
+                            $q->select(DB::raw(1))
+                            ->from('garansis')
+                            ->whereRaw('garansis.kode_garansi = sevices.kode_service')
+                            ->where('garansis.type_garansi', 'service');
+                        });
+                    }
+                }
+
+                // Payment status filter
+                if (!empty($filters['payment_status'])) {
+                    switch ($filters['payment_status']) {
+                        case 'paid':
+                            $query->whereRaw('sevices.dp >= sevices.total_biaya')
+                                ->orWhere('sevices.status_services', 'Diambil');
+                            break;
+                        case 'partial':
+                            $query->whereRaw('sevices.dp > 0 AND sevices.dp < sevices.total_biaya')
+                                ->where('sevices.status_services', '!=', 'Diambil');
+                            break;
+                        case 'unpaid':
+                            $query->whereRaw('sevices.dp = 0 OR sevices.dp IS NULL')
+                                ->where('sevices.status_services', '!=', 'Diambil');
+                            break;
+                    }
+                }
+
+                $totalCount = $query->count();
+                $services = $query->orderBy('sevices.created_at', 'desc')
+                                ->offset(($page - 1) * $limit)
+                                ->limit($limit)
+                                ->get();
+
+                return [
+                    'data' => $services,
+                    'total_count' => $totalCount,
+                    'pagination' => [
+                        'current_page' => (int) $page,
+                        'per_page' => (int) $limit,
+                        'total' => (int) $totalCount,
+                        'total_pages' => ceil($totalCount / $limit),
+                    ]
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => "Pencarian advanced menghasilkan {$result['total_count']} layanan.",
+                'data' => $result['data'],
+                'pagination' => $result['pagination'],
+                'filters_applied' => array_filter($filters),
+                'search_info' => [
+                    'is_extended_period' => !$request->has('date_from') && !$request->has('date_to'),
+                    'period_description' => 'Tahun ini dan 3 bulan terakhir tahun sebelumnya'
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Advanced Search Services Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan saat pencarian advanced: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 } // End of ServiceApiController class

@@ -84,6 +84,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/services/completedAll', [ServiceApiController::class, 'getCompletedservice']);
     Route::get('/services/{serviceId}/status', [ServiceApiController::class, 'checkServiceStatus']);
     Route::get('/services/indicators', [SparepartApiController::class, 'getServiceIndicators']); // Check if this should be in ServiceApiController
+    Route::get('/services/search-extended', [ServiceApiController::class, 'searchServiceExtended']);
+    Route::get('/services/quick-search', [ServiceApiController::class, 'quickSearchSuggestions']);
+    Route::post('/services/advanced-search', [ServiceApiController::class, 'advancedSearchServices']);
 
 
     // **ROUTE PENTING DARI FILE LAMA - JANGAN DIHAPUS**
@@ -258,55 +261,55 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // **ROUTE CUSTOMER PREFIX DARI FILE LAMA - DILUAR MIDDLEWARE (JANGAN DIHAPUS)**
 // Ini untuk akses customer tanpa auth jika diperlukan
-Route::prefix('customer')->group(function () {
-    Route::get('/', [CustomerApiController::class, 'index']);
-    Route::post('/', [CustomerApiController::class, 'store']);
-    Route::get('/{id}', [CustomerApiController::class, 'show']);
-    Route::put('/{id}', [CustomerApiController::class, 'update']);
-    Route::delete('/{id}', [CustomerApiController::class, 'destroy']);
-    Route::get('/status/{status}', [CustomerApiController::class, 'getByStatus']);
-    Route::post('/search', [CustomerApiController::class, 'search']);
-    Route::get('/generate-kode', [CustomerApiController::class, 'getNewKodeToko']);
-});
+// Route::prefix('customer')->group(function () {
+//     Route::get('/', [CustomerApiController::class, 'index']);
+//     Route::post('/', [CustomerApiController::class, 'store']);
+//     Route::get('/{id}', [CustomerApiController::class, 'show']);
+//     Route::put('/{id}', [CustomerApiController::class, 'update']);
+//     Route::delete('/{id}', [CustomerApiController::class, 'destroy']);
+//     Route::get('/status/{status}', [CustomerApiController::class, 'getByStatus']);
+//     Route::post('/search', [CustomerApiController::class, 'search']);
+//     Route::get('/generate-kode', [CustomerApiController::class, 'getNewKodeToko']);
+// });
 
 // **ROUTE ORDERS DARI FILE LAMA - DILUAR GRUP (JANGAN DIHAPUS)**
 // Additional orders routes with specific middleware
-Route::prefix('orders')->middleware(['auth:sanctum'])->group(function () {
-    Route::get('/', [OrderApiController::class, 'getOrders']);
-    Route::get('/recent', [OrderApiController::class, 'getRecentOrders']);
-    Route::get('/summary', [OrderApiController::class, 'getOrdersSummary']);
-    Route::get('/{id}', [OrderApiController::class, 'getOrderDetail']);
-    Route::get('/{id}/low-stock-items', [OrderApiController::class, 'getLowStockItems']);
-    Route::get('/search/spareparts', [OrderApiController::class, 'searchSpareparts']);
-    Route::post('/', [OrderApiController::class, 'createOrder']);
-    Route::put('/{id}', [OrderApiController::class, 'updateOrder']);
-    Route::post('/{id}/finalize', [OrderApiController::class, 'finalizeOrder']);
-    Route::post('/{id}/items', [OrderApiController::class, 'addOrderItem']);
-    Route::post('/{id}/items/multiple', [OrderApiController::class, 'addMultipleItems']);
-    Route::delete('/items/{itemId}', [OrderApiController::class, 'removeOrderItem']);
-});
+// Route::prefix('orders')->middleware(['auth:sanctum'])->group(function () {
+//     Route::get('/', [OrderApiController::class, 'getOrders']);
+//     Route::get('/recent', [OrderApiController::class, 'getRecentOrders']);
+//     Route::get('/summary', [OrderApiController::class, 'getOrdersSummary']);
+//     Route::get('/{id}', [OrderApiController::class, 'getOrderDetail']);
+//     Route::get('/{id}/low-stock-items', [OrderApiController::class, 'getLowStockItems']);
+//     Route::get('/search/spareparts', [OrderApiController::class, 'searchSpareparts']);
+//     Route::post('/', [OrderApiController::class, 'createOrder']);
+//     Route::put('/{id}', [OrderApiController::class, 'updateOrder']);
+//     Route::post('/{id}/finalize', [OrderApiController::class, 'finalizeOrder']);
+//     Route::post('/{id}/items', [OrderApiController::class, 'addOrderItem']);
+//     Route::post('/{id}/items/multiple', [OrderApiController::class, 'addMultipleItems']);
+//     Route::delete('/items/{itemId}', [OrderApiController::class, 'removeOrderItem']);
+// });
 
 // **ROUTE STOCK OPNAME DARI FILE LAMA - DILUAR GRUP (JANGAN DIHAPUS)**
 // Additional stock opname routes with specific middleware
-Route::prefix('stock-opname')->middleware(['auth:sanctum'])->group(function () {
-    Route::get('/periods', [StockOpnameController::class, 'getPeriods']);
-    Route::get('/periods/{id}', [StockOpnameController::class, 'getPeriodDetail']);
-    Route::post('/periods', [StockOpnameController::class, 'createPeriod']);
-    Route::put('/periods/{id}/start', [StockOpnameController::class, 'startProcess']);
-    Route::put('/periods/{id}/complete', [StockOpnameController::class, 'completePeriod']);
-    Route::put('/periods/{id}/cancel', [StockOpnameController::class, 'cancelPeriod']);
-    Route::get('/periods/{id}/pending-items', [StockOpnameController::class, 'getPendingItems']);
-    Route::get('/periods/{id}/checked-items', [StockOpnameController::class, 'getCheckedItems']);
-    Route::post('/periods/{id}/scan', [StockOpnameController::class, 'scanSparepart']);
-    Route::post('/periods/{periodId}/items/{detailId}/check', [StockOpnameController::class, 'saveItemCheck']);
-    Route::get('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'getAdjustmentDetail']);
-    Route::post('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'saveAdjustment']);
-    Route::post('/periods/{periodId}/add-new-item', [StockOpnameController::class, 'addNewItem']);
-    Route::get('/periods/{id}/report', [StockOpnameController::class, 'getReport']);
-    Route::get('/periods/{id}/items-with-selisih', [StockOpnameController::class, 'getItemsWithSelisih']);
-    Route::get('/categories', [StockOpnameController::class, 'getCategories']);
-    Route::get('/suppliers', [StockOpnameController::class, 'getSuppliers']);
-});
+// Route::prefix('stock-opname')->middleware(['auth:sanctum'])->group(function () {
+//     Route::get('/periods', [StockOpnameController::class, 'getPeriods']);
+//     Route::get('/periods/{id}', [StockOpnameController::class, 'getPeriodDetail']);
+//     Route::post('/periods', [StockOpnameController::class, 'createPeriod']);
+//     Route::put('/periods/{id}/start', [StockOpnameController::class, 'startProcess']);
+//     Route::put('/periods/{id}/complete', [StockOpnameController::class, 'completePeriod']);
+//     Route::put('/periods/{id}/cancel', [StockOpnameController::class, 'cancelPeriod']);
+//     Route::get('/periods/{id}/pending-items', [StockOpnameController::class, 'getPendingItems']);
+//     Route::get('/periods/{id}/checked-items', [StockOpnameController::class, 'getCheckedItems']);
+//     Route::post('/periods/{id}/scan', [StockOpnameController::class, 'scanSparepart']);
+//     Route::post('/periods/{periodId}/items/{detailId}/check', [StockOpnameController::class, 'saveItemCheck']);
+//     Route::get('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'getAdjustmentDetail']);
+//     Route::post('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'saveAdjustment']);
+//     Route::post('/periods/{periodId}/add-new-item', [StockOpnameController::class, 'addNewItem']);
+//     Route::get('/periods/{id}/report', [StockOpnameController::class, 'getReport']);
+//     Route::get('/periods/{id}/items-with-selisih', [StockOpnameController::class, 'getItemsWithSelisih']);
+//     Route::get('/categories', [StockOpnameController::class, 'getCategories']);
+//     Route::get('/suppliers', [StockOpnameController::class, 'getSuppliers']);
+// });
 
 // Public routes (no authentication required)
 Route::get('/spareparts/cari', [SalesApiController::class, 'cari']); // Example public search
