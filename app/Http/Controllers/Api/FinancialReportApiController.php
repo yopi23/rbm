@@ -213,7 +213,7 @@ class FinancialReportApiController extends Controller
             // Total profit penjualan = penjualan eksternal + penjualan internal (part toko)
             $totalPenjualanProfit = $totalSalesProfit + $totalPartTokoProfit;
 
-            $totalGrossProfit = $totalServiceProfit + $totalPenjualanProfit + $totalCashInOther;
+            $totalGrossProfit = $totalServiceProfit + $totalPenjualanProfit ;
             $totalOperatingExpenses = $totalCashOutStore + $totalCashOutOperational;
             $netBusinessProfit = $totalGrossProfit - $totalOperatingExpenses;
 
@@ -2101,4 +2101,6 @@ class FinancialReportApiController extends Controller
             ], 500);
         }
     }
+
+    
 }
