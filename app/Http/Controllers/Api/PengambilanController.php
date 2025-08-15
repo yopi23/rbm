@@ -82,7 +82,12 @@ class PengambilanController extends Controller
             $request->id_kategorilaci,
             $request->total_bayar,
             null,
-            $keterangan
+            $keterangan,
+            'Pengambilan',
+            $pengambilan->id,
+            $Sevices->kode_service
+
+
         );
 
         // Ambil data service yang terkait

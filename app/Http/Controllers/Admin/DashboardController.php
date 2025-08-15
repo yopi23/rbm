@@ -346,19 +346,21 @@ class DashboardController extends Controller
             return redirect()->back()->with('error', 'Tambah Service Gagal, Ada Kendala Teknis');
         }
     }
+
     public function create_service_api(Request $request)
     {
-        // Validasi input tanpa 'kode_service'
+        // --- PERBAIKAN 1: Tambahkan validasi untuk id_kategorilaci ---
         $validate = $request->validate([
-            'tgl_service' => ['nullable'],
-            'nama_pelanggan' => ['nullable', 'string'],
+            'tgl_service' => ['nullable', 'date'],
+            'nama_pelanggan' => ['required', 'string'],
             'no_telp' => ['nullable', 'string'],
-            'type_unit' => ['nullable', 'string'],
+            'type_unit' => ['required', 'string'],
             'keterangan' => ['nullable', 'string'],
-            'biaya_servis' => ['nullable', 'numeric'],
-            'dp' => ['nullable', 'numeric'],
+            'biaya_servis' => ['required', 'numeric', 'min:0'],
+            'dp' => ['nullable', 'numeric', 'min:0'],
             'kode_sparepart' => ['nullable', 'array'],
             'qty_kode_sparepart' => ['nullable', 'array'],
+            'id_kategorilaci' => ['required_with:dp|integer'], // Wajib diisi jika ada DP
         ]);
 
         if ($validate) {
@@ -372,17 +374,35 @@ class DashboardController extends Controller
                 'nama_pelanggan' => $request->nama_pelanggan,
                 'no_telp' => $request->no_telp,
                 'type_unit' => $request->type_unit,
-                'keterangan' => $request->ket,
+                // 'keterangan' => $request->ket, // Kemungkinan typo, harusnya $request->keterangan
+                'keterangan' => $request->keterangan,
                 'total_biaya' => $request->biaya_servis,
-                'dp' => $request->dp,
+                'dp' => $request->dp ?? 0, // Pastikan ada nilai default jika dp null
                 'status_services' => 'Antri',
-                'kode_owner' => 2
+                'kode_owner' => $this->getThisUser()->id_upline // Menggunakan user yang terautentikasi
             ]);
 
             if ($create) {
-                if ($request->kode_sparepart != null) {
-                    $data_service = modelServices::where([['kode_service', '=', $kode_service]])->first();
+                // --- PERBAIKAN 2: Logika pencatatan ke histori laci ---
+                $dpAmount = $request->dp ?? 0;
+                if ($dpAmount > 0) {
+                    $kategoriId = $request->input('id_kategorilaci');
+                    $keterangan = "DP Service: " . $kode_service . " - a/n " . $request->nama_pelanggan;
 
+                    // Memanggil fungsi dari trait untuk mencatat histori
+                    $this->recordLaciHistory(
+                        $kategoriId,
+                        $dpAmount,
+                        null,
+                        $keterangan,
+
+                    );
+                }
+                // --- AKHIR PERBAIKAN ---
+
+                if ($request->kode_sparepart != null) {
+                    // ... (Logika penambahan sparepart Anda tetap sama)
+                    $data_service = modelServices::where('kode_service', $kode_service)->first();
                     for ($i = 0; $i < count($request->kode_sparepart); $i++) {
                         if ($request['kode_sparepart'][$i] != null) {
                             $update_sparepart = Sparepart::findOrFail($request['kode_sparepart'][$i]);
@@ -392,13 +412,10 @@ class DashboardController extends Controller
                                 'detail_modal_part_service' => $update_sparepart->harga_beli,
                                 'detail_harga_part_service' => $update_sparepart->harga_jual,
                                 'qty_part' => $request['qty_kode_sparepart'][$i],
-                                'user_input' => 1,
+                                'user_input' => auth()->user()->id, // Menggunakan user yang terautentikasi
                             ]);
-
                             $stok_baru = $update_sparepart->stok_sparepart - $request['qty_kode_sparepart'][$i];
-                            $update_sparepart->update([
-                                'stok_sparepart' => $stok_baru,
-                            ]);
+                            $update_sparepart->update(['stok_sparepart' => $stok_baru]);
                         }
                     }
                 }
@@ -406,19 +423,14 @@ class DashboardController extends Controller
                 return response()->json([
                     'status' => 'success',
                     'message' => 'Tambah Service Berhasil',
+                    'data' => $create // Mengembalikan data service yang baru dibuat
                 ], 200);
             }
 
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Tambah Service Gagal, Ada Kendala Teknis',
-            ], 500);
+            return response()->json(['status' => 'error', 'message' => 'Tambah Service Gagal, Ada Kendala Teknis'], 500);
         }
 
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Validasi Gagal',
-        ], 400);
+        return response()->json(['status' => 'error', 'message' => 'Validasi Gagal', 'errors' => $validate->errors()], 422);
     }
 
     private function generateKodeService()

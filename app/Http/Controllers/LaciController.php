@@ -61,6 +61,7 @@ class LaciController extends Controller
                     'history_laci.masuk',
                     'history_laci.keluar',
                     'history_laci.keterangan',
+
                     'history_laci.created_at',
                     'history_laci.updated_at',
                     'kategori_lacis.name_laci'
@@ -82,7 +83,7 @@ class LaciController extends Controller
                     ['profit_presentases.updated_at', '<=', $request->tgl_akhir . ' 23:59:59']
                 ])
                 ->get();
-                
+
             $penarikan = DB::table('penarikans')
                 ->join('users', 'users.id', '=', 'penarikans.kode_user')
                 ->join('user_details', 'user_details.kode_user', '=', 'penarikans.kode_user')
@@ -130,6 +131,9 @@ class LaciController extends Controller
                     'history_laci.masuk',
                     'history_laci.keluar',
                     'history_laci.keterangan',
+                    'history_laci.reference_type',
+                    'history_laci.reference_id',
+                    'history_laci.reference_code',
                     'history_laci.created_at',
                     'history_laci.updated_at',
                     'kategori_lacis.name_laci'

@@ -21,8 +21,10 @@
         @endphp
         @foreach ($detailsparepart as $detailpart)
             @php
-                $totalitem += $detailpart->qty_sparepart;
-                $total_part_penjualan += $detailpart->detail_harga_jual * $detailpart->qty_sparepart;
+                $hargajual = (float) $detailpart->detail_harga_jual;
+                $qty = (int) $detailpart->qty_sparepart;
+                $totalitem += $qty;
+                $total_part_penjualan += $hargajual * $qty;
             @endphp
         @endforeach
         <div class="input-group my-2">

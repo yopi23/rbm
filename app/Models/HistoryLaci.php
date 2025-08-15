@@ -17,7 +17,10 @@ class HistoryLaci extends Model
         'id_kategori',
         'masuk',
         'keluar',
-        'keterangan'
+        'keterangan',
+        'reference_type',
+        'reference_id',
+        'reference_code'
     ];
 
     // Jika Anda menggunakan timestamps

@@ -13,6 +13,7 @@ use App\Models\Garansi;
 use App\Models\SalarySetting;
 use App\Models\ProfitPresentase;
 use App\Models\HargaKhusus;
+use App\Traits\KategoriLaciTrait;
 use App\Models\User; // Ensure User model is imported for teknisi name
 use App\Models\UserDetail; // Ensure UserDetail model is imported for teknisi saldo/details
 use App\Services\WhatsAppService;
@@ -26,6 +27,7 @@ use Carbon\Carbon; // Added for date handling
 
 class SparepartApiController extends Controller
 {
+    use KategoriLaciTrait;
     // Helper to get the authenticated user's detail.
     // Assuming this method exists in your base Controller or a trait.
     // If not, you'll need to define it or pass user details differently.
@@ -476,54 +478,188 @@ class SparepartApiController extends Controller
      * Update Service Details (can be used for both completed and uncompleted services)
      * This now triggers commission recalculation if total_biaya or dp changes and service is 'Selesai'.
      */
+    // public function updateService(Request $request, $id)
+    // {
+    //     try {
+    //         $validatedData = $request->validate([
+    //             'nama_pelanggan' => 'nullable|string|max:255',
+    //             'type_unit' => 'nullable|string|max:255',
+    //             'keterangan' => 'nullable|string',
+    //             'no_telp' => 'nullable|numeric',
+    //             'total_biaya' => 'nullable|numeric|min:0',
+    //             'dp' => 'nullable|numeric|min:0',
+    //         ]);
+
+    //         $service = ModelServices::findOrFail($id);
+
+    //         // Store old values to check for changes
+    //         $oldTotalBiaya = $service->total_biaya;
+    //         $oldDp = $service->dp;
+
+    //         $service->update($validatedData);
+
+    //         // Trigger commission recalculation if relevant financial fields changed
+    //         // AND the service is already marked as 'Selesai'
+    //         if ($service->status_services === 'Selesai' && (
+    //             (isset($validatedData['total_biaya']) && $validatedData['total_biaya'] != $oldTotalBiaya)
+    //         )) {
+    //             $this->performCommissionRecalculation($id);
+    //         }
+
+    //         return response()->json([
+    //             'message' => 'Service updated successfully',
+    //             'service' => $service,
+    //         ], 200);
+    //     } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+    //         return response()->json([
+    //             'message' => 'Service not found',
+    //         ], 404);
+    //     } catch (\Illuminate\Validation\ValidationException $e) {
+    //         return response()->json([
+    //             'message' => 'Validation failed',
+    //             'errors' => $e->errors(),
+    //         ], 422);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'message' => 'Server error',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
     public function updateService(Request $request, $id)
-    {
-        try {
-            $validatedData = $request->validate([
-                'nama_pelanggan' => 'nullable|string|max:255',
-                'type_unit' => 'nullable|string|max:255',
-                'keterangan' => 'nullable|string',
-                'no_telp' => 'nullable|numeric',
-                'total_biaya' => 'nullable|numeric|min:0',
-                'dp' => 'nullable|numeric|min:0',
-            ]);
+{
+    try {
+        $validatedData = $request->validate([
+            'nama_pelanggan' => 'nullable|string|max:255',
+            'type_unit' => 'nullable|string|max:255',
+            'keterangan' => 'nullable|string',
+            'no_telp' => 'nullable|numeric',
+            'total_biaya' => 'nullable|numeric|min:0',
+            'dp' => 'nullable|numeric|min:0',
+            'id_kategorilaci' => 'required_with:dp|integer',
+        ]);
 
-            $service = ModelServices::findOrFail($id);
+        $service = ModelServices::findOrFail($id);
 
-            // Store old values to check for changes
-            $oldTotalBiaya = $service->total_biaya;
-            $oldDp = $service->dp;
+        // Simpan data lama
+        $oldTotalBiaya = $service->total_biaya;
+        $oldDp = $service->dp ?? 0;
+        $oldLaciId = $service->id_kategorilaci;
 
-            $service->update($validatedData);
+        // Ambil data baru dari input
+        $newDp = $validatedData['dp'] ?? 0;
+        $newLaciId = $validatedData['id_kategorilaci'] ?? null;
 
-            // Trigger commission recalculation if relevant financial fields changed
-            // AND the service is already marked as 'Selesai'
-            if ($service->status_services === 'Selesai' && (
-                (isset($validatedData['total_biaya']) && $validatedData['total_biaya'] != $oldTotalBiaya)
-            )) {
-                $this->performCommissionRecalculation($id);
+        // Update service dulu
+        $service->update($validatedData);
+
+        // Hitung selisih DP
+        $dpDifference = $newDp - $oldDp;
+
+        // ==== LOGIKA HISTORY LACI ====
+        if ($dpDifference !== 0) {
+            if ($dpDifference > 0 && $newLaciId) {
+                // DP bertambah
+                $this->recordLaciHistory(
+                    $newLaciId,
+                    $dpDifference,
+                    null,
+                    "Update DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Penambahan)"
+                );
+            } elseif ($dpDifference < 0 && $oldLaciId) {
+                // DP berkurang
+                $this->recordLaciHistory(
+                    $oldLaciId,
+                    null,
+                    abs($dpDifference),
+                    "Update DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Pengurangan)",
+
+                );
+
+                // Kalau pindah laci
+                if ($newDp > 0 && $newLaciId && $newLaciId != $oldLaciId) {
+                    $this->recordLaciHistory(
+                        $newLaciId,
+                        $newDp,
+                        null,
+                        "Update DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Pindah Laci)"
+                    );
+                }
             }
-
-            return response()->json([
-                'message' => 'Service updated successfully',
-                'service' => $service,
-            ], 200);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'message' => 'Service not found',
-            ], 404);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $e->errors(),
-            ], 422);
-        } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Server error',
-                'error' => $e->getMessage(),
-            ], 500);
         }
+        // DP sama tapi pindah laci
+        elseif ($oldLaciId != $newLaciId && $newDp > 0) {
+            if ($oldLaciId) {
+                $this->recordLaciHistory(
+                    $oldLaciId,
+                    null,
+                    $newDp,
+                    "Transfer DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Keluar)"
+                );
+            }
+            if ($newLaciId) {
+                $this->recordLaciHistory(
+                    $newLaciId,
+                    $newDp,
+                    null,
+                    "Transfer DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Masuk)"
+                );
+            }
+        }
+
+        // ==== Recalculate komisi kalau status sudah selesai & total biaya berubah ====
+        if (
+            $service->status_services === 'Selesai' &&
+            isset($validatedData['total_biaya']) &&
+            $validatedData['total_biaya'] != $oldTotalBiaya
+        ) {
+            $this->performCommissionRecalculation($id);
+        }
+
+        return response()->json([
+            'message' => 'Service updated successfully',
+            'service' => $service->fresh(),
+        ], 200);
+
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        return response()->json([
+            'message' => 'Service not found',
+        ], 404);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors(),
+        ], 422);
+    } catch (\Exception $e) {
+        return response()->json([
+            'message' => 'Server error',
+            'error' => $e->getMessage(),
+        ], 500);
     }
+}
+
+/**
+ * Helper function untuk mendapatkan saldo laci saat ini
+ *
+ * @param int $kategoriLaciId
+ * @return float
+ */
+private function getLaciBalance($kategoriLaciId)
+{
+    try {
+        $result = \DB::table('history_laci')
+            ->where('id_kategorilaci', $kategoriLaciId)
+            ->selectRaw('COALESCE(SUM(masuk), 0) - COALESCE(SUM(keluar), 0) as balance')
+            ->first();
+
+        return $result ? (float) $result->balance : 0;
+
+    } catch (\Exception $e) {
+        \Log::error('Error getting laci balance: ' . $e->getMessage());
+        return 0;
+    }
+}
 
     /**
      * Deletes a service and all its related data (parts, notes, warranty, commission).

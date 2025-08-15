@@ -41,6 +41,26 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user-profile/{kode_user}', [UserDataController::class, 'getUserProfile']);
     Route::post('/penarikan', [UserDataController::class, 'store_penarikan']);
     Route::get('/karyawan', [UserDataController::class, 'getKaryawan']);
+    Route::post('/admin/penarikan-karyawan', [UserDataController::class, 'adminWithdrawEmployee']);
+    // Route::get('/admin/penarikan-history', [UserDataController::class, 'adminWithdrawalHistory']);
+    Route::get('/admin/penarikan-summary', [UserDataController::class, 'adminWithdrawalSummary']);
+    // NEW: History penarikan routes
+    Route::get('/admin-withdrawal-history', [UserDataController::class, 'adminWithdrawalHistory']);
+    Route::post('/assign-laci-withdrawal/{withdrawalId}', [UserDataController::class, 'assignLaciToWithdrawal']);
+    Route::post('/bulk-assign-laci', [UserDataController::class, 'bulkAssignLaci']);
+    Route::get('/admin-withdrawal-summary', [UserDataController::class, 'adminWithdrawalSummary']);
+    Route::get('/employee-withdrawal-history', [UserDataController::class, 'employeeWithdrawalHistory']);
+
+
+    // TAMBAHAN: Route untuk breakdown laci
+    Route::get('/laci-breakdown', [FinancialReportApiController::class, 'getLaciBreakdown']);
+    // TAMBAHAN: Route untuk detail history laci tertentu
+    Route::get('/laci-history/{laciId}', [FinancialReportApiController::class, 'getLaciHistory']);
+    // TAMBAHAN: Route untuk export breakdown laci
+    Route::get('/laci-breakdown/export', [FinancialReportApiController::class, 'exportLaciBreakdown']);
+
+    // Financial & Reports (existing, tetap sama)
+    Route::get('/financial-report', [FinancialReportApiController::class, 'getFinancialReport']);
 
     // Admin/Employee Attendance & Payroll related
     Route::post('/attendance/scan', [Api\AttendanceController::class, 'scanQrCode']); // Assuming attendance controller in Api folder
@@ -50,9 +70,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/attendance/manual-checkin', [EmployeeManagementController::class, 'manualCheckIn']);
     Route::post('/attendance/manual-checkout', [EmployeeManagementController::class, 'manualCheckOut']);
     Route::get('/attendance/employee-status/{employeeId}', [EmployeeManagementController::class, 'getEmployeeAttendanceStatus']);
-    Route::post('/admin/penarikan-karyawan', [UserDataController::class, 'adminWithdrawEmployee']);
-    Route::get('/admin/penarikan-history', [UserDataController::class, 'adminWithdrawalHistory']);
-    Route::get('/admin/penarikan-summary', [UserDataController::class, 'adminWithdrawalSummary']);
+
     Route::prefix('attendance')->group(function () {
         Route::post('/generate-employee-qr', [EmployeeManagementController::class, 'generateEmployeeQrCode']);
         Route::post('/scan-employee-qr', [EmployeeManagementController::class, 'scanEmployeeQrCode']);
