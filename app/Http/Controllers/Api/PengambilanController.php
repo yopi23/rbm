@@ -85,7 +85,7 @@ class PengambilanController extends Controller
             $keterangan,
             'Pengambilan',
             $pengambilan->id,
-            $Sevices->kode_service
+            $kode_pengambilan
 
 
         );
