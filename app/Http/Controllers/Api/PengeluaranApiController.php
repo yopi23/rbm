@@ -103,9 +103,17 @@ class PengeluaranApiController extends Controller
             if ($request->id_kategorilaci) {
                 $kategoriId = $request->id_kategorilaci;
                 $uangKeluar = (int) str_replace(',', '', $request->jumlah_pengeluaran);
-                $keterangan = $request->nama_pengeluaran . "-" . $request->catatan_pengeluaran;
+                $keterangan = $request->nama_pengeluaran . " - " . $request->catatan_pengeluaran;
 
-                $this->recordLaciHistory($kategoriId, null, $uangKeluar, $keterangan);
+                $this->recordLaciHistory(
+                    $kategoriId,
+                    null, // uang masuk
+                    $uangKeluar, // uang keluar
+                    $keterangan,
+                    'pengeluaran_toko',
+                    $pengeluaran->id,
+                    'TKO-' . $pengeluaran->id
+                );
             }
 
             return response()->json([
@@ -139,11 +147,17 @@ class PengeluaranApiController extends Controller
                 'tanggal_pengeluaran' => 'required|string',
                 'nama_pengeluaran' => 'required|string|max:255',
                 'jumlah_pengeluaran' => 'required|string',
-                'catatan_pengeluaran' => 'required|string'
+                'catatan_pengeluaran' => 'required|string',
+                'id_kategorilaci' => 'nullable|integer'
             ]);
 
             $pengeluaran = PengeluaranToko::where('kode_owner', $this->getThisUser()->id_upline)
                                         ->findOrFail($id);
+
+            // Get old data for history comparison
+            $oldAmount = $pengeluaran->jumlah_pengeluaran;
+            $oldName = $pengeluaran->nama_pengeluaran;
+            $oldCatatan = $pengeluaran->catatan_pengeluaran;
 
             $pengeluaran->update([
                 'tanggal_pengeluaran' => $request->tanggal_pengeluaran,
@@ -151,6 +165,42 @@ class PengeluaranApiController extends Controller
                 'jumlah_pengeluaran' => $request->jumlah_pengeluaran,
                 'catatan_pengeluaran' => $request->catatan_pengeluaran,
             ]);
+
+            // Handle laci history if kategori laci is provided
+            if ($request->id_kategorilaci) {
+                $kategoriId = $request->id_kategorilaci;
+                $newAmount = (int) str_replace(',', '', $request->jumlah_pengeluaran);
+                $oldAmountClean = (int) str_replace(',', '', $oldAmount);
+
+                // If amount changed, record the adjustment
+                if ($newAmount != $oldAmountClean) {
+                    $keterangan = "Update Pengeluaran Toko: " . $request->nama_pengeluaran . " - " . $request->catatan_pengeluaran . " (Penyesuaian dari " . number_format($oldAmountClean) . " ke " . number_format($newAmount) . ")";
+
+                    if ($newAmount > $oldAmountClean) {
+                        // Additional expense
+                        $this->recordLaciHistory(
+                            $kategoriId,
+                            null, // uang masuk
+                            $newAmount - $oldAmountClean, // additional amount out
+                            $keterangan,
+                            'pengeluaran_toko_update',
+                            $pengeluaran->id,
+                            'TKO-UPD-' . $pengeluaran->id
+                        );
+                    } else {
+                        // Reduction in expense (money back to laci)
+                        $this->recordLaciHistory(
+                            $kategoriId,
+                            $oldAmountClean - $newAmount, // money back in
+                            null, // uang keluar
+                            $keterangan,
+                            'pengeluaran_toko_update',
+                            $pengeluaran->id,
+                            'TKO-UPD-' . $pengeluaran->id
+                        );
+                    }
+                }
+            }
 
             return response()->json([
                 'success' => true,
@@ -181,6 +231,10 @@ class PengeluaranApiController extends Controller
         try {
             $pengeluaran = PengeluaranToko::where('kode_owner', $this->getThisUser()->id_upline)
                                         ->findOrFail($id);
+
+            // Before deleting, check if we need to reverse laci transaction
+            // This would require additional logic to find and reverse the laci entry
+            // You might want to add a soft delete or mark as cancelled instead
 
             $pengeluaran->delete();
 
@@ -281,88 +335,112 @@ class PengeluaranApiController extends Controller
      * Store new pengeluaran operasional
      */
     public function storePengeluaranOperasional(Request $request): JsonResponse
-{
-    try {
-        Log::info('Memulai proses storePengeluaranOperasional', ['request' => $request->all()]);
+    {
+        try {
+            Log::info('Memulai proses storePengeluaranOperasional', ['request' => $request->all()]);
 
-        $request->validate([
-            'tgl_pengeluaran' => 'required|string',
-            'nama_pengeluaran' => 'required|string|max:255',
-            'kategori' => 'required|string|max:100',
-            'kode_pegawai' => 'nullable|string',
-            'jml_pengeluaran' => 'required|string',
-            'desc_pengeluaran' => 'required|string'
-        ]);
+            $request->validate([
+                'tgl_pengeluaran' => 'required|string',
+                'nama_pengeluaran' => 'required|string|max:255',
+                'kategori' => 'required|string|max:100',
+                'kode_pegawai' => 'nullable|string',
+                'jml_pengeluaran' => 'required|string',
+                'desc_pengeluaran' => 'required|string',
+                'id_kategorilaci' => 'nullable|integer'
+            ]);
 
-        Log::debug('Validasi berhasil', ['data' => $request->all()]);
+            Log::debug('Validasi berhasil', ['data' => $request->all()]);
 
-        $pegawai = $this->getThisUser()->kode_user;
-        Log::debug('Nilai pegawai yang diproses', ['pegawai' => $pegawai]);
+            $pegawai = $this->getThisUser()->kode_user;
+            Log::debug('Nilai pegawai yang diproses', ['pegawai' => $pegawai]);
 
-        $pengeluaran = PengeluaranOperasional::create([
-            'tgl_pengeluaran' => $request->tgl_pengeluaran,
-            'nama_pengeluaran' => $request->nama_pengeluaran,
-            'kategori' => $request->kategori,
-            'kode_pegawai' => $pegawai,
-            'jml_pengeluaran' => $request->jml_pengeluaran,
-            'desc_pengeluaran' => $request->desc_pengeluaran ?? '',
-            'kode_owner' => $this->getThisUser()->id_upline
-        ]);
+            $pengeluaran = PengeluaranOperasional::create([
+                'tgl_pengeluaran' => $request->tgl_pengeluaran,
+                'nama_pengeluaran' => $request->nama_pengeluaran,
+                'kategori' => $request->kategori,
+                'kode_pegawai' => $pegawai,
+                'jml_pengeluaran' => $request->jml_pengeluaran,
+                'desc_pengeluaran' => $request->desc_pengeluaran ?? '',
+                'kode_owner' => $this->getThisUser()->id_upline
+            ]);
 
-        Log::info('Pengeluaran berhasil dibuat', ['pengeluaran' => $pengeluaran->toArray()]);
+            Log::info('Pengeluaran berhasil dibuat', ['pengeluaran' => $pengeluaran->toArray()]);
 
-        // Update employee balance if it's payroll
-        if ($pegawai && $pegawai !== '-') {
-            Log::debug('Memproses update saldo pegawai', ['kode_pegawai' => $pegawai]);
+            // Record laci history if kategori laci is provided
+            if ($request->id_kategorilaci) {
+                $kategoriId = $request->id_kategorilaci;
+                $uangKeluar = (int) str_replace(',', '', $request->jml_pengeluaran);
+                $keterangan = $request->kategori . " - " . $request->nama_pengeluaran . ": " . $request->desc_pengeluaran;
 
-            $pegawaiDetail = UserDetail::where('kode_user', $pegawai)->first();
+                $this->recordLaciHistory(
+                    $kategoriId,
+                    null, // uang masuk
+                    $uangKeluar, // uang keluar
+                    $keterangan,
+                    'pengeluaran_operasional',
+                    $pengeluaran->id,
+                    'OPX-' . $pengeluaran->id
+                );
 
-            if ($pegawaiDetail) {
-                $jmlPengeluaran = (int) str_replace(',', '', $request->jml_pengeluaran);
-                Log::debug('Detail pegawai ditemukan', [
-                    'pegawaiDetail' => $pegawaiDetail->toArray(),
-                    'jml_pengeluaran' => $jmlPengeluaran
+                Log::info('History laci berhasil dicatat', [
+                    'kategori_id' => $kategoriId,
+                    'uang_keluar' => $uangKeluar,
+                    'keterangan' => $keterangan
                 ]);
-
-                $pegawaiDetail->update([
-                    'saldo' => $pegawaiDetail->saldo + $jmlPengeluaran
-                ]);
-
-                Log::info('Saldo pegawai berhasil diupdate', [
-                    'kode_pegawai' => $pegawai,
-                    'saldo_baru' => $pegawaiDetail->saldo
-                ]);
-            } else {
-                Log::warning('Detail pegawai tidak ditemukan', ['kode_pegawai' => $pegawai]);
             }
+
+            // Update employee balance if it's payroll
+            if ($pegawai && $pegawai !== '-') {
+                Log::debug('Memproses update saldo pegawai', ['kode_pegawai' => $pegawai]);
+
+                $pegawaiDetail = UserDetail::where('kode_user', $pegawai)->first();
+
+                if ($pegawaiDetail) {
+                    $jmlPengeluaran = (int) str_replace(',', '', $request->jml_pengeluaran);
+                    Log::debug('Detail pegawai ditemukan', [
+                        'pegawaiDetail' => $pegawaiDetail->toArray(),
+                        'jml_pengeluaran' => $jmlPengeluaran
+                    ]);
+
+                    $pegawaiDetail->update([
+                        'saldo' => $pegawaiDetail->saldo + $jmlPengeluaran
+                    ]);
+
+                    Log::info('Saldo pegawai berhasil diupdate', [
+                        'kode_pegawai' => $pegawai,
+                        'saldo_baru' => $pegawaiDetail->saldo
+                    ]);
+                } else {
+                    Log::warning('Detail pegawai tidak ditemukan', ['kode_pegawai' => $pegawai]);
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pengeluaran operasional berhasil ditambahkan',
+                'data' => $pengeluaran->load('pegawai')
+            ], 201);
+
+        } catch (ValidationException $e) {
+            Log::error('Validasi gagal', ['errors' => $e->errors(), 'request' => $request->all()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Gagal menambahkan pengeluaran operasional', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request' => $request->all()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menambahkan pengeluaran operasional',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Pengeluaran operasional berhasil ditambahkan',
-            'data' => $pengeluaran->load('pegawai')
-        ], 201);
-
-    } catch (ValidationException $e) {
-        Log::error('Validasi gagal', ['errors' => $e->errors(), 'request' => $request->all()]);
-        return response()->json([
-            'success' => false,
-            'message' => 'Validasi gagal',
-            'errors' => $e->errors()
-        ], 422);
-    } catch (\Exception $e) {
-        Log::error('Gagal menambahkan pengeluaran operasional', [
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString(),
-            'request' => $request->all()
-        ]);
-        return response()->json([
-            'success' => false,
-            'message' => 'Gagal menambahkan pengeluaran operasional',
-            'error' => $e->getMessage()
-        ], 500);
     }
-}
 
     /**
      * Update pengeluaran operasional
@@ -376,11 +454,17 @@ class PengeluaranApiController extends Controller
                 'kategori' => 'required|string|max:100',
                 'kode_pegawai' => 'nullable|string',
                 'jml_pengeluaran' => 'required|string',
-                'desc_pengeluaran' => 'required|string'
+                'desc_pengeluaran' => 'required|string',
+                'id_kategorilaci' => 'nullable|integer'
             ]);
 
             $pengeluaran = PengeluaranOperasional::where('kode_owner', $this->getThisUser()->id_upline)
                                                 ->findOrFail($id);
+
+            // Get old data for history comparison
+            $oldAmount = $pengeluaran->jml_pengeluaran;
+            $oldNama = $pengeluaran->nama_pengeluaran;
+            $oldKategori = $pengeluaran->kategori;
 
             $pegawai = $request->kategori == 'Penggajian' ? $request->kode_pegawai : null;
 
@@ -392,6 +476,42 @@ class PengeluaranApiController extends Controller
                 'jml_pengeluaran' => $request->jml_pengeluaran,
                 'desc_pengeluaran' => $request->desc_pengeluaran ?? '',
             ]);
+
+            // Handle laci history if kategori laci is provided
+            if ($request->id_kategorilaci) {
+                $kategoriId = $request->id_kategorilaci;
+                $newAmount = (int) str_replace(',', '', $request->jml_pengeluaran);
+                $oldAmountClean = (int) str_replace(',', '', $oldAmount);
+
+                // If amount changed, record the adjustment
+                if ($newAmount != $oldAmountClean) {
+                    $keterangan = "Update " . $request->kategori . " - " . $request->nama_pengeluaran . ": " . $request->desc_pengeluaran . " (Penyesuaian dari " . number_format($oldAmountClean) . " ke " . number_format($newAmount) . ")";
+
+                    if ($newAmount > $oldAmountClean) {
+                        // Additional expense
+                        $this->recordLaciHistory(
+                            $kategoriId,
+                            null, // uang masuk
+                            $newAmount - $oldAmountClean, // additional amount out
+                            $keterangan,
+                            'pengeluaran_operasional_update',
+                            $pengeluaran->id,
+                            'OPX-UPD-' . $pengeluaran->id
+                        );
+                    } else {
+                        // Reduction in expense (money back to laci)
+                        $this->recordLaciHistory(
+                            $kategoriId,
+                            $oldAmountClean - $newAmount, // money back in
+                            null, // uang keluar
+                            $keterangan,
+                            'pengeluaran_operasional_update',
+                            $pengeluaran->id,
+                            'OPX-UPD-' . $pengeluaran->id
+                        );
+                    }
+                }
+            }
 
             return response()->json([
                 'success' => true,
@@ -422,6 +542,10 @@ class PengeluaranApiController extends Controller
         try {
             $pengeluaran = PengeluaranOperasional::where('kode_owner', $this->getThisUser()->id_upline)
                                                 ->findOrFail($id);
+
+            // Before deleting, check if we need to reverse laci transaction
+            // This would require additional logic to find and reverse the laci entry
+            // You might want to add a soft delete or mark as cancelled instead
 
             $pengeluaran->delete();
 
