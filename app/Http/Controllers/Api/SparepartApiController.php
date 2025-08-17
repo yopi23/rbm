@@ -2245,28 +2245,80 @@ public function revertServiceToQueue($id)
      */
     public function getServiceIndicators(Request $request)
 {
-    // Tambah filter owner untuk keamanan data
-    $services = modelServices::whereIn('status_service',['Antri','Selesai'])
-                            ->where('kode_owner', $this->getThisUser()->id_upline)
-                             ->get();
+    try {
+        $startTime = microtime(true);
 
-    $indicators = [];
-    foreach ($services as $service) {
-        $hasWarranty = Garansi::where('kode_garansi', $service->kode_service)
-                             ->where('type_garansi', 'service') // Pastikan hanya garansi service
-                             ->exists();
-        $hasNotes = DetailCatatanService::where('kode_services', $service->id)->exists();
+        // Tambah filter owner untuk keamanan data
+        $services = modelServices::whereIn('status_services', ['Antri', 'Selesai'])
+                                ->where('kode_owner', $this->getThisUser()->id_upline)
+                                ->get();
 
-        $indicators[$service->id] = [
-            'has_warranty' => $hasWarranty,
-            'has_notes' => $hasNotes
-        ];
+        \Log::info('Services query completed', [
+            'count' => $services->count(),
+            'owner_id' => $this->getThisUser()->id_upline
+        ]);
+
+        if ($services->isEmpty()) {
+            return response()->json([
+                'success' => true,
+                'data' => [],
+                'message' => 'No services found'
+            ]);
+        }
+
+        $indicators = [];
+        $warrantyCheckTime = 0;
+        $notesCheckTime = 0;
+
+        foreach ($services as $service) {
+            // Warranty check
+            $warrantyStart = microtime(true);
+            $hasWarranty = Garansi::where('kode_garansi', $service->kode_service)
+                                 ->where('type_garansi', 'service')
+                                 ->exists();
+            $warrantyCheckTime += (microtime(true) - $warrantyStart);
+
+            // Notes check
+            $notesStart = microtime(true);
+            $hasNotes = DetailCatatanService::where('kode_services', $service->id)->exists();
+            $notesCheckTime += (microtime(true) - $notesStart);
+
+            $indicators[$service->id] = [
+                'has_warranty' => $hasWarranty,
+                'has_notes' => $hasNotes
+            ];
+        }
+
+        $totalTime = microtime(true) - $startTime;
+
+        \Log::info('Service indicators completed', [
+            'total_time' => round($totalTime * 1000, 2) . 'ms',
+            'warranty_check_time' => round($warrantyCheckTime * 1000, 2) . 'ms',
+            'notes_check_time' => round($notesCheckTime * 1000, 2) . 'ms',
+            'services_processed' => count($indicators)
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'data' => $indicators,
+            'meta' => [
+                'processed' => count($indicators),
+                'execution_time_ms' => round($totalTime * 1000, 2)
+            ]
+        ]);
+
+    } catch (\Exception $e) {
+        \Log::error('Error in getServiceIndicators', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Internal server error',
+            'error' => config('app.debug') ? $e->getMessage() : 'Something went wrong'
+        ], 500);
     }
-
-    return response()->json([
-        'success' => true,
-        'data' => $indicators
-    ]);
 }
 
 
