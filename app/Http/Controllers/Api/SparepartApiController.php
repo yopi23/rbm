@@ -2246,7 +2246,8 @@ public function revertServiceToQueue($id)
     public function getServiceIndicators(Request $request)
 {
     // Tambah filter owner untuk keamanan data
-    $services = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+    $services = modelServices::whereIn('status_service',['Antri','Selesai'])
+                            ->where('kode_owner', $this->getThisUser()->id_upline)
                              ->get();
 
     $indicators = [];
