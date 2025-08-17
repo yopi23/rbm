@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Validator;
 use App\Models\SubKategoriSparepart;
 use App\Models\KategoriSparepart;
 use Carbon\Carbon; // Added for date handling
+use Illuminate\Validation\Rule;
 
 
 class SparepartApiController extends Controller
@@ -530,22 +531,36 @@ class SparepartApiController extends Controller
     public function updateService(Request $request, $id)
 {
     try {
-        $validatedData = $request->validate([
-            'nama_pelanggan' => 'nullable|string|max:255',
-            'type_unit' => 'nullable|string|max:255',
-            'keterangan' => 'nullable|string',
-            'no_telp' => 'nullable|numeric',
-            'total_biaya' => 'nullable|numeric|min:0',
-            'dp' => 'nullable|numeric|min:0',
-            'id_kategorilaci' => 'required_with:dp|integer',
-        ]);
-
         $service = ModelServices::findOrFail($id);
 
         // Simpan data lama
         $oldTotalBiaya = $service->total_biaya;
         $oldDp = $service->dp ?? 0;
         $oldLaciId = $service->id_kategorilaci;
+
+        $validatedData = $request->validate([
+            'nama_pelanggan' => 'nullable|string|max:255',
+            'type_unit'      => 'nullable|string|max:255',
+            'keterangan'     => 'nullable|string',
+            'no_telp'        => 'nullable|numeric',
+            'total_biaya'    => 'nullable|numeric|min:0',
+            'dp'             => 'nullable|numeric|min:0',
+            'id_kategorilaci'=> [
+                'nullable',
+                'integer',
+                function ($attribute, $value, $fail) use ($request, $oldDp) {
+                    $newDp = $request->input('dp', 0);
+
+                    // Hanya wajib isi jika DP berubah
+                    if ($newDp != $oldDp && $newDp > 0 && empty($value)) {
+                        $fail("Kolom $attribute wajib diisi jika DP berubah.");
+                    }
+                }
+            ],
+            'tipe_sandi' => ['nullable', 'string', Rule::in(['pola', 'pin', 'teks'])],
+            'isi_sandi' => ['nullable', 'string', 'required_with:tipe_sandi'],
+            'data_unit' => ['nullable', 'json'],
+        ]);
 
         // Ambil data baru dari input
         $newDp = $validatedData['dp'] ?? 0;
@@ -574,7 +589,6 @@ class SparepartApiController extends Controller
                     null,
                     abs($dpDifference),
                     "Update DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Pengurangan)",
-
                 );
 
                 // Kalau pindah laci
@@ -638,6 +652,7 @@ class SparepartApiController extends Controller
         ], 500);
     }
 }
+
 
 /**
  * Helper function untuk mendapatkan saldo laci saat ini
@@ -2231,8 +2246,7 @@ public function revertServiceToQueue($id)
     public function getServiceIndicators(Request $request)
 {
     // Tambah filter owner untuk keamanan data
-    $services = modelServices::where('status_services', 'Antri')
-                             ->where('kode_owner', $this->getThisUser()->id_upline)
+    $services = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
                              ->get();
 
     $indicators = [];

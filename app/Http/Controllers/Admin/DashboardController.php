@@ -24,6 +24,8 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use App\Traits\KategoriLaciTrait;
 use Symfony\Component\Translation\Dumper\YamlFileDumper;
+use Illuminate\Validation\Rule;
+
 
 class DashboardController extends Controller
 {
@@ -361,9 +363,12 @@ class DashboardController extends Controller
             'kode_sparepart' => ['nullable', 'array'],
             'qty_kode_sparepart' => ['nullable', 'array'],
             'id_kategorilaci' => ['required_with:dp|integer'], // Wajib diisi jika ada DP
+            'tipe_sandi' => ['nullable', 'string', Rule::in(['pola', 'pin', 'teks'])],
+            'isi_sandi' => ['nullable', 'string', 'required_with:tipe_sandi'],
+            'data_unit' => ['nullable', 'json'],
         ]);
 
-        if ($validate) {
+        try {
             // Generate kode_service otomatis
             $kode_service = $this->generateKodeService();
 
@@ -379,7 +384,10 @@ class DashboardController extends Controller
                 'total_biaya' => $request->biaya_servis,
                 'dp' => $request->dp ?? 0, // Pastikan ada nilai default jika dp null
                 'status_services' => 'Antri',
-                'kode_owner' => $this->getThisUser()->id_upline // Menggunakan user yang terautentikasi
+                'kode_owner' => $this->getThisUser()->id_upline, // Menggunakan user yang terautentikasi
+                'tipe_sandi' => $request->tipe_sandi,
+                'isi_sandi' => $request->isi_sandi,
+                'data_unit' => $request->data_unit,
             ]);
 
             if ($create) {
@@ -426,11 +434,13 @@ class DashboardController extends Controller
                     'data' => $create // Mengembalikan data service yang baru dibuat
                 ], 200);
             }
-
-            return response()->json(['status' => 'error', 'message' => 'Tambah Service Gagal, Ada Kendala Teknis'], 500);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+                // Menangkap error validasi dan mengembalikannya dengan benar
+                return response()->json(['status' => 'error', 'message' => 'Validasi Gagal', 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            // Menangkap error teknis lainnya
+            return response()->json(['status' => 'error', 'message' => 'Tambah Service Gagal: ' . $e->getMessage()], 500);
         }
-
-        return response()->json(['status' => 'error', 'message' => 'Validasi Gagal', 'errors' => $validate->errors()], 422);
     }
 
     private function generateKodeService()
