@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
+use App\Models\UserDetail;
 use App\Models\SalarySetting;
 use Illuminate\Support\Facades\Validator;
 
@@ -23,9 +24,9 @@ class AuthController extends Controller
             ]);
 
             // Cek versi aplikasi terlebih dahulu
-            // $clientVersion = '2025.06.16';
-            $clientVersion = $request->input('version');
-            $minVersion = '2025.07.26'; // versi minimum yang diizinkan
+            $clientVersion = '2025.06.16';
+            // $clientVersion = $request->input('version');
+            $minVersion = '2025.06.16'; // versi minimum yang diizinkan
 
             if (version_compare($clientVersion, $minVersion, '<')) {
                 return response()->json([
@@ -41,6 +42,20 @@ class AuthController extends Controller
                     'status' => 'error',
                     'message' => 'Data Tidak Cocok',
                 ], 401);
+            }
+
+             $user = Auth::user()->load('userDetail');
+
+            // --- PENGECEKAN STATUS USER ---
+            // Cek apakah user detail ada dan statusnya aktif ('1')
+            if ($user->userDetail && $user->userDetail->status_user != '1') {
+                // Jika tidak aktif, langsung logout dan kirim pesan error
+                Auth::logout();
+
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Akun kamu Belum aktif, Silahkan Hubungi Admin untuk Mengaktifkan Akunmu Kembali',
+                ], 403); // 403 Forbidden, karena user terautentikasi tapi tidak diizinkan
             }
 
             // Login berhasil
@@ -72,9 +87,9 @@ class AuthController extends Controller
     {
         try {
             // Ambil versi dari request
-            // $clientVersion = '2025.06.16';
-            $clientVersion = $request->input('version');
-            $minVersion = '2025.07.26'; // versi minimum yang diizinkan
+            $clientVersion = '2025.06.16';
+            // $clientVersion = $request->input('version');
+            $minVersion = '2025.06.16'; // versi minimum yang diizinkan
 
             // Cek versi aplikasi terlebih dahulu, terlepas dari token
             if (version_compare($clientVersion, $minVersion, '<')) {
@@ -83,6 +98,19 @@ class AuthController extends Controller
                     'message' => 'Versi aplikasi kamu sudah tidak didukung. Silakan update terlebih dahulu.',
                     'force_update' => true
                 ], 426); // 426 Upgrade Required
+            }
+             $user = Auth::user()->load('userDetail');
+
+            // --- PENGECEKAN STATUS USER ---
+            // Cek apakah user detail ada dan statusnya aktif ('1')
+            if ($user->userDetail && $user->userDetail->status_user != '1') {
+                // Jika tidak aktif, langsung logout dan kirim pesan error
+                Auth::logout();
+
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Akun kamu Belum aktif, Silahkan Hubungi Admin untuk Mengaktifkan Akunmu Kembali',
+                ], 403); // 403 Forbidden, karena user terautentikasi tapi tidak diizinkan
             }
 
             // Kemudian cek validitas token

@@ -357,7 +357,7 @@ class DashboardController extends Controller
             'nama_pelanggan' => ['required', 'string'],
             'no_telp' => ['nullable', 'string'],
             'type_unit' => ['required', 'string'],
-            'keterangan' => ['nullable', 'string'],
+            'keterangan' => ['required', 'string'],
             'biaya_servis' => ['required', 'numeric', 'min:0'],
             'dp' => ['nullable', 'numeric', 'min:0'],
             'kode_sparepart' => ['nullable', 'array'],
@@ -377,7 +377,7 @@ class DashboardController extends Controller
                 'kode_service' => $kode_service,
                 'tgl_service' => $request->tgl_service ?: Carbon::now()->format('Y-m-d'),
                 'nama_pelanggan' => $request->nama_pelanggan,
-                'no_telp' => $request->no_telp,
+                'no_telp' => $request->no_telp ?? 0,
                 'type_unit' => $request->type_unit,
                 // 'keterangan' => $request->ket, // Kemungkinan typo, harusnya $request->keterangan
                 'keterangan' => $request->keterangan,
