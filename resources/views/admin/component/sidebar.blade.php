@@ -72,6 +72,31 @@
                      </li>
                  @endif
                  @if ($this_user->jabatan == '0')
+                     <li class="nav-header">DATA Langganan</li>
+                     <li class="nav-item">
+                         <a href="{{ route('administrator.tokens.index') }}" class="nav-link">
+                             <i class="nav-icon fas fa-key"></i>
+                             <p>
+                                 Buat Token
+                             </p>
+                         </a>
+                     </li>
+                     <li class="nav-item">
+                         <a href="{{ route('administrator.tokens.plans.index') }}" class="nav-link">
+                             <i class="nav-icon fas fa-box"></i>
+                             <p>
+                                 Buat Paket
+                             </p>
+                         </a>
+                     </li>
+                     <li class="nav-item">
+                         <a href="{{ route('administrator.tokens.logs.index') }}" class="nav-link">
+                             <i class="nav-icon fas fa-clipboard-list"></i>
+                             <p>
+                                 Log Langganan
+                             </p>
+                         </a>
+                     </li>
                      <li class="nav-header">DATA MASTER</li>
                      <li class="nav-item">
                          <a href="{{ route('owner.index') }}" class="nav-link">

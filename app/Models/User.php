@@ -7,6 +7,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use App\Models\UserDetail;
+use App\Models\Subscription;
+use App\Models\Payment;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class User extends Authenticatable
 {
@@ -69,6 +74,55 @@ class User extends Authenticatable
     public function workSchedules()
     {
         return $this->hasMany(WorkSchedule::class, 'user_id');
+    }
+    /**
+     * Mendapatkan data langganan milik user ini.
+     */
+    public function subscription(): HasOne
+    {
+        return $this->hasOne(Subscription::class);
+    }
+
+    /**
+     * Mendapatkan riwayat pembayaran dari user ini.
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * Fungsi utama untuk mengecek apakah user (atau owner-nya)
+     * memiliki langganan aktif.
+     */
+    public function hasActiveSubscription(): bool
+    {
+        // Pastikan relasi userDetail ada untuk menghindari error
+        if (!$this->userDetail) {
+            return false;
+        }
+
+        // Jabatan 0 (Super Admin) selalu dianggap aktif
+        if ($this->userDetail->jabatan == '0') {
+            return true;
+        }
+
+        // Jabatan 1 (Admin/Owner) cek langganan miliknya sendiri
+        if ($this->userDetail->jabatan == '1') {
+            $subscription = $this->subscription;
+            // Cek apakah langganan ada, statusnya aktif, dan belum expired
+            return $subscription && $subscription->status === 'active' && $subscription->expires_at->isFuture();
+        }
+
+        // Untuk jabatan lain (karyawan), cek status langganan upline-nya
+        $owner = User::find($this->userDetail->id_upline);
+        if ($owner) {
+            // Memanggil fungsi yang sama pada data owner-nya (rekursif)
+            return $owner->hasActiveSubscription();
+        }
+
+        // Jika tidak punya owner, maka tidak aktif
+        return false;
     }
 
 }

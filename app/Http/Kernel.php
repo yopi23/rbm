@@ -36,13 +36,15 @@ class Kernel extends HttpKernel
             \Illuminate\View\Middleware\ShareErrorsFromSession::class,
             \App\Http\Middleware\VerifyCsrfToken::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            \App\Http\Middleware\CheckSubscription::class,
         ],
 
         'api' => [
-            // \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
             'throttle:api',
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
-            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+            // \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+
 
         ],
     ];
@@ -68,5 +70,7 @@ class Kernel extends HttpKernel
         'authCheck' => \App\Http\Middleware\RoleCheck::class,
         'checkRole' => \App\Http\Middleware\CheckRole::class,
         'roleCheck' => \App\Http\Middleware\RoleCheck::class,
+        'subscribed' => \App\Http\Middleware\CheckSubscription::class,
+        'subscribed.api' => \App\Http\Middleware\CheckApiSubscription::class,
     ];
 }

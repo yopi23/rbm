@@ -37,6 +37,10 @@ use App\Http\Controllers\Admin\EmployeeManagementController;
 use App\Http\Controllers\Admin\HpController;
 use App\Http\Controllers\Admin\PenaltyRulesController;
 use App\Http\Controllers\Admin\AttendanceCronController;
+use App\Http\Controllers\Admin\SubscriptionController;
+use App\Http\Controllers\Administrator\TokenController;
+use App\Http\Controllers\Administrator\PlanController;
+use App\Http\Controllers\Administrator\SubscriptionLogController;
 
 
 
@@ -94,6 +98,54 @@ Route::delete('/laci/kategori', [LaciController::class, 'deleteKategoriLaci'])->
 Route::get('/laci/riwayat/data', [LaciController::class, 'getRiwayatData'])->name('laci.riwayat.data');
 Route::get('/laci/komisi/data', [LaciController::class, 'getKomisiData'])->name('laci.komisi.data');
 Route::get('/laci/penarikan/data', [LaciController::class, 'getPenarikanData'])->name('laci.penarikan.data');
+
+Route::middleware(['auth'])->group(function () {
+
+    /**
+     * ===================================================================
+     * ROUTE UNTUK ADMIN / OWNER (Jabatan 1)
+     * Mengelola langganan mereka sendiri.
+     * ===================================================================
+     */
+    Route::prefix('subscriptions')->name('subscriptions.')->controller(SubscriptionController::class)->group(function () {
+        // Halaman utama langganan (GET /subscriptions)
+        Route::get('/', 'index')->name('index');
+
+        // Proses aktivasi token (POST /subscriptions/activate)
+        Route::post('/activate', 'activateWithToken')->name('activate');
+
+        // Menampilkan halaman pembayaran (GET /subscriptions/payment/{plan})
+        Route::get('/payment/{plan}', 'showPayment')->name('payment');
+        Route::delete('/payment/{payment}/cancel', 'cancelPayment')->name('payment.cancel');
+    });
+
+
+
+
+});
+Route::group(['middleware' => 'checkRole:0'], function () {
+ /**
+     * ===================================================================
+     * ROUTE UNTUK ADMINISTRATOR / SUPER ADMIN (Jabatan 0)
+     * Mengelola token untuk semua admin.
+     * ===================================================================
+     */
+    // Sebaiknya, grup ini dilindungi oleh middleware khusus untuk Super Admin
+    // Contoh: ->middleware('isAdministrator')
+    Route::prefix('administrator')->name('administrator.')->group(function () {
+
+        Route::prefix('tokens')->name('tokens.')->controller(TokenController::class)->group(function() {
+            // Halaman utama manajemen token (GET /administrator/tokens)
+            Route::get('/', 'index')->name('index');
+
+            // Proses pembuatan token baru (POST /administrator/tokens)
+            Route::post('/', 'store')->name('store');
+            Route::resource('plans', PlanController::class);
+            Route::get('subscription-logs', [SubscriptionLogController::class, 'index'])->name('logs.index');
+        });
+
+    });
+});
 
 //admin
 Route::group(['middleware' => ['auth']], function () {

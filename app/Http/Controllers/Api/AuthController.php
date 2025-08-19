@@ -20,13 +20,13 @@ class AuthController extends Controller
             $request->validate([
                 'email' => 'required|email',
                 'password' => 'required',
-                // 'version' => 'required', // Tambahkan validasi untuk versi
+                'version' => 'required', // Tambahkan validasi untuk versi
             ]);
 
             // Cek versi aplikasi terlebih dahulu
-            $clientVersion = '2025.06.16';
-            // $clientVersion = $request->input('version');
-            $minVersion = '2025.06.16'; // versi minimum yang diizinkan
+            // $clientVersion = '2025.08.16';
+            $clientVersion = $request->input('version');
+            $minVersion = '2025.08.16'; // versi minimum yang diizinkan
 
             if (version_compare($clientVersion, $minVersion, '<')) {
                 return response()->json([
@@ -74,6 +74,7 @@ class AuthController extends Controller
                 'access_token' => $token,
                 'token_type' => 'Bearer',
                 'user' => $user,
+                'subscription_active' => $user->hasActiveSubscription(),
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -87,9 +88,9 @@ class AuthController extends Controller
     {
         try {
             // Ambil versi dari request
-            $clientVersion = '2025.06.16';
-            // $clientVersion = $request->input('version');
-            $minVersion = '2025.06.16'; // versi minimum yang diizinkan
+            // $clientVersion = '2025.08.16';
+            $clientVersion = $request->input('version');
+            $minVersion = '2025.08.16'; // versi minimum yang diizinkan
 
             // Cek versi aplikasi terlebih dahulu, terlepas dari token
             if (version_compare($clientVersion, $minVersion, '<')) {
@@ -120,7 +121,8 @@ class AuthController extends Controller
                 return response()->json([
                     'status' => 'success',
                     'message' => 'Token is valid.',
-                    'user' => $user,
+                    'user' => $user->load('userDetail'),
+                    'subscription_active' => $user->hasActiveSubscription(),
                 ], 200);
             }
 
