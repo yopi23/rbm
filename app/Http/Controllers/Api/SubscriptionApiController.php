@@ -57,7 +57,7 @@ class SubscriptionApiController extends Controller
         }
 
         $qrisString = $qrisService->generate($payment->unique_amount, $payment->reference_code);
-        $options = new QROptions(['outputType' => QRCode::OUTPUT_IMAGE_SVG, 'eccLevel' => QRCode::ECC_L]);
+        $options = new QROptions(['outputType' => QRCode::OUTPUT_MARKUP_SVG, 'eccLevel' => QRCode::ECC_L]);
         $qrCodeImage = (new QRCode($options))->render($qrisString);
 
         return response()->json(['payment' => $payment->load('subscriptionPlan'), 'qr_code_image' => $qrCodeImage]);
