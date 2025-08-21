@@ -16,6 +16,7 @@ return [
     */
 
     'name' => env('APP_NAME', 'Laravel'),
+    'macrodroid_secret_key' => env('MACRODROID_SECRET_KEY'),
 
     /*
     |--------------------------------------------------------------------------
@@ -193,7 +194,7 @@ return [
          */
         App\Providers\AppServiceProvider::class,
         App\Providers\AuthServiceProvider::class,
-        // App\Providers\BroadcastServiceProvider::class,
+        App\Providers\BroadcastServiceProvider::class,
         App\Providers\EventServiceProvider::class,
         App\Providers\RouteServiceProvider::class,
 

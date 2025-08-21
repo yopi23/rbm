@@ -8,6 +8,7 @@ use App\Models\SubscriptionLog;
 use App\Models\SubscriptionToken; // <-- Tambahkan ini
 use App\Models\User; // <-- Tambahkan ini
 use Carbon\Carbon;
+use App\Events\PaymentVerified;
 
 class SubscriptionService
 {
@@ -32,6 +33,8 @@ class SubscriptionService
             'EXTENDED_BY_PAYMENT',
             "Langganan diperpanjang/diaktifkan via QRIS Ref: {$payment->reference_code} untuk {$plan->duration_in_months} bulan."
         );
+         // === KIRIM SINYAL CALLBACK DI SINI ===
+        event(new PaymentVerified($payment));
     }
 
     /**

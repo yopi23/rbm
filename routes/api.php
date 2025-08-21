@@ -18,7 +18,9 @@ use App\Http\Controllers\Api\HpApiController;
 use App\Http\Controllers\Api\CommissionController;
 use App\Http\Controllers\Api\FinancialReportApiController;
 use App\Http\Controllers\Api\PengeluaranApiController;
+use App\Http\Controllers\Api\WebhookController;
 use App\Http\Controllers\Admin\EmployeeManagementController;
+use Illuminate\Support\Facades\Broadcast;
 
 /*
 |--------------------------------------------------------------------------
@@ -34,7 +36,8 @@ use App\Http\Controllers\Admin\EmployeeManagementController;
 Route::get('/spareparts/cari', [SalesApiController::class, 'cari']); // Example public search
 Route::get('/cek-service', [ServiceApiController::class,'cekService']); // Example public service check
 Route::post('login', [AuthController::class, 'login']);
-
+Route::post('/webhooks/macrodroid', [WebhookController::class, 'handleMacrodroid']);
+Broadcast::routes(['middleware' => ['auth:sanctum']]);
 Route::middleware('auth:sanctum')->group(function () {
 
     // Pindahkan route ini dari grup di bawah ke sini
