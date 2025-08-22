@@ -216,91 +216,168 @@ class ServiceApiController extends Controller
     /**
      * Search all services with enhanced functionality
      */
+    // public function allservice(Request $request)
+    // {
+    //     try {
+    //         $kodeOwner = $this->getThisUser()->id_upline;
+    //         $search = $request->input('search');
+    //         $page = $request->get('page', 1);
+    //         $limit = min($request->get('limit', 20), 50);
+    //         $status = $request->get('status'); // Filter by status
+    //         $year = $request->get('year', date('Y'));
+
+    //         if (empty($search)) {
+    //             return response()->json([
+    //                 'success' => true,
+    //                 'message' => 'Silakan masukkan kata kunci pencarian.',
+    //                 'data' => [],
+    //                 'pagination' => null
+    //             ], 200);
+    //         }
+
+    //         $cacheKey = "all_services_{$kodeOwner}_{$search}_{$page}_{$limit}_{$status}_{$year}";
+
+    //         $result = Cache::remember($cacheKey, 180, function () use ($kodeOwner, $search, $page, $limit, $status, $year) {
+    //             $query = modelServices::where('kode_owner', $kodeOwner)
+    //                 ->where(function ($q) use ($search) {
+    //                     $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
+    //                       ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
+    //                       ->orWhere('sevices.kode_service', $search)
+    //                       ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
+    //                 })
+    //                 ->whereYear('sevices.created_at', $year)
+    //                 ->join('users', 'sevices.id_teknisi', '=', 'users.id')
+    //                 ->select('sevices.*', 'users.name as teknisi');
+
+    //             if ($status) {
+    //                 $query->where('sevices.status_services', $status);
+    //             }
+
+    //             $totalCount = $query->count();
+    //             $services = $query->orderBy('sevices.created_at', 'desc')
+    //                              ->offset(($page - 1) * $limit)
+    //                              ->limit($limit)
+    //                              ->get();
+
+    //             // Enhance with additional data
+    //             $services = $services->map(function ($service) {
+    //                 $service->has_warranty = Garansi::where('kode_garansi', $service->kode_service)
+    //                     ->where('type_garansi', 'service')
+    //                     ->exists();
+
+    //                 $service->has_notes = DetailCatatanService::where('kode_services', $service->id)->exists();
+
+    //                 $service->part_count = [
+    //                     'toko' => DetailPartServices::where('kode_services', $service->id)->count(),
+    //                     'luar' => DetailPartLuarService::where('kode_services', $service->id)->count()
+    //                 ];
+
+    //                 return $service;
+    //             });
+
+    //             return [
+    //                 'data' => $services,
+    //                 'pagination' => [
+    //                     'current_page' => (int) $page,
+    //                     'per_page' => (int) $limit,
+    //                     'total' => (int) $totalCount,
+    //                     'total_pages' => ceil($totalCount / $limit),
+    //                 ]
+    //             ];
+    //         });
+
+    //         return response()->json([
+    //             'success' => true,
+    //             'message' => 'Data layanan ditemukan.',
+    //             'data' => $result['data'],
+    //             'pagination' => $result['pagination'],
+    //             'search_query' => $search
+    //         ], 200);
+    //     } catch (\Exception $e) {
+    //         Log::error("All Service Search Error: " . $e->getMessage());
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
     public function allservice(Request $request)
-    {
-        try {
-            $kodeOwner = $this->getThisUser()->id_upline;
-            $search = $request->input('search');
-            $page = $request->get('page', 1);
-            $limit = min($request->get('limit', 20), 50);
-            $status = $request->get('status'); // Filter by status
-            $year = $request->get('year', date('Y'));
+{
+    try {
+        $kodeOwner = $this->getThisUser()->id_upline;
+        $search = $request->input('search');
+        $page = $request->get('page', 1);
+        $limit = min($request->get('limit', 20), 50);
+        $status = $request->get('status'); // Filter by status
+        $year = $request->get('year', date('Y'));
 
-            if (empty($search)) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Silakan masukkan kata kunci pencarian.',
-                    'data' => [],
-                    'pagination' => null
-                ], 200);
-            }
-
-            $cacheKey = "all_services_{$kodeOwner}_{$search}_{$page}_{$limit}_{$status}_{$year}";
-
-            $result = Cache::remember($cacheKey, 180, function () use ($kodeOwner, $search, $page, $limit, $status, $year) {
-                $query = modelServices::where('kode_owner', $kodeOwner)
-                    ->where(function ($q) use ($search) {
-                        $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
-                          ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
-                          ->orWhere('sevices.kode_service', $search)
-                          ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
-                    })
-                    ->whereYear('sevices.created_at', $year)
-                    ->join('users', 'sevices.id_teknisi', '=', 'users.id')
-                    ->select('sevices.*', 'users.name as teknisi');
-
-                if ($status) {
-                    $query->where('sevices.status_services', $status);
-                }
-
-                $totalCount = $query->count();
-                $services = $query->orderBy('sevices.created_at', 'desc')
-                                 ->offset(($page - 1) * $limit)
-                                 ->limit($limit)
-                                 ->get();
-
-                // Enhance with additional data
-                $services = $services->map(function ($service) {
-                    $service->has_warranty = Garansi::where('kode_garansi', $service->kode_service)
-                        ->where('type_garansi', 'service')
-                        ->exists();
-
-                    $service->has_notes = DetailCatatanService::where('kode_services', $service->id)->exists();
-
-                    $service->part_count = [
-                        'toko' => DetailPartServices::where('kode_services', $service->id)->count(),
-                        'luar' => DetailPartLuarService::where('kode_services', $service->id)->count()
-                    ];
-
-                    return $service;
-                });
-
-                return [
-                    'data' => $services,
-                    'pagination' => [
-                        'current_page' => (int) $page,
-                        'per_page' => (int) $limit,
-                        'total' => (int) $totalCount,
-                        'total_pages' => ceil($totalCount / $limit),
-                    ]
-                ];
-            });
-
+        if (empty($search)) {
             return response()->json([
                 'success' => true,
-                'message' => 'Data layanan ditemukan.',
-                'data' => $result['data'],
-                'pagination' => $result['pagination'],
-                'search_query' => $search
+                'message' => 'Silakan masukkan kata kunci pencarian.',
+                'data' => [],
+                'pagination' => null
             ], 200);
-        } catch (\Exception $e) {
-            Log::error("All Service Search Error: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-            ], 500);
         }
+
+        $query = modelServices::where('kode_owner', $kodeOwner)
+            ->where(function ($q) use ($search) {
+                $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
+                  ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
+                  ->orWhere('sevices.kode_service','LIKE', "%$search%")
+                  ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
+            })
+            ->whereYear('sevices.created_at', $year)
+            ->join('users', 'sevices.id_teknisi', '=', 'users.id')
+            ->select('sevices.*', 'users.name as teknisi');
+
+        if ($status) {
+            $query->where('sevices.status_services', $status);
+        }
+
+        $totalCount = $query->count();
+        $services = $query->orderBy('sevices.created_at', 'desc')
+                         ->offset(($page - 1) * $limit)
+                         ->limit($limit)
+                         ->get();
+
+        // Tambahan data
+        $services = $services->map(function ($service) {
+            $service->has_warranty = Garansi::where('kode_garansi', $service->kode_service)
+                ->where('type_garansi', 'service')
+                ->exists();
+
+            $service->has_notes = DetailCatatanService::where('kode_services', $service->id)->exists();
+
+            $service->part_count = [
+                'toko' => DetailPartServices::where('kode_services', $service->id)->count(),
+                'luar' => DetailPartLuarService::where('kode_services', $service->id)->count()
+            ];
+
+            return $service;
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data layanan ditemukan.',
+            'data' => $services,
+            'pagination' => [
+                'current_page' => (int) $page,
+                'per_page' => (int) $limit,
+                'total' => (int) $totalCount,
+                'total_pages' => ceil($totalCount / $limit),
+            ],
+            'search_query' => $search
+        ], 200);
+
+    } catch (\Exception $e) {
+        Log::error("All Service Search Error: " . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+        ], 500);
     }
+}
 
     /**
      * Check service with enhanced warranty and part information
