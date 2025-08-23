@@ -324,7 +324,7 @@ class ServiceApiController extends Controller
             ->where(function ($q) use ($search) {
                 $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
                   ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
-                  ->orWhere('sevices.kode_service','LIKE', "%$search%")
+                  ->orWhere('sevices.kode_service',$search)
                   ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
             })
             ->whereYear('sevices.created_at', $year)
@@ -2021,194 +2021,172 @@ public function getDailyReportGrouped(Request $request)
 }
 
 public function searchServiceExtended(Request $request)
-    {
-        try {
-            $search = $request->input('search');
-            $page = $request->get('page', 1);
-            $limit = min($request->get('limit', 20), 50);
-            $status = $request->get('status'); // Optional status filter
-            $technician_id = $request->get('technician_id'); // Optional technician filter
-            $sort_by = $request->get('sort_by', 'created_at'); // created_at, tgl_service, updated_at
-            $sort_order = $request->get('sort_order', 'desc'); // asc, desc
+{
+    try {
+        $search        = $request->input('search');
+        $page          = (int) $request->get('page', 1);
+        $limit         = min((int) $request->get('limit', 20), 50);
+        $status        = $request->get('status');         // Optional filter status
+        $technician_id = $request->get('technician_id');  // Optional filter teknisi
+        $sort_by       = $request->get('sort_by', 'created_at');
+        $sort_order    = strtolower($request->get('sort_order', 'desc'));
 
-            // Validation
-            if (empty($search) || strlen($search) < 2) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Kata kunci pencarian minimal 2 karakter.',
-                    'data' => [],
-                    'pagination' => null
-                ], 400);
+        // Validation keyword
+        if (empty($search) || strlen($search) < 2) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'Kata kunci pencarian minimal 2 karakter.',
+                'data'       => [],
+                'pagination' => null
+            ], 400);
+        }
+
+        // Range waktu: Tahun berjalan + 3 bulan terakhir tahun sebelumnya
+        $currentYear = date('Y');
+        $previousYear = $currentYear - 1;
+
+        $dateFrom = Carbon::create($previousYear, 10, 1)->startOfDay(); // 1 Okt tahun lalu
+        $dateTo   = Carbon::create($currentYear, 12, 31)->endOfDay();   // 31 Des tahun ini
+
+        $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+            ->whereBetween('sevices.created_at', [$dateFrom, $dateTo])
+            ->leftJoin('users', 'sevices.id_teknisi', '=', 'users.id')
+            ->select(
+                'sevices.*',
+                'users.name as teknisi',
+                DB::raw('CASE
+                    WHEN sevices.created_at >= "' . date('Y-01-01') . '" THEN "current_year"
+                    ELSE "previous_year_last_quarter"
+                END as period_category')
+            );
+
+        // Pencarian fleksibel
+        $query->where(function ($q) use ($search) {
+            $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
+              ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
+              ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
+              ->orWhere('sevices.no_telp', 'LIKE', "%$search%")
+              ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
+        });
+
+        // Filter tambahan
+        if ($status) {
+            $query->where('sevices.status_services', $status);
+        }
+
+        if ($technician_id) {
+            $query->where('sevices.id_teknisi', $technician_id);
+        }
+
+        // Validasi sort
+        $allowedSortColumns = ['created_at', 'tgl_service', 'updated_at', 'total_biaya', 'nama_pelanggan'];
+        if (!in_array($sort_by, $allowedSortColumns)) {
+            $sort_by = 'created_at';
+        }
+        if (!in_array($sort_order, ['asc', 'desc'])) {
+            $sort_order = 'desc';
+        }
+
+        // Hitung total
+        $totalCount = $query->count();
+
+        // Ambil data dengan pagination
+        $services = $query->orderBy("sevices.{$sort_by}", $sort_order)
+            ->orderBy('sevices.id', 'desc')
+            ->offset(($page - 1) * $limit)
+            ->limit($limit)
+            ->get();
+
+        // Tambahan data untuk tiap service
+        $services = $services->map(function ($service) {
+            // Cek garansi
+            $warranty = Garansi::where('kode_garansi', $service->kode_service)
+                ->where('type_garansi', 'service')
+                ->first();
+
+            $service->warranty_info = $warranty ? [
+                'exists'         => true,
+                'expiry_date'    => $warranty->tgl_exp_garansi,
+                'status'         => $this->getWarrantyStatus($warranty->tgl_exp_garansi),
+                'days_remaining' => now()->diffInDays($warranty->tgl_exp_garansi, false)
+            ] : ['exists' => false];
+
+            // Hitung parts
+            $service->parts_count = [
+                'toko' => DetailPartServices::where('kode_services', $service->id)->count(),
+                'luar' => DetailPartLuarService::where('kode_services', $service->id)->count()
+            ];
+
+            // Catatan terakhir
+            $latestNote = DetailCatatanService::where('kode_services', $service->id)
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            $service->latest_note = $latestNote ? $latestNote->catatan_service : null;
+            $service->has_notes   = $latestNote != null;
+
+            // Info pembayaran
+            $totalBiaya = (float) $service->total_biaya;
+            $dp         = (float) $service->dp;
+            $sisaBayar  = $totalBiaya - $dp;
+
+            $service->payment_info = [
+                'total_biaya'       => $totalBiaya,
+                'dp_paid'           => $dp,
+                'remaining'         => $sisaBayar,
+                'is_fully_paid'     => $sisaBayar <= 0 || $service->status_services === 'Diambil',
+                'payment_percentage'=> $totalBiaya > 0 ? round(($dp / $totalBiaya) * 100, 2) : 0
+            ];
+
+            // Lama service (jika selesai)
+            if ($service->status_services === 'Selesai' && $service->tgl_service) {
+                $service->completion_time = [
+                    'hours' => Carbon::parse($service->created_at)->diffInHours(Carbon::parse($service->tgl_service)),
+                    'days'  => Carbon::parse($service->created_at)->diffInDays(Carbon::parse($service->tgl_service))
+                ];
             }
 
-            // Calculate date range: current year + last 3 months of previous year
-            $currentYear = date('Y');
-            $previousYear = $currentYear - 1;
+            return $service;
+        });
 
-            // Start from October 1st of previous year (last 3 months)
-            $dateFrom = Carbon::create($previousYear, 10, 1)->startOfDay();
-            // End at December 31st of current year
-            $dateTo = Carbon::create($currentYear, 12, 31)->endOfDay();
-
-            $cacheKey = "search_extended_{$this->getThisUser()->id_upline}_" .
-                    md5($search . $page . $limit . $status . $technician_id . $sort_by . $sort_order);
-
-            $result = Cache::remember($cacheKey, 300, function () use (
-                $search, $page, $limit, $status, $technician_id, $sort_by, $sort_order, $dateFrom, $dateTo
-            ) {
-                $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
-                    ->whereBetween('sevices.created_at', [$dateFrom, $dateTo])
-                    ->leftJoin('users', 'sevices.id_teknisi', '=', 'users.id')
-                    ->select(
-                        'sevices.*',
-                        'users.name as teknisi',
-                        DB::raw('CASE
-                            WHEN sevices.created_at >= "' . date('Y-01-01') . '" THEN "current_year"
-                            ELSE "previous_year_last_quarter"
-                        END as period_category')
-                    );
-
-                // Enhanced search conditions
-                $query->where(function ($q) use ($search) {
-                    // Search by customer name (primary)
-                    $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
-                    // Search by device type
-                    ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
-                    // Search by service code
-                    ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
-                    // Search by phone number (if exists in your schema)
-                    ->orWhere('sevices.no_telp', 'LIKE', "%$search%")
-                    // Search by description/problem
-                    ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
-                    // Search by address (if exists)
-                    // ->orWhere('sevices.alamat', 'LIKE', "%$search%");
-                });
-
-                // Apply filters
-                if ($status) {
-                    $query->where('sevices.status_services', $status);
-                }
-
-                if ($technician_id) {
-                    $query->where('sevices.id_teknisi', $technician_id);
-                }
-
-                // Validate sort column
-                $allowedSortColumns = ['created_at', 'tgl_service', 'updated_at', 'total_biaya', 'nama_pelanggan'];
-                if (!in_array($sort_by, $allowedSortColumns)) {
-                    $sort_by = 'created_at';
-                }
-
-                $sort_order = in_array(strtolower($sort_order), ['asc', 'desc']) ? $sort_order : 'desc';
-
-                $totalCount = $query->count();
-
-                $services = $query->orderBy("sevices.{$sort_by}", $sort_order)
-                                ->orderBy('sevices.id', 'desc') // Secondary sort for consistency
-                                ->offset(($page - 1) * $limit)
-                                ->limit($limit)
-                                ->get();
-
-                // Enhance results with additional data
-                $services = $services->map(function ($service) {
-                    // Check warranty status
-                    $warranty = Garansi::where('kode_garansi', $service->kode_service)
-                        ->where('type_garansi', 'service')
-                        ->first();
-
-                    $service->warranty_info = null;
-                    if ($warranty) {
-                        $service->warranty_info = [
-                            'exists' => true,
-                            'expiry_date' => $warranty->tgl_exp_garansi,
-                            'status' => $this->getWarrantyStatus($warranty->tgl_exp_garansi),
-                            'days_remaining' => now()->diffInDays($warranty->tgl_exp_garansi, false)
-                        ];
-                    } else {
-                        $service->warranty_info = ['exists' => false];
-                    }
-
-                    // Count parts used
-                    $service->parts_count = [
-                        'toko' => DetailPartServices::where('kode_services', $service->id)->count(),
-                        'luar' => DetailPartLuarService::where('kode_services', $service->id)->count()
-                    ];
-
-                    // Check if has notes
-                    $service->has_notes = DetailCatatanService::where('kode_services', $service->id)->exists();
-
-                    // Calculate payment status
-                    $totalBiaya = (float) $service->total_biaya;
-                    $dp = (float) $service->dp;
-                    $sisaBayar = $totalBiaya - $dp;
-
-                    $service->payment_info = [
-                        'total_biaya' => $totalBiaya,
-                        'dp_paid' => $dp,
-                        'remaining' => $sisaBayar,
-                        'is_fully_paid' => $sisaBayar <= 0 || $service->status_services === 'Diambil',
-                        'payment_percentage' => $totalBiaya > 0 ? round(($dp / $totalBiaya) * 100, 2) : 0
-                    ];
-
-                    // Calculate service duration (if completed)
-                    if ($service->status_services === 'Selesai' && $service->tgl_service) {
-                        $service->completion_time = [
-                            'hours' => Carbon::parse($service->created_at)
-                                    ->diffInHours(Carbon::parse($service->tgl_service)),
-                            'days' => Carbon::parse($service->created_at)
-                                ->diffInDays(Carbon::parse($service->tgl_service))
-                        ];
-                    }
-
-                    return $service;
-                });
-
-                return [
-                    'data' => $services,
-                    'pagination' => [
-                        'current_page' => (int) $page,
-                        'per_page' => (int) $limit,
-                        'total' => (int) $totalCount,
-                        'total_pages' => ceil($totalCount / $limit),
-                        'has_next_page' => $page < ceil($totalCount / $limit),
-                        'has_previous_page' => $page > 1,
-                    ]
-                ];
-            });
-
-            // Generate search statistics
-            $searchStats = $this->generateSearchStatistics($search, $dateFrom, $dateTo);
-
-            return response()->json([
-                'success' => true,
-                'message' => "Ditemukan {$result['pagination']['total']} layanan yang cocok dengan pencarian.",
-                'data' => $result['data'],
-                'pagination' => $result['pagination'],
-                'search_info' => [
-                    'query' => $search,
-                    'period' => [
-                        'from' => $dateFrom->format('Y-m-d'),
-                        'to' => $dateTo->format('Y-m-d'),
-                        'description' => "Tahun {$currentYear} dan 3 bulan terakhir tahun " . ($currentYear - 1)
-                    ],
-                    'filters' => [
-                        'status' => $status,
-                        'technician_id' => $technician_id,
-                        'sort_by' => $sort_by,
-                        'sort_order' => $sort_order
-                    ]
+        // Response final
+        return response()->json([
+            'success'    => true,
+            'message'    => "Ditemukan {$totalCount} layanan yang cocok dengan pencarian.",
+            'data'       => $services,
+            'pagination' => [
+                'current_page'     => $page,
+                'per_page'         => $limit,
+                'total'            => $totalCount,
+                'total_pages'      => ceil($totalCount / $limit),
+                'has_next_page'    => $page < ceil($totalCount / $limit),
+                'has_previous_page'=> $page > 1,
+            ],
+            'search_info'=> [
+                'query'       => $search,
+                'period'      => [
+                    'from'        => $dateFrom->format('Y-m-d'),
+                    'to'          => $dateTo->format('Y-m-d'),
+                    'description' => "Tahun {$currentYear} dan 3 bulan terakhir tahun " . ($currentYear - 1)
                 ],
-                'statistics' => $searchStats
-            ], 200);
+                'filters'     => [
+                    'status'        => $status,
+                    'technician_id' => $technician_id,
+                    'sort_by'       => $sort_by,
+                    'sort_order'    => $sort_order
+                ]
+            ]
+        ], 200);
 
-        } catch (\Exception $e) {
-            Log::error("Search Service Extended Error: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Terjadi kesalahan saat melakukan pencarian: ' . $e->getMessage(),
-            ], 500);
-        }
+    } catch (\Exception $e) {
+        Log::error("Search Service Extended Error: " . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Terjadi kesalahan saat melakukan pencarian: ' . $e->getMessage(),
+        ], 500);
     }
+}
+
 
     /**
      * Generate search statistics for the extended search
