@@ -1766,6 +1766,7 @@ public function getDailyReportServices(Request $request)
                     'id' => $service->id,
                     'kode_service' => $service->kode_service,
                     'nama_pelanggan' => $service->nama_pelanggan,
+                    'no_telp' => $service->no_telp,
                     'tgl_service' => $service->tgl_service,
                     'tgl_diambil' => $service->service_status === 'Diambil' ? $service->updated_at : null,
                     'type_unit' => $service->type_unit,
