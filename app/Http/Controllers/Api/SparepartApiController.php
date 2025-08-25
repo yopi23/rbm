@@ -529,8 +529,9 @@ class SparepartApiController extends Controller
     // }
 
     public function updateService(Request $request, $id)
-    {
-        try {
+{
+    try {
+        return \DB::transaction(function () use ($request, $id) {
             $service = ModelServices::findOrFail($id);
 
             // Simpan data lama
@@ -552,7 +553,7 @@ class SparepartApiController extends Controller
                         $newDp = $request->input('dp', 0);
 
                         // Hanya wajib isi jika DP berubah
-                        if ($newDp != $oldDp && $newDp > 0 && empty($value)) {
+                        if ($newDp != $oldDp && $newDp > 0 && is_null($value)) {
                             $fail("Kolom $attribute wajib diisi jika DP berubah.");
                         }
                     }
@@ -582,16 +583,18 @@ class SparepartApiController extends Controller
                         null,
                         "Update DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Penambahan)"
                     );
-                } elseif ($dpDifference < 0 && $oldLaciId) {
-                    // DP berkurang
-                    $this->recordLaciHistory(
-                        $oldLaciId,
-                        null,
-                        abs($dpDifference),
-                        "Update DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Pengurangan)",
-                    );
+                } elseif ($dpDifference < 0) {
+                    if ($oldLaciId) {
+                        // DP berkurang
+                        $this->recordLaciHistory(
+                            $oldLaciId,
+                            null,
+                            abs($dpDifference),
+                            "Update DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Pengurangan)"
+                        );
+                    }
 
-                    // Kalau pindah laci
+                    // Kalau pindah laci (baru dan lama beda)
                     if ($newDp > 0 && $newLaciId && $newLaciId != $oldLaciId) {
                         $this->recordLaciHistory(
                             $newLaciId,
@@ -622,12 +625,10 @@ class SparepartApiController extends Controller
                 }
             }
 
-            // ==== Recalculate komisi kalau status sudah selesai & total biaya berubah ====
-            if (
-                in_array($service->status_services, ['Selesai', 'Diambil']) && // DIUBAH DI SINI
-                isset($validatedData['total_biaya']) &&
-                $validatedData['total_biaya'] != $oldTotalBiaya
-            ) {
+            // ==== Recalculate komisi kalau status sudah selesai/diambil & total biaya berubah ====
+            $status = strtolower($service->status_services);
+
+            if (in_array($status, ['selesai', 'diambil']) && $service->wasChanged('total_biaya')) {
                 $this->performCommissionRecalculation($id);
             }
 
@@ -635,23 +636,25 @@ class SparepartApiController extends Controller
                 'message' => 'Service updated successfully',
                 'service' => $service->fresh(),
             ], 200);
+        });
 
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'message' => 'Service not found',
-            ], 404);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $e->errors(),
-            ], 422);
-        } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Server error',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        return response()->json([
+            'message' => 'Service not found',
+        ], 404);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors(),
+        ], 422);
+    } catch (\Exception $e) {
+        return response()->json([
+            'message' => 'Server error',
+            'error' => $e->getMessage(),
+        ], 500);
     }
+}
+
 
 
 /**
@@ -889,73 +892,79 @@ private function performCommissionRecalculation($serviceId)
     Log::info("Internal: Service Harga SP updated to: $total_part for Service ID: $serviceId");
 
     // Recalculate profit ONLY if service is "Selesai" and a technician is assigned
-    if ($service->status_services == 'Selesai' && $service->id_teknisi) {
-        $id_teknisi = $service->id_teknisi;
+    if (in_array(strtolower($service->status_services), ['selesai','diambil'])
+    && $service->id_teknisi) {
+
+    $serviceId = $service->id;
+    $id_teknisi = $service->id_teknisi;
+
+    DB::transaction(function () use ($service, $serviceId, $id_teknisi, $total_part) {
         $presentaseSetting = SalarySetting::where('user_id', $id_teknisi)->first();
         $teknisi = UserDetail::where('kode_user', $id_teknisi)->first();
 
-        if (!$teknisi || !$presentaseSetting) { // Pastikan teknisi dan setting gajinya ada
+        if (!$teknisi || !$presentaseSetting) {
             Log::warning("Internal: Technician or SalarySetting not found for ID: {$id_teknisi}. Commission not updated.");
             return [
-                'service_id' => $service->id,
+                'service_id'   => $serviceId,
                 'new_harga_sp' => $service->harga_sp,
-                'new_profit' => 0,
-                'warning' => 'Technician or salary setting not found, commission skipped.'
+                'new_profit'   => 0,
+                'warning'      => 'Technician or salary setting not found, commission skipped.'
             ];
         }
 
-        // Ambil profit lama (jika ada) untuk dikoreksi pada saldo teknisi
+        // Hapus profit lama dari saldo teknisi (jika ada)
         $oldProfitPresentase = ProfitPresentase::where('kode_service', $serviceId)->first();
         if ($oldProfitPresentase) {
             $teknisi->decrement('saldo', $oldProfitPresentase->profit);
             Log::info("Internal: Old profit deducted: {$oldProfitPresentase->profit} from Technician ID: {$id_teknisi}");
         }
 
-        // Hitung total profit dari service
+        // Hitung ulang profit dari service
         $total_service_profit = $service->total_biaya - $total_part;
 
-        // DIUBAH: Inisialisasi variabel untuk profit teknisi dan toko
         $fix_profit_teknisi = 0;
         $profit_untuk_toko = 0;
 
-        // DIUBAH: Gunakan if-else untuk menentukan nilai profit berdasarkan tipe gaji
-        if ($presentaseSetting->compensation_type == 'percentage') {
-            // Logika untuk teknisi persentase
-            if ($total_service_profit < 0) { // Jika rugi
+        if ($presentaseSetting->compensation_type === 'percentage') {
+            if ($total_service_profit < 0) {
+                // Komisi negatif (rugi)
                 $fix_profit_teknisi = $total_service_profit * $presentaseSetting->max_percentage / 100;
-            } else { // Jika untung
+            } else {
+                // Untung
                 $fix_profit_teknisi = $total_service_profit * $presentaseSetting->percentage_value / 100;
             }
             $profit_untuk_toko = $total_service_profit - $fix_profit_teknisi;
-            Log::info("Internal (Percentage): New calculated profit: {$fix_profit_teknisi} for Technician ID: {$id_teknisi}");
 
-        } else { // 'fixed'
-            // Logika untuk teknisi gaji tetap
-            $fix_profit_teknisi = 0; // Komisi dari service adalah 0
-            $profit_untuk_toko = $total_service_profit; // Semua profit masuk ke toko
+            Log::info("Internal (Percentage): New calculated profit: {$fix_profit_teknisi} for Technician ID: {$id_teknisi}");
+        } else {
+            // Gaji tetap
+            $fix_profit_teknisi = 0;
+            $profit_untuk_toko = $total_service_profit;
+
             Log::info("Internal (Fixed): Profit generated for store: {$profit_untuk_toko} by Technician ID: {$id_teknisi}");
         }
 
-        // DIUBAH: 'updateOrCreate' sekarang dijalankan untuk SEMUA tipe gaji
+        // Simpan atau update profit
         $komisi = ProfitPresentase::updateOrCreate(
             ['kode_service' => $serviceId],
             [
-                'tgl_profit' => now(),
+                'tgl_profit'      => now(),
                 'kode_presentase' => $presentaseSetting->id,
-                'kode_user' => $id_teknisi,
-                'profit' => $fix_profit_teknisi, // Akan 0 jika gaji tetap
-                'profit_toko' => $profit_untuk_toko, // Akan terisi sesuai perhitungan di atas
-                'saldo' => $teknisi->fresh()->saldo + $fix_profit_teknisi, // Saldo sementara
+                'kode_user'       => $id_teknisi,
+                'profit'          => $fix_profit_teknisi,
+                'profit_toko'     => $profit_untuk_toko,
             ]
         );
 
-        // Tambahkan profit baru (yang mungkin 0) ke saldo teknisi
+        // Tambahkan profit baru (bisa positif atau negatif) ke saldo teknisi
         $teknisi->increment('saldo', $fix_profit_teknisi);
-        Log::info("Internal: Technician new saldo: {$teknisi->fresh()->saldo} for Technician ID: {$id_teknisi}");
 
         // Update saldo final di record komisi
         $komisi->update(['saldo' => $teknisi->fresh()->saldo]);
-    }
+
+        Log::info("Internal: Technician new saldo: {$teknisi->fresh()->saldo} for Technician ID: {$id_teknisi}");
+    });
+}
 
     Log::info("Internal: performCommissionRecalculation finished for Service ID: $serviceId");
 
