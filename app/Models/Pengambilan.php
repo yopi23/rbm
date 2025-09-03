@@ -17,4 +17,8 @@ class Pengambilan extends Model
         'user_input',
         'status_pengambilan',
     ];
+    public function kas()
+    {
+        return $this->morphOne(KasPerusahaan::class, 'sourceable');
+    }
 }

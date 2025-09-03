@@ -7,15 +7,19 @@ use App\Models\PengeluaranOperasional;
 use App\Models\PengeluaranToko;
 use App\Models\User;
 use App\Models\UserDetail;
+use App\Models\BebanOperasional;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
 use App\Traits\KategoriLaciTrait;
 use Illuminate\Support\Facades\Log;
+use App\Traits\ManajemenKasTrait;
+use Illuminate\Support\Facades\DB;
 
 class PengeluaranApiController extends Controller
 {
     use KategoriLaciTrait;
+    use ManajemenKasTrait;
 
     /**
      * Get all pengeluaran toko
@@ -53,6 +57,40 @@ class PengeluaranApiController extends Controller
             ], 500);
         }
     }
+
+    public function getKategoriPengeluaran(): JsonResponse
+    {
+        try {
+            // Ambil kategori dari master data Beban Tetap
+            $kategoriBeban = BebanOperasional::where('kode_owner', $this->getThisUser()->id_upline)
+                                            ->pluck('nama_beban');
+
+            // Tambahkan kategori standar (tanpa 'Lainnya' dulu)
+            $kategoriStandar = collect(['Penggajian']);
+
+            // Gabungkan dan pastikan unik
+            $semuaKategori = $kategoriStandar->merge($kategoriBeban)->unique()->values();
+
+            // Pastikan 'Lainnya' selalu ada di paling bawah
+            $semuaKategori = $semuaKategori->reject(function ($item) {
+                return strtolower($item) === 'lainnya';
+            })->values();
+            $semuaKategori->push('Lainnya');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Kategori berhasil diambil',
+                'data' => $semuaKategori
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil kategori',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 
     /**
      * Get single pengeluaran toko by ID
@@ -98,6 +136,11 @@ class PengeluaranApiController extends Controller
                 'catatan_pengeluaran' => $request->catatan_pengeluaran,
                 'kode_owner' => $this->getThisUser()->id_upline
             ]);
+            $this->catatKas(
+                    $pengeluaran, 0, $pengeluaran->jumlah_pengeluaran,
+                    'Pengeluaran Toko (API): ' . $pengeluaran->nama_pengeluaran,
+                    $pengeluaran->tanggal_pengeluaran
+                );
 
             // Handle laci history if kategori laci is provided
             if ($request->id_kategorilaci) {
@@ -365,7 +408,11 @@ class PengeluaranApiController extends Controller
             ]);
 
             Log::info('Pengeluaran berhasil dibuat', ['pengeluaran' => $pengeluaran->toArray()]);
-
+            $this->catatKas(
+                $pengeluaran, 0, $pengeluaran->jml_pengeluaran,
+                'Pengeluaran Opex (API): ' . $pengeluaran->nama_pengeluaran,
+                $pengeluaran->tgl_pengeluaran
+            );
             // Record laci history if kategori laci is provided
             if ($request->id_kategorilaci) {
                 $kategoriId = $request->id_kategorilaci;

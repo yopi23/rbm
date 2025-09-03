@@ -14,11 +14,13 @@ use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Redis;
 use App\Traits\KategoriLaciTrait;
+use App\Traits\ManajemenKasTrait;
 use PDO;
 
 class PenjualanController extends Controller
 {
     use KategoriLaciTrait;
+    use ManajemenKasTrait;
     //
     public function view_penjualan(Request $request)
     {
@@ -275,10 +277,13 @@ class PenjualanController extends Controller
     }
     public function update(Request $request, $id)
     {
-        $data = Penjualan::findOrFail($id);
+        $penjualan = Penjualan::findOrFail($id);
         $data_update = [];
         if ($request->total_penjualan <= 0) return redirect()->route('penjualan')->with('error', 'Penjualan Tidak Boleh Kosong');
+
+        $isPaid = false;
         if ($request->simpan == 'bayar') {
+            $isPaid = true;
             $data_update = [
                 'tgl_penjualan' => $request->tgl_penjualan,
                 'nama_customer' => $request->nama_customer != null ? $request->nama_customer : '-',
@@ -304,6 +309,7 @@ class PenjualanController extends Controller
         }
         // Menangani form baru
         if ($request->simpan == 'newbayar') {
+            $isPaid = true;
             $data_update = [
                 'tgl_penjualan' => $request->tgl_penjualan, // Atau ambil dari request jika ada
                 'nama_customer' => $request->nama_customer ?? '-', // Ambil dari form baru
@@ -337,8 +343,19 @@ class PenjualanController extends Controller
                 'created_at' => Carbon::now(),
             ];
         }
-        $data->update($data_update);
-        if ($data) {
+        $penjualan->update($data_update);
+
+        if ($isPaid && $penjualan) {
+            $this->catatKas(
+                $penjualan,                                  // Model sumber
+                $penjualan->total_penjualan,                // Debit (uang masuk)
+                0,                                           // Kredit (tidak ada)
+                'Penjualan Produk #' . $penjualan->kode_penjualan, // Deskripsi
+                $penjualan->tgl_penjualan                     // Tanggal
+            );
+        }
+
+        if ($penjualan) {
             return redirect()->back();
         }
     }

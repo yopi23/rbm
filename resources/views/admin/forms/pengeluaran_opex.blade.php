@@ -1,121 +1,126 @@
-@section('page',$page)
+@section('page', $page)
 @include('admin.component.header')
 @include('admin.component.navbar')
 @include('admin.component.sidebar')
-  <!-- Content Wrapper. Contains page content -->
-  <div class="content-wrapper">
-    <!-- Content Header (Page header) -->
-    <div class="content-header">
-      <div class="container-fluid">
-        <div class="row mb-2">
-          <div class="col-sm-6">
-            <h1 class="m-0">@yield('page')</h1>
-          </div><!-- /.col -->
-          <div class="col-sm-6">
-            <ol class="breadcrumb float-sm-right">
-              <li class="breadcrumb-item"><a href="{{route('dashboard')}}">Home</a></li>
-              <li class="breadcrumb-item active">@yield('page')</li>
-            </ol>
-          </div><!-- /.col -->
-        </div><!-- /.row -->
-      </div><!-- /.container-fluid -->
-    </div>
 
-    <section class="content">
-      <div class="container-fluid">
-        <div class="row">
-            <div class="col-md-12">
-              @if(session('error'))
-                  <div class="alert alert-danger">
-                      {{ session('error') }}
-                  </div>
-                  @endif
-                  @if(session('success'))
-                  <div class="alert alert-primary">
-                      {{ session('success') }}
-                  </div>
-                  @endif
-                <div class="card card-outline card-success">
-                    <div class="card-header">
-                        <div class="card-title">@yield('page')</div>
-                    </div>
-                    <form action="{{ isset($data) != null ? route('update_pengeluaran_opex',$data->id) : route('store_pengeluaran_opex') }}" method="POST" enctype="multipart/form-data">
-                      @csrf
-                      @if (isset($data) != null)
-                          @method('PUT')
-                      @else
-                          @method('POST')
-                      @endif
-                      <div class="card-body">
-                          <div class="form-group">
-                            <label>Tanggal</label>
-                            <input type="date" name="tgl_pengeluaran" value="{{isset($data) != null ? $data->tgl_pengeluaran : date('Y-m-d')}}" id="tgl_pengeluaran" class="form-control" required>
-                          </div>
-                          <div class="form-group">
-                            <label>Nama</label>
-                            <input type="text" name="nama_pengeluaran" value="{{isset($data) != null ? $data->nama_pengeluaran : ''}}" id="nama_pengeluaran" class="form-control" required>
-                          </div>
-                          <div class="form-group">
-                            <label>Kategori</label>
-                            <select name="kategori" id="kategori" class="form-control" required>
-                                <option value="">-- Pilih Pengeluaran --</option>
-                                <option value="Penggajian" {{isset($data) != null && $data->kategori == 'Penggajian' ? 'selected' : ''}}>Penggajian</option>
-                                <option value="Sewa"{{isset($data) != null && $data->kategori == 'Sewa' ? 'selected' : ''}}>Sewa</option>
-                                <option value="Tagihan"{{isset($data) != null && $data->kategori == 'Tagihan' ? 'selected' : ''}}>Tagihan (Wifi, Listrik ,dll)</option>
-                                <option value="Lainnya"{{isset($data) != null && $data->kategori == 'Lainnya' ? 'selected' : ''}}>Lainnya</option>
-                            </select>
-                          </div>
-                          <div class="form-group pegawai">
-                              <label>Pegawai</label>
-                              <select name="kode_pegawai" id="kode_pegawai" class="form-control">
-                                  @foreach ($user as $item)
-                                      <option value="{{$item->id}}" {{isset($data) != null && $data->kode_pegawai == $item->id ? 'selected' : ''}}>{{$item->name}}</option>
-                                  @endforeach
-                              </select>
-                          </div>
-                          <div class="form-group">
-                            <label>Jumlah</label>
-                            <input type="text" value="{{isset($data) != null ? $data->jml_pengeluaran : '0'}}" name="jml_pengeluaran" id="jml_pengeluaran" class="form-control">
-                          </div>
-                          <div class="form-group">
-                            <label>Catatan</label>
-                            <textarea class="form-control" name="desc_pengeluaran" id="desc_pengeluaran" cols="30" rows="10">{{isset($data) != null ? $data->desc_pengeluaran : ''}}</textarea>
-                          </div>
-                      </div>
-                      <div class="card-footer">
-                        <button type="submit" class="btn btn-success">Simpan</button>
-                        <a href="{{route('pengeluaran_operasional')}}" class="btn btn-danger">Kembali</a>
-                      </div>
-                    </form>
-                    
+<div class="content-wrapper">
+    <section class="content-header">
+        <div class="container-fluid">
+            <div class="row mb-2">
+                <div class="col-sm-6">
+                    <h1>{{ $page }}</h1>
                 </div>
-                
+                <div class="col-sm-6">
+                    <ol class="breadcrumb float-sm-right">
+                        <li class="breadcrumb-item"><a href="{{ route('dashboard') }}">Home</a></li>
+                        <li class="breadcrumb-item"><a href="{{ route('pengeluaran_operasional') }}">Pengeluaran
+                                Operasional</a></li>
+                        <li class="breadcrumb-item active">{{ isset($data) ? 'Edit' : 'Tambah' }}</li>
+                    </ol>
+                </div>
             </div>
         </div>
-      </div>
     </section>
-    <!-- /.content -->
-  </div>
 
-@section('content-script')
-  <script>
-    $(function(){
-      var value = $('#kategori').bind(':selected').val();
-      if(value == 'Penggajian'){
-          $('.pegawai').css("display",'block')
-         }else{
-            $('.pegawai').css("display",'none')
-         }
-      $('#kategori').on('change',function(){
-         var value = $(this).bind(':selected').val();
-         if(value == 'Penggajian'){
-          $('.pegawai').css("display",'block')
-         }else{
-            $('.pegawai').css("display",'none')
-         }
-      });
-    })
-    
-  </script>
+    <section class="content">
+        <div class="container-fluid">
+            <div class="card card-primary">
+                <div class="card-header">
+                    <h3 class="card-title">{{ isset($data) ? 'Edit' : 'Form Tambah' }} Pengeluaran</h3>
+                </div>
+                <form
+                    action="{{ isset($data) ? route('update_pengeluaran_opex', $data->id) : route('store_pengeluaran_opex') }}"
+                    method="POST">
+                    @csrf
+                    @if (isset($data))
+                        @method('PUT')
+                    @endif
+
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label for="tgl_pengeluaran">Tanggal</label>
+                            <input type="date" name="tgl_pengeluaran" id="tgl_pengeluaran" class="form-control"
+                                value="{{ $data->tgl_pengeluaran ?? now()->format('Y-m-d') }}" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="nama_pengeluaran">Nama Pengeluaran</label>
+                            <input type="text" name="nama_pengeluaran" id="nama_pengeluaran" class="form-control"
+                                value="{{ $data->nama_pengeluaran ?? '' }}" placeholder="Contoh: Pembayaran Sewa Ruko"
+                                required>
+                        </div>
+                        <div class="form-group">
+                            <label for="kategori">Kategori</label>
+                            <select name="kategori" id="kategori" class="form-control" required>
+                                <option value="">-- Pilih Kategori --</option>
+                                {{-- Opsi standar yang selalu ada --}}
+                                <option value="Penggajian"
+                                    {{ isset($data) && $data->kategori == 'Penggajian' ? 'selected' : '' }}>Penggajian
+                                </option>
+
+                                {{-- Loop untuk menampilkan kategori dari master data beban operasional --}}
+                                @if (isset($kategoriOpex))
+                                    @foreach ($kategoriOpex as $kategori)
+                                        <option value="{{ $kategori }}"
+                                            {{ isset($data) && $data->kategori == $kategori ? 'selected' : '' }}>
+                                            {{ ucfirst($kategori) }}</option>
+                                    @endforeach
+                                @endif
+
+                                <option value="Lainnya"
+                                    {{ isset($data) && $data->kategori == 'Lainnya' ? 'selected' : '' }}>Lainnya
+                                </option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="pegawai-form-group" style="display: none;">
+                            <label for="kode_pegawai">Pegawai</label>
+                            <select name="kode_pegawai" id="kode_pegawai" class="form-control">
+                                <option value="">-- Pilih Pegawai --</option>
+                                @foreach ($user as $item)
+                                    <option value="{{ $item->id }}"
+                                        @if (isset($data) && $data->kode_pegawai == $item->id) selected @endif>{{ $item->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="jml_pengeluaran">Jumlah (Rp)</label>
+                            <input type="number" name="jml_pengeluaran" id="jml_pengeluaran" class="form-control"
+                                value="{{ $data->jml_pengeluaran ?? '0' }}" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="desc_pengeluaran">Catatan / Deskripsi</label>
+                            <textarea class="form-control" name="desc_pengeluaran" id="desc_pengeluaran" rows="3">{{ $data->desc_pengeluaran ?? '' }}</textarea>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <button type="submit" class="btn btn-success">Simpan</button>
+                        <a href="{{ route('pengeluaran_operasional') }}" class="btn btn-danger">Kembali</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+</div>
+
+@section('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const kategoriSelect = document.getElementById('kategori');
+            const pegawaiFormGroup = document.getElementById('pegawai-form-group');
+
+            function togglePegawaiSelect() {
+                if (kategoriSelect.value === 'Penggajian') {
+                    pegawaiFormGroup.style.display = 'block';
+                } else {
+                    pegawaiFormGroup.style.display = 'none';
+                }
+            }
+
+            // Jalankan saat halaman pertama kali dimuat
+            togglePegawaiSelect();
+
+            // Tambahkan event listener untuk memantau perubahan
+            kategoriSelect.addEventListener('change', togglePegawaiSelect);
+        });
+    </script>
 @endsection
 @include('admin.component.footer')

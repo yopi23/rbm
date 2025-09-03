@@ -12,9 +12,11 @@ use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
+use App\Traits\ManajemenKasTrait;
 
 class UserController extends Controller
 {
+    use ManajemenKasTrait;
     //
     public function view_profile(Request $request)
     {
@@ -154,6 +156,16 @@ class UserController extends Controller
                 'saldo' => $new_saldo
             ]);
 
+            $this->catatKas(
+                $penarikan,                                  // Model sumber
+                0,                                           // Debit
+                $jumlahPenarikan,                            // Kredit (uang keluar dari kas perusahaan)
+                'Penarikan Saldo Teknisi: ' . $pegawaiDetail->fullname, // Deskripsi
+                now()                                        // Tanggal
+            );
+
+            DB::commit();
+
             // Status WhatsApp notification
 $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
 
@@ -224,6 +236,7 @@ if (count($validPhoneNumbers) > 0) {
             'error' => 'Oops, Something Went Wrong'
         ]);
     }
+
     public function delete_penarikan(Request $request, $id)
     {
         $data = Penarikan::findOrFail($id);

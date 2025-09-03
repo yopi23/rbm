@@ -95,5 +95,9 @@ class PengeluaranOperasional extends Model
         }
         return $this->kategori;
     }
+    public function kas()
+    {
+        return $this->morphOne(KasPerusahaan::class, 'sourceable');
+    }
 
 }

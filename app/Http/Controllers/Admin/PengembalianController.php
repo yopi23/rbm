@@ -7,10 +7,12 @@ use App\Models\Pengambilan;
 use Illuminate\Http\Request;
 use App\Models\Sevices as modelServices;
 use App\Traits\KategoriLaciTrait;
+use App\Traits\ManajemenKasTrait;
 
 class PengembalianController extends Controller
 {
     use KategoriLaciTrait;
+    use ManajemenKasTrait;
     //
     public function index()
     {
@@ -56,8 +58,18 @@ class PengembalianController extends Controller
 
         // Catat histori laci
         $this->recordLaciHistory($kategoriId, $uangMasuk, null, $keterangan);
+
         //end laci
         if ($update) {
+            if ($update->total_bayar > 0) {
+                $this->catatKas(
+                    $update, // Model sumbernya adalah Pengambilan
+                    $update->total_bayar, // Debit
+                    0, // Kredit
+                    'Pelunasan Service via Pengambilan #' . $update->kode_pengambilan,
+                    now()
+                );
+            }
             modelServices::where([['kode_pengambilan', '=', $id]])->update([
                 'status_services' => 'Diambil'
             ]);

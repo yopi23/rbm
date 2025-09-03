@@ -96,6 +96,11 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
 
     // Financial & Reports (existing, tetap sama)
     Route::get('/financial-report', [FinancialReportApiController::class, 'getFinancialReport']);
+    Route::get('/profit-allocation/preview', [FinancialReportApiController::class, 'getProfitAllocationPreview']);
+    Route::post('/profit-allocation/distribute', [FinancialReportApiController::class, 'processProfitDistribution']);
+
+    Route::get('/allocation/balances', [FinancialReportApiController::class, 'getAllocationBalances']);
+    Route::post('/allocation/withdraw', [FinancialReportApiController::class, 'processAllocationWithdrawal']);
 
     // Admin/Employee Attendance & Payroll related
     Route::post('/attendance/scan', [Api\AttendanceController::class, 'scanQrCode']); // Assuming attendance controller in Api folder
@@ -224,6 +229,8 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::get('/service-notes/{service_id}', [SparepartApiController::class, 'getCatatanService']);
 
     // Financial & Reports
+    Route::get('/pengeluaran-kategori', [PengeluaranApiController::class, 'getKategoriPengeluaran']);
+
     Route::get('pengeluaran-toko', [PengeluaranApiController::class, 'getPengeluaranToko'])->name('api.pengeluaran-toko.index');
     Route::post('pengeluaran-toko', [PengeluaranApiController::class, 'storePengeluaranToko'])->name('api.pengeluaran-toko.store');
     Route::get('pengeluaran-toko/{id}', [PengeluaranApiController::class, 'showPengeluaranToko'])->name('api.pengeluaran-toko.show');

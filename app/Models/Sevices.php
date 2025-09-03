@@ -58,4 +58,8 @@ class Sevices extends Model
     {
         return $this->hasMany(DetailPartLuarService::class, 'kode_services', 'id');
     }
+    public function kas()
+    {
+        return $this->morphOne(KasPerusahaan::class, 'sourceable');
+    }
 }

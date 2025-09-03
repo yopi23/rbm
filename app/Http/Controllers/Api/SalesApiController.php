@@ -7,6 +7,7 @@ use App\Models\Penjualan;
 use App\Models\Sparepart;
 use App\Models\HargaKhusus;
 use App\Models\DetailSparepartPenjualan;
+use App\Traits\ManajemenKasTrait; // Tambahkan Trait
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use App\Traits\KategoriLaciTrait;
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\Cache;
 class SalesApiController extends Controller
 {
     use KategoriLaciTrait;
+    use ManajemenKasTrait;
     public function getCategories()
     {
         try {
@@ -673,6 +675,13 @@ private function buildAllKeywordsMatch($keywords)
 
         // Jika status bukan draft (status 1), maka tambahkan ke laci
         if ($statusPenjualan == '1') {
+            $this->catatKas(
+                $sale,
+                $totalBayar,
+                0,
+                'Penjualan API #' . $sale->kode_penjualan,
+                $sale->tgl_penjualan
+            );
             $this->recordLaciHistory(
                 $request->kategori_laci_id,
                 $totalBayar, // Uang masuk
@@ -719,6 +728,13 @@ private function buildAllKeywordsMatch($keywords)
             'total_bayar' => $sale->total_penjualan, // Update total bayar
             'updated_at' => now(),
         ]);
+        $this->catatKas(
+            $sale,
+            $sale->total_penjualan,
+            0,
+            'Pelunasan Penjualan #' . $sale->kode_penjualan,
+            now() // Dicatat saat dilunasi
+        );
 
         // Catat ke laci jika dibutuhkan
         $this->recordLaciHistory(

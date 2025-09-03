@@ -31,5 +31,8 @@ class Penjualan extends Model
     {
         return $this->hasMany(DetailSparepartPenjualan::class, 'kode_penjualan', 'id');
     }
-
+    public function kas()
+    {
+        return $this->morphOne(KasPerusahaan::class, 'sourceable');
+    }
 }

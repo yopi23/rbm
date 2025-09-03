@@ -33,33 +33,33 @@ class ServiceApiController extends Controller
      * Get completed services for today with caching
      */
     public function getCompletedToday(Request $request)
-{
-    try {
-        $today = date('Y-m-d');
+    {
+        try {
+            $today = date('Y-m-d');
 
-        $completedServices = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
-            ->where('status_services', 'Selesai')
-            ->whereDate('sevices.tgl_service', $today)
-            ->join('users', 'sevices.id_teknisi', '=', 'users.id')
-            ->select('sevices.*', 'users.name as teknisi')
-            ->orderBy('sevices.tgl_service', 'desc')
-            ->get();
+            $completedServices = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+                ->where('status_services', 'Selesai')
+                ->whereDate('sevices.tgl_service', $today)
+                ->join('users', 'sevices.id_teknisi', '=', 'users.id')
+                ->select('sevices.*', 'users.name as teknisi')
+                ->orderBy('sevices.tgl_service', 'desc')
+                ->get();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Data layanan yang selesai hari ini berhasil diambil.',
-            'data' => $completedServices,
-            'total_today' => $completedServices->count(),
-            'date' => $today
-        ], 200);
-    } catch (\Exception $e) {
-        Log::error("Get Completed Today Error: " . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-        ], 500);
+            return response()->json([
+                'success' => true,
+                'message' => 'Data layanan yang selesai hari ini berhasil diambil.',
+                'data' => $completedServices,
+                'total_today' => $completedServices->count(),
+                'date' => $today
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error("Get Completed Today Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
     }
-}
 
 
     /**

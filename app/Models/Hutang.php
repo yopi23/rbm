@@ -18,5 +18,14 @@ class Hutang extends Model
         'kode_nota',
         'total_hutang',
         'status',
+        'tgl_jatuh_tempo',
     ];
+    public function supplier()
+    {
+        // Parameter:
+        // 1. Supplier::class -> Model yang dituju.
+        // 2. 'kode_supplier' -> Nama kolom foreign key di tabel 'hutang' ini.
+        // 3. 'id' -> Nama kolom primary key di tabel 'suppliers' yang dituju.
+        return $this->belongsTo(Supplier::class, 'kode_supplier', 'id');
+    }
 }

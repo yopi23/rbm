@@ -12,13 +12,32 @@ use App\Models\Supplier;
 use App\Models\KategoriSparepart;
 use App\Models\SubKategoriSparepart;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use App\Models\StockHistory;
 use App\Models\StockNotification;
 use App\Models\HargaKhusus;
+use App\Models\Hutang;
+use App\Traits\ManajemenKasTrait;
 
 class PembelianController extends Controller
 {
+    use ManajemenKasTrait;
+
+    private function getOwnerId(): int
+    {
+        $user = Auth::user();
+        \Log::debug('User object:', [
+        'user_id' => $user ? $user->id : null,
+        'has_userDetail_method' => $user ? method_exists($user, 'userDetail') : false,
+        'userDetail_relation' => $user ? $user->userDetail : null,
+        'userDetail_loaded' => $user && $user->relationLoaded('userDetail')
+    ]);
+        if ($user->userDetail->jabatan == '1') {
+            return $user->id;
+        }
+        return $user->userDetail->id_upline;
+    }
     /**
      * Display a listing of the resource.
      */
@@ -26,7 +45,7 @@ class PembelianController extends Controller
     {
         $page = 'Pembelian';
         // Ambil data pembelian untuk ditampilkan di tabel
-        $pembelians = Pembelian::orderBy('created_at', 'desc')->get();
+        $pembelians = Pembelian::where('kode_owner', $this->getOwnerId())->orderBy('created_at', 'desc')->get();
 
         // Generate kode pembelian baru
         $lastPembelian = Pembelian::orderBy('id', 'desc')->first();
@@ -65,6 +84,7 @@ class PembelianController extends Controller
             'kode_pembelian' => $kode_pembelian,
             'tanggal_pembelian' => date('Y-m-d'),
             'total_harga' => 0,
+            'kode_owner' => $this->getOwnerId(),
             'status' => 'draft', // Tambahkan status 'draft' untuk pembelian yang belum selesai
         ]);
 
@@ -396,6 +416,8 @@ class PembelianController extends Controller
  */
 public function finalize($id)
 {
+    $metodePembayaran = request('metode_pembayaran', 'Lunas');
+    $tglJatuhTempo = request('tgl_jatuh_tempo');
     DB::beginTransaction();
 
     try {
@@ -418,6 +440,15 @@ public function finalize($id)
         }
 
         $pembelian->supplier = $supplier->nama_supplier;
+        $pembelian->status = 'selesai';
+        $pembelian->metode_pembayaran = $metodePembayaran;
+
+        if ($metodePembayaran == 'Hutang') {
+            $pembelian->status_pembayaran = 'Belum Lunas';
+            $pembelian->tgl_jatuh_tempo = $tglJatuhTempo;
+        } else {
+            $pembelian->status_pembayaran = 'Lunas';
+        }
         $pembelian->save();
 
         foreach ($pembelian->detailPembelians as $detail) {
@@ -508,6 +539,28 @@ public function finalize($id)
         // Jika semua proses berhasil, simpan perubahan secara permanen
         $pembelian->status = 'selesai';
         $pembelian->save();
+
+        // 3. PANGGIL FUNGSI CATAT KAS SEBAGAI PENGELUARAN
+            if ($metodePembayaran == 'Lunas') {
+            // Jika LUNAS, langsung catat pengeluaran di kas perusahaan
+            $this->catatKas(
+                $pembelian,
+                0,
+                $pembelian->total_harga,
+                'Pembelian Lunas #' . $pembelian->kode_pembelian,
+                now()
+            );
+        } else {
+            // Jika HUTANG, catat di tabel hutang, JANGAN catat di kas
+            Hutang::create([
+                'kode_supplier' => $supplier->id,
+                'kode_owner' => $this->getOwnerId(),
+                'kode_nota' => $pembelian->kode_pembelian,
+                'total_hutang' => $pembelian->total_harga,
+                'tgl_jatuh_tempo' => $tglJatuhTempo,
+                'status' => 'Belum Lunas',
+            ]);
+        }
 
         DB::commit();
         return redirect()->route('pembelian.index')->with('success', 'Pembelian berhasil diselesaikan dan stok berhasil diupdate.');

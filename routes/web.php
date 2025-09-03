@@ -35,8 +35,10 @@ use App\Http\Controllers\Admin\StockOpnameController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\EmployeeManagementController;
 use App\Http\Controllers\Admin\HpController;
+use App\Http\Controllers\Admin\AsetController;
 use App\Http\Controllers\Admin\PenaltyRulesController;
 use App\Http\Controllers\Admin\AttendanceCronController;
+use App\Http\Controllers\Admin\BebanOperasionalController;
 use App\Http\Controllers\Admin\SubscriptionController;
 use App\Http\Controllers\Administrator\TokenController;
 use App\Http\Controllers\Administrator\PlanController;
@@ -630,7 +632,8 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
     });
 
 });
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth'])->prefix('admin')->group(function () {
+    Route::resource('asets', AsetController::class);
     // Dashboard Keuangan
     Route::get('/financial', [App\Http\Controllers\Admin\FinancialController::class, 'index'])->name('financial.index');
 
@@ -661,9 +664,32 @@ Route::middleware(['auth'])->group(function () {
     // Integrasi dengan Service
     Route::get('/financial/service/{serviceId}', [App\Http\Controllers\Admin\FinancialController::class, 'createFromService'])->name('financial.create.from.service');
 
+    Route::get('/modal', [App\Http\Controllers\Admin\ModalController::class, 'index'])->name('modal.index');
+    Route::get('/modal/create', [App\Http\Controllers\Admin\ModalController::class, 'create'])->name('modal.create');
+    Route::post('/modal', [App\Http\Controllers\Admin\ModalController::class, 'store'])->name('modal.store');
+     Route::get('/modal/{id}/edit', [App\Http\Controllers\Admin\ModalController::class, 'edit'])->name('modal.edit');
+    Route::put('/modal/{id}', [App\Http\Controllers\Admin\ModalController::class, 'update'])->name('modal.update');
+    Route::delete('/modal/{id}', [App\Http\Controllers\Admin\ModalController::class, 'destroy'])->name('modal.destroy');
+
+    Route::get('/settings', [App\Http\Controllers\Admin\SettingController::class, 'index'])->name('settings.index');
+    Route::post('/settings/close-book', [App\Http\Controllers\Admin\SettingController::class, 'storeCloseBook'])->name('settings.closebook.store');
+
+    Route::get('/distribusi-laba', [App\Http\Controllers\Admin\DistribusiLabaController::class, 'index'])->name('distribusi.index');
+    Route::post('/distribusi-laba/setting', [App\Http\Controllers\Admin\DistribusiLabaController::class, 'storeSetting'])->name('distribusi.setting.store');
+    Route::post('/distribusi-laba/proses', [App\Http\Controllers\Admin\DistribusiLabaController::class, 'prosesTutupBuku'])->name('distribusi.proses');
+     Route::post('/distribusi-laba/harian', [App\Http\Controllers\Admin\DistribusiLabaController::class, 'prosesDistribusiHarian'])->name('distribusi.harian');
+
+    Route::get('/hutang', [App\Http\Controllers\Admin\HutangController::class, 'index'])->name('hutang.index');
+    Route::post('/hutang/{id}/bayar', [App\Http\Controllers\Admin\HutangController::class, 'bayar'])->name('hutang.bayar');
+
+    Route::get('/distribusi/preview-harian', [App\Http\Controllers\Admin\DistribusiLabaController::class, 'previewDistribusiHarian'])->name('distribusi.previewHarian');
+    Route::get('/distribusi-laba/laporan', [App\Http\Controllers\Admin\DistribusiLabaController::class, 'laporan'])->name('distribusi.laporan');
+    Route::get('/distribusi-laba/pencairan', [App\Http\Controllers\Admin\DistribusiLabaController::class, 'pencairan'])->name('distribusi.pencairan');
+    Route::post('/distribusi-laba/pencairan', [App\Http\Controllers\Admin\DistribusiLabaController::Class, 'prosesPencairan'])->name('distribusi.prosesPencairan');
+
+    Route::resource('beban-operasional', BebanOperasionalController::class)->except(['show', 'create', 'edit'])->names('beban');
 
 });
-
 // Subcategory Routes
 Route::group(['middleware' => ['auth']], function () {
     // View all subcategories

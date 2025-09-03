@@ -15,4 +15,8 @@ class PengeluaranToko extends Model
         'jumlah_pengeluaran',
         'kode_owner',
     ];
+    public function kas()
+    {
+        return $this->morphOne(KasPerusahaan::class, 'sourceable');
+    }
 }

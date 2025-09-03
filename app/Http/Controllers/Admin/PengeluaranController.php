@@ -7,12 +7,16 @@ use App\Models\PengeluaranOperasional;
 use App\Models\PengeluaranToko;
 use App\Models\User;
 use App\Models\UserDetail;
+use App\Models\BebanOperasional;
 use Illuminate\Http\Request;
 use App\Traits\KategoriLaciTrait;
+use App\Traits\ManajemenKasTrait; // 1. Impor Trait
+use Illuminate\Support\Facades\DB;
 
 class PengeluaranController extends Controller
 {
     use KategoriLaciTrait;
+    use ManajemenKasTrait;
     //
     public function getTable($thead = '<th>No</th><th>Aksi</th>', $tbody = '')
     {
@@ -77,17 +81,22 @@ class PengeluaranController extends Controller
     }
     public function store_pengeluaran_toko(Request  $request)
     {
-        $val = $this->validate($request, [
-            'tanggal_pengeluaran' => ['required']
-        ]);
-        if ($val) {
-            $create = PengeluaranToko::create([
+        $request->validate(['tanggal_pengeluaran' => 'required']);
+
+        DB::beginTransaction();
+        try {
+            $pengeluaran = PengeluaranToko::create([
                 'tanggal_pengeluaran' => $request->tanggal_pengeluaran,
                 'nama_pengeluaran' => $request->nama_pengeluaran,
                 'jumlah_pengeluaran' => $request->jumlah_pengeluaran,
                 'catatan_pengeluaran' => $request->catatan_pengeluaran,
                 'kode_owner' => $this->getThisUser()->id_upline
             ]);
+            $this->catatKas(
+                $pengeluaran, 0, $pengeluaran->jumlah_pengeluaran,
+                'Pengeluaran Toko: ' . $pengeluaran->nama_pengeluaran,
+                $pengeluaran->tanggal_pengeluaran
+            );
             // laci
             // Misalnya, ambil kategori dari request
             $kategoriId = $request->input('id_kategorilaci');
@@ -98,17 +107,11 @@ class PengeluaranController extends Controller
             $this->recordLaciHistory($kategoriId,  null, $uangKeluar, $keterangan);
             //end laci
 
-            if ($create) {
-                return redirect()->back()->with([
-                    'success' => 'Pengeluaran Toko Berhasil Ditambahkan'
-                ]);
-                // return redirect()->route('pengeluaran_toko')
-                //     ->with([
-                //         'success' => 'Pengeluaran Toko Berhasil Ditambahkan'
-                //     ]);
-            }
-            // return redirect()->route('pengeluaran_toko')->with('error', "Oops, Something Went Wrong");
-            return redirect()->route('/');
+             DB::commit();
+            return redirect()->route('pengeluaran_toko')->with('success', 'Pengeluaran Toko Berhasil Ditambahkan');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', "Oops, Terjadi Kesalahan: " . $e->getMessage());
         }
     }
     public function update_pengeluaran_toko(Request  $request, $id)
@@ -191,49 +194,63 @@ class PengeluaranController extends Controller
     {
         $page = "Tambah Pengeluaran Operasional";
         $user = User::join('user_details', 'users.id', '=', 'user_details.kode_user')->where([['user_details.jabatan', '!=', '0'], ['user_details.jabatan', '!=', '1'], ['user_details.status_user', '=', '1'], ['user_details.id_upline', '=', $this->getThisUser()->id_upline]])->get(['users.*']);
-        return view('admin.forms.pengeluaran_opex', compact(['page', 'user']));
+
+        $kategoriOpex = BebanOperasional::where('kode_owner', $this->getThisUser()->id_upline)
+                                      ->pluck('nama_beban');
+
+        return view('admin.forms.pengeluaran_opex', compact(['page', 'user','kategoriOpex']));
     }
     public function edit_pengeluaran_opex(Request $request, $id)
     {
         $page = "Edit Pengeluaran Operasional";
         $user = User::join('user_details', 'users.id', '=', 'user_details.kode_user')->where([['user_details.jabatan', '!=', '0'], ['user_details.jabatan', '!=', '1'], ['user_details.status_user', '=', '1'], ['user_details.id_upline', '=', $this->getThisUser()->id_upline]])->get(['users.*']);
         $data = PengeluaranOperasional::findOrFail($id);
-        return view('admin.forms.pengeluaran_opex', compact(['page', 'user', 'data']));
+
+        $kategoriOpex = BebanOperasional::where('kode_owner', $this->getThisUser()->id_upline)
+                                      ->pluck('nama_beban');
+
+        return view('admin.forms.pengeluaran_opex', compact(['page', 'user', 'data','kategoriOpex']));
     }
     public function store_pengeluaran_opex(Request $request)
     {
-        $validate = $request->validate([
+        $request->validate([
             'tgl_pengeluaran' => ['required'],
             'nama_pengeluaran' => ['required'],
             'kategori' => ['required'],
         ]);
-        if ($validate) {
-            $pegawai = $request->kategori == 'Penggajian' ? $request->kode_pegawai : '-';
-            $create = PengeluaranOperasional::create([
+
+        DB::beginTransaction();
+        try {
+            $pegawai = $request->kategori == 'Penggajian' ? $request->kode_pegawai : null;
+            $pengeluaran = PengeluaranOperasional::create([
                 'tgl_pengeluaran' => $request->tgl_pengeluaran,
                 'nama_pengeluaran' => $request->nama_pengeluaran,
                 'kategori' => $request->kategori,
                 'kode_pegawai' => $pegawai,
                 'jml_pengeluaran' => $request->jml_pengeluaran,
-                'desc_pengeluaran' => $request->desc_pengeluaran != null ? $request->desc_pengeluaran : '',
+                'desc_pengeluaran' => $request->desc_pengeluaran ?? '',
                 'kode_owner' => $this->getThisUser()->id_upline
             ]);
-            if ($create) {
-                if ($pegawai != '-') {
-                    $pegawais = UserDetail::where([['kode_user', '=', $pegawai]])->get()->first();
-                    $new_saldo = $pegawais->saldo + $request->jml_pengeluaran;
-                    $pegawais->update([
-                        'saldo' => $new_saldo
-                    ]);
-                }
-                return redirect()->route('pengeluaran_operasional')
-                    ->with([
-                        'success' => 'Pengeluaran Operasional Berhasil Ditambahkan'
-                    ]);
-            }
-            return redirect()->back()->with('error', "Oops, Something Went Wrong");
+
+            // Catatan: Logika penambahan saldo ke pegawai di sini mungkin perlu direvisi.
+            // Seharusnya pembayaran gaji dicatat sebagai pengeluaran, bukan penambahan saldo.
+            // Namun, untuk integrasi kas, kita catat sebagai pengeluaran.
+
+            // 3. Catat di Buku Besar
+            $this->catatKas(
+                $pengeluaran, 0, $pengeluaran->jml_pengeluaran,
+                'Pengeluaran Opex: ' . $pengeluaran->nama_pengeluaran,
+                $pengeluaran->tgl_pengeluaran
+            );
+
+            DB::commit();
+            return redirect()->route('pengeluaran_operasional')->with('success', 'Pengeluaran Operasional Berhasil Ditambahkan');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', "Oops, Terjadi Kesalahan: " . $e->getMessage());
         }
     }
+
     public function update_pengeluaran_opex(Request $request, $id)
     {
         $validate = $request->validate([

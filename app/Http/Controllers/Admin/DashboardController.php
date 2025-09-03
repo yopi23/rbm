@@ -10,6 +10,7 @@ use App\Models\PemasukkanLain;
 use App\Models\PengeluaranOperasional;
 use App\Models\PengeluaranToko;
 use App\Models\Penjualan;
+use App\Models\kas_perusahaan;
 use Illuminate\Http\Request;
 use App\Models\Sevices as modelServices;
 use App\Models\Sparepart;
@@ -23,13 +24,16 @@ use App\Models\Laci;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use App\Traits\KategoriLaciTrait;
+use App\Traits\ManajemenKasTrait;
 use Symfony\Component\Translation\Dumper\YamlFileDumper;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
 
 
 class DashboardController extends Controller
 {
     use KategoriLaciTrait;
+    use ManajemenKasTrait;
     //
     public function index(Request $request)
     {
@@ -322,6 +326,28 @@ class DashboardController extends Controller
             ]);
 
             if ($create) {
+                $dpAmount = $request->dp ?? 0;
+                if ($dpAmount > 0) {
+                    $kategoriId = $request->input('id_kategorilaci');
+                    $keterangan = "DP Service: " . $kode_service . " - a/n " . $request->nama_pelanggan;
+
+                    $this->catatKas(
+                        $create, // Model sumbernya adalah service yang baru dibuat
+                        $dpAmount, // Debit (uang masuk)
+                        0, // Kredit
+                        "DP Service #" . $create->kode_service . " - " . $create->nama_pelanggan,
+                        now()
+                    );
+
+                    // Memanggil fungsi dari trait untuk mencatat histori
+                    $this->recordLaciHistory(
+                        $kategoriId,
+                        $dpAmount,
+                        null,
+                        $keterangan,
+
+                    );
+                }
                 if ($request->kode_sparepart != null) {
                     $data_service = modelServices::where([['kode_service', '=', $request->kode_service]])->get()->first();
                     for ($i = 0; $i < count($request->kode_sparepart); $i++) {
@@ -396,6 +422,14 @@ class DashboardController extends Controller
                 if ($dpAmount > 0) {
                     $kategoriId = $request->input('id_kategorilaci');
                     $keterangan = "DP Service: " . $kode_service . " - a/n " . $request->nama_pelanggan;
+
+                    $this->catatKas(
+                        $create, // Model sumbernya adalah service yang baru dibuat
+                        $dpAmount, // Debit (uang masuk)
+                        0, // Kredit
+                        "DP Service #" . $create->kode_service . " - " . $create->nama_pelanggan,
+                        now()
+                    );
 
                     // Memanggil fungsi dari trait untuk mencatat histori
                     $this->recordLaciHistory(

@@ -120,60 +120,100 @@
                      @if ($this_user->jabatan == '1')
                          {{-- Tambahkan menu berikut di sidebar menu dalam file sidebar.blade.php --}}
 
-                         <!-- Menu Keuangan -->
-                         <li class="nav-item {{ request()->is('financial*') ? 'menu-open' : '' }}">
-                             <a href="#" class="nav-link {{ request()->is('financial*') ? 'active' : '' }}">
-                                 <i class="nav-icon fas fa-money-bill-wave"></i>
+                         @php
+                             // Logika untuk menentukan apakah menu Keuangan harus terbuka dan aktif
+                             $isFinancialMenuActive = request()->routeIs([
+                                 'financial.*',
+                                 'modal.*',
+                                 'distribusi.*',
+                                 'settings.*',
+                             ]);
+                         @endphp
+                         <li class="nav-item {{ $isFinancialMenuActive ? 'menu-open' : '' }}">
+                             <a href="#" class="nav-link {{ $isFinancialMenuActive ? 'active' : '' }}">
+                                 <i class="nav-icon fas fa-cash-register"></i>
                                  <p>
-                                     Keuangan
+                                     Manajemen Keuangan
                                      <i class="right fas fa-angle-left"></i>
                                  </p>
                              </a>
                              <ul class="nav nav-treeview">
                                  <li class="nav-item">
-                                     <a href="{{ route('zakat_usaha') }}"
-                                         class="nav-link {{ request()->is('zakat') ? 'active' : '' }}">
-                                         <i class="far fa-circle nav-icon"></i>
-                                         <p>Zakat</p>
-                                     </a>
-                                 </li>
-                                 {{-- <li class="nav-item">
                                      <a href="{{ route('financial.index') }}"
-                                         class="nav-link {{ request()->is('financial') ? 'active' : '' }}">
-                                         <i class="far fa-circle nav-icon"></i>
-                                         <p>Dashboard</p>
+                                         class="nav-link {{ request()->routeIs('financial.index') ? 'active' : '' }}">
+                                         <i class="fas fa-tachometer-alt nav-icon"></i>
+                                         <p>Dashboard Harian</p>
                                      </a>
                                  </li>
                                  <li class="nav-item">
                                      <a href="{{ route('financial.transactions') }}"
-                                         class="nav-link {{ request()->is('financial/transactions') ? 'active' : '' }}">
-                                         <i class="far fa-circle nav-icon"></i>
-                                         <p>Transaksi</p>
-                                     </a>
-                                 </li>
-                                 <li class="nav-item">
-                                     <a href="{{ route('financial.create') }}"
-                                         class="nav-link {{ request()->is('financial/create') ? 'active' : '' }}">
-                                         <i class="far fa-circle nav-icon"></i>
-                                         <p>Tambah Transaksi</p>
-                                     </a>
-                                 </li>
-                                 <li class="nav-item">
-                                     <a href="{{ route('financial.categories') }}"
-                                         class="nav-link {{ request()->is('financial/categories') ? 'active' : '' }}">
-                                         <i class="far fa-circle nav-icon"></i>
-                                         <p>Kategori</p>
+                                         class="nav-link {{ request()->routeIs('financial.transactions') ? 'active' : '' }}">
+                                         <i class="fas fa-book nav-icon"></i>
+                                         <p>Buku Besar</p>
                                      </a>
                                  </li>
 
                                  <li class="nav-item">
-                                     <a href="{{ route('financial.reports') }}"
-                                         class="nav-link {{ request()->is('financial/reports') ? 'active' : '' }}">
-                                         <i class="far fa-circle nav-icon"></i>
-                                         <p>Laporan</p>
+                                     <a href="{{ route('hutang.index') }}"
+                                         class="nav-link {{ request()->routeIs('hutang.*') ? 'active' : '' }}">
+                                         <i class="fas fa-file-invoice-dollar nav-icon"></i>
+                                         <p>Manajemen Hutang</p>
                                      </a>
-                                 </li> --}}
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('modal.index') }}"
+                                         class="nav-link {{ request()->routeIs('modal.*') ? 'active' : '' }}">
+                                         <i class="fas fa-landmark nav-icon"></i>
+                                         <p>Manajemen Modal</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('distribusi.index') }}"
+                                         class="nav-link {{ request()->routeIs('distribusi.*') ? 'active' : '' }}">
+                                         <i class="fas fa-chart-pie nav-icon"></i>
+                                         <p>Distribusi Laba</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('distribusi.laporan') }}"
+                                         class="nav-link {{ request()->routeIs('distribusi.laporan') ? 'active' : '' }}">
+                                         <i class="fas fa-file-invoice-dollar nav-icon"></i>
+                                         <p>Laporan Distribusi Laba</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('distribusi.pencairan') }}"
+                                         class="nav-link {{ request()->routeIs('distribusi.pencairan') ? 'active' : '' }}">
+                                         <i class="fas fa-hand-holding-usd nav-icon"></i>
+                                         <p>Pencairan Laba</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('settings.index') }}"
+                                         class="nav-link {{ request()->routeIs('settings.*') ? 'active' : '' }}">
+                                         <i class="fas fa-cogs nav-icon"></i>
+                                         <p>Pengaturan Keuangan</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('asets.index') }}"
+                                         class="nav-link {{ request()->routeIs('asets.*') ? 'active' : '' }}">
+                                         <i class="fas fa-building nav-icon"></i>
+                                         <p>Manajemen Aset</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('beban.index') }}"
+                                         class="nav-link {{ request()->routeIs('beban.index') ? 'active' : '' }}">
+                                         <i class="fas fa-file-invoice nav-icon"></i>
+                                         <p>Beban Tetap Bulanan</p>
+                                     </a>
+                                 </li>
+
                              </ul>
+                         </li>
+                         <li
+                             class="nav-item {{ in_array(request()->route()->getName(), ['admin.inventory.home', 'admin.inventory.restock-report', 'admin.inventory.bestsellers']) ? 'menu-open' : '' }}">
                          </li>
                          <!-- Menu Inventory Management -->
                          <li

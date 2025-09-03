@@ -81,11 +81,32 @@
                 </dl>
             </div>
             <div class="card-footer">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>Metode Pembayaran</label>
+                            <select id="metode_pembayaran" class="form-control">
+                                <option value="Lunas">Lunas (Cash)</option>
+                                <option value="Hutang">Hutang (Tempo)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-4" id="jatuh_tempo_div" style="display: none;">
+                        <div class="form-group">
+                            <label>Tanggal Jatuh Tempo</label>
+                            <input type="date" id="tgl_jatuh_tempo" class="form-control"
+                                value="{{ now()->addDays(30)->format('Y-m-d') }}">
+                        </div>
+                    </div>
+                </div>
+                <hr>
                 <a href="{{ route('pembelian.index') }}" class="btn btn-default">Kembali</a>
                 <form id="finalize-form-{{ $pembelian->id }}"
                     action="{{ route('pembelian.finalize', $pembelian->id) }}" method="POST" style="display: inline;">
                     @csrf
                     <input type="hidden" id="finalize_supplier" name="supplier" value="">
+                    <input type="hidden" id="finalize_metode" name="metode_pembayaran" value="Lunas">
+                    <input type="hidden" id="finalize_jatuh_tempo" name="tgl_jatuh_tempo" value="">
                     <input type="hidden" id="finalize_kategori" name="kategori" value="">
                     <button type="button" class="btn btn-success float-right" onclick="finalizeForm()">
                         <i class="fas fa-check"></i> Selesaikan Pembelian
@@ -417,6 +438,13 @@
             "responsive": true,
         });
     });
+    document.getElementById('metode_pembayaran').addEventListener('change', function() {
+        if (this.value === 'Hutang') {
+            document.getElementById('jatuh_tempo_div').style.display = 'block';
+        } else {
+            document.getElementById('jatuh_tempo_div').style.display = 'none';
+        }
+    });
 
     // --- FUNGSI YANG DIKEMBALIKAN ---
     function loadSubKategori() {
@@ -633,6 +661,11 @@
                 text: 'Mohon pilih Supplier dan Kategori.'
             });
             return;
+        }
+        const metode = document.getElementById('metode_pembayaran').value;
+        document.getElementById('finalize_metode').value = metode;
+        if (metode === 'Hutang') {
+            document.getElementById('finalize_jatuh_tempo').value = document.getElementById('tgl_jatuh_tempo').value;
         }
         document.getElementById('finalize_supplier').value = supplierId;
         document.getElementById('finalize_kategori').value = kategoriId;

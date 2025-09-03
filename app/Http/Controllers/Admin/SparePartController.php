@@ -265,6 +265,36 @@ class SparePartController extends Controller
         $page = "Tambah Kategori Sparepart";
         return view('admin.forms.kategori_sparepart', compact(['page']));
     }
+    public function store_kategori_sparepart(Request $request)
+{
+    $validate = $request->validate([
+        'nama_kategori' => ['required'],
+    ]);
+
+    if ($validate) {
+        $file = $request->file('foto_kategori');
+        $foto = $file != null ? date('Ymdhis') . $file->getClientOriginalName() : '-';
+
+        if ($file != null) {
+            $file->move('public/uploads/', $foto);
+        }
+
+        $create = KategoriSparepart::create([
+            'foto_kategori' => $foto,
+            'nama_kategori' => $request->nama_kategori,
+            'kode_owner' => $this->getThisUser()->id_upline
+        ]);
+
+        if ($create) {
+            return redirect()->route('kategori_sparepart')
+                ->with(['success' => 'Kategori Sparepart Berhasil Ditambahkan']);
+        }
+
+        return redirect()->back()->with('error', "Oops, Something Went Wrong");
+    } else {
+        return redirect()->back()->with('error', "Validating Error, Please Fill Required Field");
+    }
+}
      // Function to get subcategories by category ID (for AJAX)
      public function get_sub_kategori_by_kategori($kategori_id)
      {
