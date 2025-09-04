@@ -2628,8 +2628,8 @@ class FinancialReportApiController extends Controller
         $biayaOperasionalInsidental = PengeluaranOperasionalModel::where('kode_owner', $kode_owner)
             ->whereBetween('tgl_pengeluaran', [$startRange, $endRange])->sum('jml_pengeluaran');
 
-        $serviceIdsSelesai = Sevices::where('kode_owner', $kode_owner)->where('status_services', 'Selesai')
-            ->whereBetween('updated_at', [$startRange, $endRange])->pluck('id');
+        $serviceIdsSelesai = Sevices::where('kode_owner', $kode_owner)->whereIn('status_services', ['Selesai', 'Diambil'])
+            ->whereBetween('tgl_service', [$startRange, $endRange])->pluck('id');
         $biayaKomisi = ProfitPresentase::whereIn('kode_service', $serviceIdsSelesai)->sum('profit');
 
         $totalPenyusutanBulanan = Aset::where('kode_owner', $kode_owner)->sum(DB::raw('(nilai_perolehan - nilai_residu) / masa_manfaat_bulan'));

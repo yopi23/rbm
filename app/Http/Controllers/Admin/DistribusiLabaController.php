@@ -183,7 +183,7 @@ class DistribusiLabaController extends Controller
 
         // D.2 Hitung Biaya Komisi Teknisi (kewajiban timbul saat service 'Selesai')
         $serviceIdsSelesai = \App\Models\Sevices::where('kode_owner', $ownerId)
-            ->where('status_services', 'Selesai')
+            ->whereIn('status_services', ['Selesai','Diambil'])
             ->whereBetween('updated_at', [$startRange, $endRange])
             ->pluck('id');
         $biayaKomisi = \App\Models\ProfitPresentase::whereIn('kode_service', $serviceIdsSelesai)->sum('profit');
