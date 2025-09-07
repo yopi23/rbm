@@ -8,11 +8,12 @@ use App\Models\UserDetail;
 use App\Services\WhatsAppService;
 use App\Traits\KategoriLaciTrait;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\DB;// <-- Pastikan ini ada
+use App\Traits\ManajemenKasTrait;
 
 class UserDataController extends Controller
 {
-    use KategoriLaciTrait;
+    use KategoriLaciTrait, ManajemenKasTrait;
 
     public function getUserProfile($kode_user)
     {
@@ -87,7 +88,6 @@ class UserDataController extends Controller
         $user = $this->getThisUser();
         $pegawais = UserDetail::where([['kode_user', '=', $user->kode_user]])->get()->first();
 
-        // Validasi input - HAPUS VALIDASI LACI KARENA TIDAK DIBUTUHKAN UNTUK KARYAWAN
         $request->validate([
             'jumlah_penarikan' => 'required|numeric|min:1',
             'catatan_penarikan' => 'nullable|string|max:255',
@@ -95,140 +95,135 @@ class UserDataController extends Controller
 
         $jumlahPenarikan = (float) preg_replace('/[^0-9.]/', '', $request->jumlah_penarikan);
 
-        // Cek saldo pengguna
         if ($pegawais->saldo < $jumlahPenarikan) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Saldo tidak mencukupi'
-            ], 400);
+            return response()->json(['status' => 'error', 'message' => 'Saldo tidak mencukupi'], 400);
         }
 
-        // Generate kode penarikan
-        $kode = 'PEN' . date('Ymd') . $this->getThisUser()->id_upline . $this->getThisUser()->kode_user;
+        // Mulai Transaction untuk memastikan semua proses aman
+        DB::beginTransaction();
+        try {
+            $kode = 'PEN' . date('Ymd') . $this->getThisUser()->id_upline . $this->getThisUser()->kode_user;
 
-        // Simpan data penarikan
-        $create = Penarikan::create([
-            'tgl_penarikan' => date('Y-m-d h:i:s'),
-            'kode_penarikan' => $kode,
-            'kode_user' => $this->getThisUser()->kode_user,
-            'kode_owner' => $user->id_upline,
-            'jumlah_penarikan' => $jumlahPenarikan,
-            'catatan_penarikan' => $request->catatan_penarikan ?? '-',
-            'status_penarikan' => '1',
-            'dari_saldo' => $user->saldo,
-            // TIDAK ADA id_kategori - akan diassign nanti oleh admin
-        ]);
+            $create = Penarikan::create([
+                'tgl_penarikan' => date('Y-m-d H:i:s'),
+                'kode_penarikan' => $kode,
+                'kode_user' => $this->getThisUser()->kode_user,
+                'kode_owner' => $user->id_upline,
+                'jumlah_penarikan' => $jumlahPenarikan,
+                'catatan_penarikan' => $request->catatan_penarikan ?? '-',
+                'status_penarikan' => '1',
+                'dari_saldo' => $user->saldo,
+            ]);
 
-        if ($create) {
-            // Update saldo user
-            $new_saldo = $user->saldo - $jumlahPenarikan;
-            $pegawais->update(['saldo' => $new_saldo]);
+            // Lanjutkan hanya jika penarikan berhasil dibuat
+            if ($create) {
+                // 1. Update saldo user
+                $new_saldo = $user->saldo - $jumlahPenarikan;
+                $pegawais->update(['saldo' => $new_saldo]);
 
-            // WhatsApp notification code (tetap sama)
-            $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
-            $admin = UserDetail::where([['kode_user', '=', $pegawais->id_upline]])->get()->first();
-            $validPhoneNumbers = [];
-            $whatsAppService = app(WhatsAppService::class);
+                // 2. Integrasi pencatatan kas perusahaan
+                $this->catatKas(
+                    $create,                                        // Model sumber
+                    0,                                              // Debit (tidak ada uang masuk)
+                    $jumlahPenarikan,                               // Kredit (uang keluar)
+                    'Penarikan Saldo API oleh: ' . $pegawais->fullname // Deskripsi
+                );
 
-            if (!empty($admin->no_telp) && $whatsAppService->isValidPhoneNumber($admin->no_telp)) {
-                $validPhoneNumbers[] = $admin->no_telp;
-            }
-
-            if (!empty($pegawais->no_telp) && $whatsAppService->isValidPhoneNumber($pegawais->no_telp)) {
-                $validPhoneNumbers[] = $pegawais->no_telp;
-            }
-
-            if (count($validPhoneNumbers) > 0) {
-                try {
-                    $waResult = $whatsAppService->penarikanNotification([
-                        'teknisi' => $pegawais->fullname,
-                        'jumlah' => 'Rp ' . number_format($jumlahPenarikan, 0, ',', '.'),
-                        'catatan' => $request->catatan_penarikan != null ? $request->catatan_penarikan : '-',
-                        'no_hp' => $validPhoneNumbers,
-                    ]);
-
-                    if ($waResult['status']) {
-                        $whatsappStatus = 'Pesan WhatsApp berhasil dikirim ke semua penerima';
-                    } else {
-                        $successCount = count(array_filter($waResult['details'], function($detail) {
-                            return $detail['status'] === true;
-                        }));
-
-                        if ($successCount > 0) {
-                            $whatsappStatus = "Pesan WhatsApp berhasil dikirim ke {$successCount} dari " . count($validPhoneNumbers) . " penerima";
-                        } else {
-                            $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
-                        }
-                    }
-                } catch (\Exception $waException) {
-                    \Log::error("Failed to send WhatsApp notification: " . $waException->getMessage(), [
-                        'penarikan' => $pegawais->fullname,
-                        'recipients' => $validPhoneNumbers,
-                        'exception' => $waException
-                    ]);
-
-                    $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
+                // 3. Logika Notifikasi WhatsApp (tetap sama)
+                $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
+                $admin = UserDetail::where([['kode_user', '=', $pegawais->id_upline]])->get()->first();
+                $validPhoneNumbers = [];
+                $whatsAppService = app(WhatsAppService::class);
+                if (!empty($admin->no_telp) && $whatsAppService->isValidPhoneNumber($admin->no_telp)) {
+                    $validPhoneNumbers[] = $admin->no_telp;
                 }
-            } else {
-                $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Tidak ada nomor telepon valid';
+                if (!empty($pegawais->no_telp) && $whatsAppService->isValidPhoneNumber($pegawais->no_telp)) {
+                    $validPhoneNumbers[] = $pegawais->no_telp;
+                }
+                if (count($validPhoneNumbers) > 0) {
+                    try {
+                        $waResult = $whatsAppService->penarikanNotification([
+                            'teknisi' => $pegawais->fullname,
+                            'jumlah' => 'Rp ' . number_format($jumlahPenarikan, 0, ',', '.'),
+                            'catatan' => $request->catatan_penarikan != null ? $request->catatan_penarikan : '-',
+                            'no_hp' => $validPhoneNumbers,
+                        ]);
+
+                        if ($waResult['status']) {
+                            $whatsappStatus = 'Pesan WhatsApp berhasil dikirim ke semua penerima';
+                        } else {
+                            $successCount = count(array_filter($waResult['details'], function($detail) {
+                                return $detail['status'] === true;
+                            }));
+
+                            if ($successCount > 0) {
+                                $whatsappStatus = "Pesan WhatsApp berhasil dikirim ke {$successCount} dari " . count($validPhoneNumbers) . " penerima";
+                            } else {
+                                $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
+                            }
+                        }
+
+                    } catch (\Exception $waException) {
+                        \Log::error("Failed to send WhatsApp notification: " . $waException->getMessage());
+                    }
+                }
+
+                // 4. Jika semua langkah di atas berhasil, simpan perubahan ke database
+                DB::commit();
+
+                // 5. Kembalikan response sukses
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Penarikan berhasil dibuat dan kas perusahaan telah diperbarui.',
+                    'data' => [
+                        'id' => (int) $create->id,
+                        'kode_penarikan' => $create->kode_penarikan,
+                        'jumlah_penarikan' => (float) $create->jumlah_penarikan,
+                        'dari_saldo' => (float) $create->dari_saldo,
+                        'saldo_setelah' => (float) $new_saldo,
+                        'tgl_penarikan' => $create->tgl_penarikan,
+                        'catatan_penarikan' => $create->catatan_penarikan,
+                    ]
+                ], 201);
             }
+            // Jika $create gagal karena suatu alasan
+            DB::rollBack();
+            return response()->json(['status' => 'error', 'message' => 'Gagal membuat data penarikan.'], 500);
 
-            // PERBAIKAN: Return data dengan format konsisten
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Penarikan berhasil dibuat',
-                'data' => [
-                    'id' => (int) $create->id,
-                    'kode_penarikan' => $create->kode_penarikan,
-                    'jumlah_penarikan' => (float) $create->jumlah_penarikan,
-                    'dari_saldo' => (float) $create->dari_saldo,
-                    'saldo_setelah' => (float) $new_saldo,
-                    'tgl_penarikan' => $create->tgl_penarikan,
-                    'catatan_penarikan' => $create->catatan_penarikan,
-                ]
-            ], 201);
+        } catch (\Exception $e) {
+            // Jika terjadi error di salah satu proses (update saldo, catat kas), batalkan semua
+            DB::rollBack();
+            \Log::error("API Penarikan error: " . $e->getMessage());
+            return response()->json(['status' => 'error', 'message' => 'Terjadi kesalahan server: ' . $e->getMessage()], 500);
         }
-
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Terjadi kesalahan, coba lagi nanti'
-        ], 500);
     }
 
     public function adminWithdrawEmployee(Request $request)
     {
-        // Pastikan yang akses adalah admin
         $user = $this->getThisUser();
         if ($user->jabatan != '1') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized. Hanya admin yang dapat melakukan penarikan saldo karyawan.'
-            ], 403);
+            return response()->json(['success' => false, 'message' => 'Unauthorized. Hanya admin yang dapat melakukan penarikan saldo karyawan.'], 403);
         }
 
-        // Validasi input - PERBAIKAN: Update nama field
         $request->validate([
             'kode_user' => 'required|numeric',
             'jumlah_penarikan' => 'required|numeric|min:1',
             'catatan_penarikan' => 'nullable|string|max:255',
-            'id_kategorilaci' => 'required|numeric|exists:kategori_lacis,id', // PERUBAHAN NAMA FIELD
+            'id_kategorilaci' => 'required|numeric|exists:kategori_lacis,id',
         ]);
 
         $jumlahPenarikan = (float) preg_replace('/[^0-9.]/', '', $request->jumlah_penarikan);
         $targetEmployee = UserDetail::where('kode_user', $request->kode_user)->first();
 
         if (!$targetEmployee) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Karyawan tidak ditemukan'
-            ], 404);
+            return response()->json(['success' => false, 'message' => 'Karyawan tidak ditemukan'], 404);
         }
 
-        // Generate kode penarikan khusus untuk admin
         $kode = 'ADM' . date('Ymd') . $user->kode_user . $request->kode_user;
 
+        // Mulai Transaction
+        DB::beginTransaction();
         try {
-            // Simpan data penarikan ke tabel penarikans
             $create = Penarikan::create([
                 'tgl_penarikan' => date('Y-m-d H:i:s'),
                 'kode_penarikan' => $kode,
@@ -241,38 +236,33 @@ class UserDataController extends Controller
             ]);
 
             if ($create) {
-                // Update saldo karyawan (bisa minus)
+                // 1. Update saldo karyawan
                 $newSaldo = $targetEmployee->saldo - $jumlahPenarikan;
                 $targetEmployee->update(['saldo' => $newSaldo]);
 
-                // CATAT KE LACI dengan reference system - PERBAIKAN: gunakan field yang benar
+                // 2. Catat ke Laci
                 $keterangan = "Penarikan admin untuk {$targetEmployee->fullname} oleh {$user->fullname} - " . ($request->catatan_penarikan ?? '-');
-
                 $this->recordLaciHistory(
-                    $request->id_kategorilaci, // PERUBAHAN: gunakan field yang benar
-                    null, // masuk
-                    $jumlahPenarikan, // keluar
+                    $request->id_kategorilaci,
+                    null,
+                    $jumlahPenarikan,
                     $keterangan,
-                    'penarikan', // reference_type
-                    $create->id, // reference_id
-                    $kode // reference_code
+                    'penarikan',
+                    $create->id,
+                    $kode
                 );
 
-                // Log aktivitas admin
-                \Log::info("Admin withdrawal", [
-                    'admin_id' => $user->kode_user,
-                    'admin_name' => $user->fullname,
-                    'employee_id' => $request->kode_user,
-                    'employee_name' => $targetEmployee->fullname,
-                    'amount' => $jumlahPenarikan,
-                    'old_balance' => $targetEmployee->saldo,
-                    'new_balance' => $newSaldo,
-                    'note' => $request->catatan_penarikan,
-                    'withdrawal_code' => $kode,
-                    'kategori_laci' => $request->id_kategorilaci // PERUBAHAN: gunakan field yang benar
-                ]);
+                // 3. Integrasi pencatatan kas perusahaan
+                $this->catatKas(
+                    $create,                                                            // Model sumber
+                    0,                                                                  // Debit
+                    $jumlahPenarikan,                                                   // Kredit
+                    "Penarikan oleh admin ({$user->fullname}) untuk {$targetEmployee->fullname}" // Deskripsi
+                );
+                // 5. Simpan semua perubahan
+                DB::commit();
 
-                // PERBAIKAN: Return data dengan format yang konsisten
+                // 6. Beri response sukses
                 return response()->json([
                     'success' => true,
                     'message' => "Penarikan berhasil untuk {$targetEmployee->fullname}",
@@ -289,25 +279,18 @@ class UserDataController extends Controller
                 ], 201);
             }
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menyimpan data penarikan'
-            ], 500);
+            // Jika $create gagal
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Gagal menyimpan data penarikan'], 500);
 
         } catch (\Exception $e) {
-            \Log::error("Admin withdrawal error", [
-                'error' => $e->getMessage(),
-                'admin_id' => $user->kode_user,
-                'employee_id' => $request->kode_user,
-                'amount' => $jumlahPenarikan
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Terjadi kesalahan saat memproses penarikan: ' . $e->getMessage()
-            ], 500);
+            // Jika ada error di tengah jalan, batalkan semua
+            DB::rollBack();
+            \Log::error("Admin withdrawal error", ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Terjadi kesalahan saat memproses penarikan: ' . $e->getMessage()], 500);
         }
     }
+
 
     // Method untuk admin melihat semua history penarikan dengan info laci
     public function adminWithdrawalHistory(Request $request)

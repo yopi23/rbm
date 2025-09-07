@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use App\Traits\ManajemenKasTrait;
+use Illuminate\Support\Facades\DB;
 
 class UserController extends Controller
 {

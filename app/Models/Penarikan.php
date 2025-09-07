@@ -80,5 +80,9 @@ class Penarikan extends Model
     {
         return 'Rp ' . number_format($this->jumlah_penarikan, 0, ',', '.');
     }
+    public function kas()
+    {
+        return $this->morphOne(KasPerusahaan::class, 'sourceable');
+    }
 }
 
