@@ -2531,15 +2531,18 @@ class FinancialReportApiController extends Controller
             $tgl_mulai = Carbon::parse($request->tgl_awal)->startOfDay();
             $tgl_selesai = Carbon::parse($request->tgl_akhir)->endOfDay();
 
-            // 1. Cek apakah sudah pernah didistribusikan
-            $cekSudahDistribusi = DistribusiLaba::where('kode_owner', $kode_owner)
-                                ->where('tanggal_mulai', $tgl_mulai)
-                                ->where('tanggal_selesai', $tgl_selesai)
-                                ->exists();
+           $cekTumpangTindih = DistribusiLaba::where('kode_owner', $kode_owner)
+            ->where('tanggal_selesai', '>=', $tgl_mulai)
+            ->where('tanggal_mulai', '<=', $tgl_selesai)
+            ->first();
 
-            if ($cekSudahDistribusi) {
-                return response()->json(['success' => false, 'message' => 'Laba untuk periode ini sudah didistribusikan sebelumnya.'], 409);
+            if ($cekTumpangTindih) {
+                $pesanError = "Laba untuk periode ini tumpang tindih dengan distribusi yang sudah ada pada " .
+                            Carbon::parse($cekTumpangTindih->tanggal_mulai)->format('d/m/Y') . " - " .
+                            Carbon::parse($cekTumpangTindih->tanggal_selesai)->format('d/m/Y') . ".";
+                return response()->json(['success' => false, 'message' => $pesanError], 409); // 409 Conflict
             }
+
 
             // 2. Hitung Laba Bersih
             $labaResult = $this->_calculateNetProfit($kode_owner, $request->tgl_awal, $request->tgl_akhir);
