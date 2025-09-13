@@ -15,6 +15,7 @@ use App\Traits\KategoriLaciTrait;
 use Illuminate\Support\Facades\Log;
 use App\Traits\ManajemenKasTrait;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class PengeluaranApiController extends Controller
 {
@@ -58,39 +59,79 @@ class PengeluaranApiController extends Controller
         }
     }
 
-    public function getKategoriPengeluaran(): JsonResponse
-    {
-        try {
-            // Ambil kategori dari master data Beban Tetap
-            $kategoriBeban = BebanOperasional::where('kode_owner', $this->getThisUser()->id_upline)
-                                            ->pluck('nama_beban');
+    // public function getKategoriPengeluaran(): JsonResponse
+    // {
+    //     try {
+    //         // Ambil kategori dari master data Beban Tetap
+    //         $kategoriBeban = BebanOperasional::where('kode_owner', $this->getThisUser()->id_upline)
+    //                                         ->pluck('nama_beban');
 
-            // Tambahkan kategori standar (tanpa 'Lainnya' dulu)
-            $kategoriStandar = collect(['Penggajian']);
+    //         // Tambahkan kategori standar (tanpa 'Lainnya' dulu)
+    //         $kategoriStandar = collect(['Penggajian']);
 
-            // Gabungkan dan pastikan unik
-            $semuaKategori = $kategoriStandar->merge($kategoriBeban)->unique()->values();
+    //         // Gabungkan dan pastikan unik
+    //         $semuaKategori = $kategoriStandar->merge($kategoriBeban)->unique()->values();
 
-            // Pastikan 'Lainnya' selalu ada di paling bawah
-            $semuaKategori = $semuaKategori->reject(function ($item) {
-                return strtolower($item) === 'lainnya';
-            })->values();
-            $semuaKategori->push('Lainnya');
+    //         // Pastikan 'Lainnya' selalu ada di paling bawah
+    //         $semuaKategori = $semuaKategori->reject(function ($item) {
+    //             return strtolower($item) === 'lainnya';
+    //         })->values();
+    //         $semuaKategori->push('Lainnya');
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Kategori berhasil diambil',
-                'data' => $semuaKategori
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mengambil kategori',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+    //         return response()->json([
+    //             'success' => true,
+    //             'message' => 'Kategori berhasil diambil',
+    //             'data' => $semuaKategori
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Gagal mengambil kategori',
+    //             'error' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
+    public function getBebanOperasionalList(): JsonResponse
+{
+    try {
+        $ownerId = $this->getThisUser()->id_upline;
+        $awalBulan = Carbon::now()->startOfMonth();
+        $akhirBulan = Carbon::now()->endOfMonth();
+
+        $daftarBeban = BebanOperasional::where('kode_owner', $ownerId)
+            ->with(['pengeluaranOperasional' => function ($query) use ($awalBulan, $akhirBulan) {
+                $query->whereBetween('tgl_pengeluaran', [$awalBulan, $akhirBulan]);
+            }])
+            ->orderBy('nama_beban', 'asc')
+            ->get();
+
+        $result = $daftarBeban->map(function ($item) {
+            $terpakai = $item->pengeluaranOperasional->sum('jml_pengeluaran');
+
+            // Perbaikan 1: Pastikan hasil perhitungan adalah float
+            $sisa_jatah = (float) $item->jumlah_bulanan - $terpakai;
+
+            return [
+                'id' => $item->id,
+                'nama_beban' => $item->nama_beban,
+                // Perbaikan 2: Casting jumlah_bulanan ke float
+                'jumlah_bulanan' => (float) $item->jumlah_bulanan,
+                'sisa_jatah' => $sisa_jatah > 0 ? $sisa_jatah : 0,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Daftar beban operasional berhasil diambil',
+            'data' => $result
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false, 'message' => 'Gagal mengambil data', 'error' => $e->getMessage()
+        ], 500);
     }
-
+}
 
     /**
      * Get single pengeluaran toko by ID
@@ -384,6 +425,7 @@ class PengeluaranApiController extends Controller
 
             $request->validate([
                 'tgl_pengeluaran' => 'required|string',
+                'beban_operasional_id' => 'nullable|integer|exists:beban_operasionals,id',
                 'nama_pengeluaran' => 'required|string|max:255',
                 'kategori' => 'required|string|max:100',
                 'kode_pegawai' => 'nullable|string',
@@ -394,13 +436,33 @@ class PengeluaranApiController extends Controller
 
             Log::debug('Validasi berhasil', ['data' => $request->all()]);
 
+            if ($request->filled('beban_operasional_id')) {
+            $beban = BebanOperasional::findOrFail($request->beban_operasional_id);
+            $pengeluaranBaru = $request->jml_pengeluaran;
+
+            $awalBulan = Carbon::parse($request->tgl_pengeluaran)->startOfMonth();
+            $akhirBulan = Carbon::parse($request->tgl_pengeluaran)->endOfMonth();
+
+            $sudahTerpakai = PengeluaranOperasional::where('beban_operasional_id', $beban->id)
+                ->whereBetween('tgl_pengeluaran', [$awalBulan, $akhirBulan])
+                ->sum('jml_pengeluaran');
+
+            $sisaJatah = $beban->jumlah_bulanan - $sudahTerpakai;
+
+            if ($pengeluaranBaru > $sisaJatah) {
+                $pesanError = "Jumlah melebihi sisa jatah untuk '" . $beban->nama_beban . "'. Sisa jatah: " . number_format($sisaJatah);
+                return response()->json(['success' => false, 'message' => $pesanError], 422);
+            }
+        }
+
             $pegawai = $this->getThisUser()->kode_user;
             Log::debug('Nilai pegawai yang diproses', ['pegawai' => $pegawai]);
 
             $pengeluaran = PengeluaranOperasional::create([
                 'tgl_pengeluaran' => $request->tgl_pengeluaran,
+                'beban_operasional_id' => $request->beban_operasional_id,
                 'nama_pengeluaran' => $request->nama_pengeluaran,
-                'kategori' => $request->kategori,
+                'kategori' => $beban ? $beban->nama_beban : 'Lainnya',
                 'kode_pegawai' => $pegawai,
                 'jml_pengeluaran' => $request->jml_pengeluaran,
                 'desc_pengeluaran' => $request->desc_pengeluaran ?? '',

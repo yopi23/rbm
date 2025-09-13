@@ -6,5 +6,13 @@ use Illuminate\Database\Eloquent\Model;
 class BebanOperasional extends Model {
     use HasFactory;
     protected $table = 'beban_operasional';
-    protected $fillable = ['kode_owner', 'nama_beban', 'jumlah_bulanan', 'keterangan'];
+    protected $fillable = ['kode_owner',
+    'nama_beban',
+    'jumlah_bulanan',
+    'keterangan'];
+
+     public function pengeluaranOperasional()
+    {
+        return $this->hasMany(PengeluaranOperasional::class);
+    }
 }

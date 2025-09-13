@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BebanOperasional;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
 
 class BebanOperasionalController extends Controller
 {
@@ -21,11 +22,43 @@ class BebanOperasionalController extends Controller
     public function index()
     {
         $page = "Kelola Beban Tetap Bulanan";
-        $beban = BebanOperasional::where('kode_owner', $this->getOwnerId())->get();
+        $ownerId = $this->getOwnerId();
 
-        $content = view('admin.page.beban.index', compact('page', 'beban'));
+        // Tentukan rentang tanggal untuk bulan ini
+        $awalBulan = Carbon::now()->startOfMonth();
+        $akhirBulan = Carbon::now()->endOfMonth();
+
+        // Mengambil nama bulan dan tahun saat ini (misal: "September 2025")
+        $namaBulan = Carbon::now()->locale('id')->isoFormat('MMMM YYYY');
+
+        $beban = BebanOperasional::where('kode_owner', $ownerId)
+            ->with(['pengeluaranOperasional' => function ($query) use ($awalBulan, $akhirBulan) {
+                $query->whereBetween('tgl_pengeluaran', [$awalBulan, $akhirBulan]);
+            }])
+            ->get();
+
+        $beban->map(function ($item) {
+            $item->terpakai_bulan_ini = $item->pengeluaranOperasional->sum('jml_pengeluaran');
+            $item->sisa_jatah = $item->jumlah_bulanan - $item->terpakai_bulan_ini;
+            return $item;
+        });
+
+        // 👇 TAMBAHKAN INI UNTUK MENGHITUNG TOTAL KESELURUHAN 👇
+        $totalJatah = $beban->sum('jumlah_bulanan');
+        $totalTerpakai = $beban->sum('terpakai_bulan_ini');
+        $totalSisa = $beban->sum('sisa_jatah');
+
+        $content = view('admin.page.beban.index', compact(
+            'page',
+            'beban',
+            'namaBulan', // Kirim nama bulan ke view
+            'totalJatah', // Kirim total ke view
+            'totalTerpakai',
+            'totalSisa'
+        ));
         return view('admin.layout.blank_page', compact('page', 'content'));
     }
+
 
     /**
      * Menyimpan beban tetap baru.

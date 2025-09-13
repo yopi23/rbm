@@ -10,6 +10,7 @@ class PengeluaranOperasional extends Model
     use HasFactory;
     protected $fillable = [
         'tgl_pengeluaran',
+        'beban_operasional_id',
         'nama_pengeluaran',
         'kategori',
         'kode_pegawai',

@@ -25,28 +25,7 @@
                     </form>
                 </div>
 
-                <div class="card card-success">
-                    <div class="card-header">
-                        <h3 class="card-title">2. Proses Tutup Buku Manual</h3>
-                    </div>
-                    <form action="{{ route('tutupbuku.proses') }}" method="POST"
-                        onsubmit="return confirm('Anda yakin ingin memproses tutup buku untuk tanggal ini? Aksi ini tidak dapat dibatalkan.');">
-                        @csrf
-                        <div class="card-body">
-                            <p>Gunakan fitur ini jika proses otomatis gagal atau jika Anda perlu memproses ulang data
-                                untuk tanggal di masa lalu.</p>
-                            <div class="form-group">
-                                <label for="tanggal">Pilih Tanggal Operasional</label>
-                                <input type="date" name="tanggal" class="form-control"
-                                    value="{{ now()->subDay()->format('Y-m-d') }}" required>
-                            </div>
-                        </div>
-                        <div class="card-footer">
-                            <button type="submit" class="btn btn-success"><i class="fas fa-archive mr-1"></i> Proses
-                                Tutup Buku Manual</button>
-                        </div>
-                    </form>
-                </div>
+
             </div>
 
             <div class="col-md-5">
@@ -60,7 +39,8 @@
                             <li><strong>Waktu Jalan:</strong> Setiap hari pada jam <strong>23:55</strong> (atau sesuai
                                 jadwal Anda).</li>
                             <li><strong>Aksi:</strong> Sistem akan otomatis menjalankan proses tutup buku untuk
-                                <strong>hari kemarin</strong>.</li>
+                                <strong>hari kemarin</strong>.
+                            </li>
                             <li><strong>Tombol Manual:</strong> Gunakan tombol di samping hanya jika diperlukan.</li>
                         </ul>
                         <div class="alert alert-warning">
