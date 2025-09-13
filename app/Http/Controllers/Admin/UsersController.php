@@ -64,7 +64,10 @@ class UsersController extends Controller
         <th>Role</th>
         <th>Status</th>
         <th>Aksi</th>';
-        $data = User::join('user_details','users.id','=','user_details.kode_user')->where('user_details.id_upline','=',$this->getThisUser()->id_upline)->get(['users.*','user_details.*','users.id as id_user']);
+        $data = User::join('user_details','users.id','=','user_details.kode_user')
+        ->whereIn('user_details.jabatan',[2,3])
+        ->where('user_details.id_upline','=',$this->getThisUser()->id_upline)
+        ->get(['users.*','user_details.*','users.id as id_user']);
         $tbody = '';
         $no = 1;
         foreach($data as $item){
@@ -133,17 +136,17 @@ class UsersController extends Controller
                         'id_upline' => $this->getThisUser()->id_upline,
                         'status_user' => $request->status_user,
                         'kode_invite' => $kode_invite,
-                        'link_twitter' =>'-', 
-                        'link_facebook' => '-', 
-                        'link_instagram' =>'-', 
-                        'link_linkedin' =>'-',   
+                        'link_twitter' =>'-',
+                        'link_facebook' => '-',
+                        'link_instagram' =>'-',
+                        'link_linkedin' =>'-',
                     ]);
                 }
                     return redirect()->route('users.index')
                     ->with([
                         'success' => 'Users Berhasil Ditambahkan'
                     ]);
-                return redirect()->back()->with('error',"Oops, Something Went Wrong"); 
+                return redirect()->back()->with('error',"Oops, Something Went Wrong");
             }
         }
     }
@@ -201,14 +204,14 @@ class UsersController extends Controller
                     $data_user->update([
                         'fullname' => $request->name,
                         'jabatan' => $request->jabatan,
-                        'status_user' => $request->status_user, 
+                        'status_user' => $request->status_user,
                     ]);
                 }
                     return redirect()->route('users.index')
                     ->with([
                         'success' => 'Users Berhasil DiEdit'
                     ]);
-                return redirect()->back()->with('error',"Oops, Something Went Wrong"); 
+                return redirect()->back()->with('error',"Oops, Something Went Wrong");
             }
         }
     }

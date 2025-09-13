@@ -627,7 +627,7 @@ class EmployeeManagementController extends Controller
                 $data['service_percentage'] = 0;
                 $data['target_bonus'] = 0;
                 $data['monthly_target'] = 0;
-            } 
+            }
 
             // Debug: Log data yang akan disimpan
             \Log::info('Salary Settings Store - Data to be saved:', $data);
@@ -682,16 +682,27 @@ class EmployeeManagementController extends Controller
     {
         $page = "Pelanggaran";
 
+        // Get the current user's id_upline
+        $idUpline = $this->getThisUser()->id_upline;
+
+        // Get user IDs that belong to this upline
+        $userIds = User::whereHas('userDetail', function($query) use ($idUpline) {
+                $query->where('id_upline', $idUpline);
+            })
+            ->pluck('id');
+
+        // Filter violations based on user IDs
         $violations = Violation::with(['user', 'createdBy'])
+            ->whereIn('user_id', $userIds)
             ->orderBy('violation_date', 'desc')
             ->get();
 
         $employees = User::join('user_details', 'users.id', '=', 'user_details.kode_user')
-            ->where('user_details.id_upline', $this->getThisUser()->id_upline)
+            ->where('user_details.id_upline', $idUpline)
             ->whereIn('user_details.jabatan', [2, 3])
             ->get(['users.*', 'user_details.*', 'users.id as id_user']);
 
-        $content= view('admin.page.violations', compact('violations', 'employees'))->render();
+        $content = view('admin.page.violations', compact('violations', 'employees'))->render();
         return view('admin.layout.blank_page', compact('page', 'content'));
     }
 

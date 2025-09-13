@@ -118,6 +118,7 @@ class StockManagementController extends Controller
     public function getLowStockItems($threshold = 5, $limit = null)
     {
         $query = Sparepart::with(['kategori', 'supplier'])
+            ->where('kode_owner', '=', $this->getThisUser()->id_upline)
             ->where('stok_sparepart', '<=', $threshold)
             ->orderBy('stok_sparepart', 'asc');
 
@@ -136,19 +137,23 @@ class StockManagementController extends Controller
         $startDate = Carbon::now()->subDays($days);
 
         // Gabungkan data penjualan dari dua tabel: detail_sparepart_penjualan dan detail_part_services
-        $salesFromPenjualan = DetailSparepartPenjualan::select(
-                'kode_sparepart',
-                DB::raw('SUM(qty_sparepart) as total_qty')
+        $salesFromPenjualan = DetailSparepartPenjualan::join('spareparts', 'detail_sparepart_penjualans.kode_sparepart', '=', 'spareparts.id')
+            ->select(
+                'detail_sparepart_penjualans.kode_sparepart',
+                DB::raw('SUM(detail_sparepart_penjualans.qty_sparepart) as total_qty')
             )
-            ->where('created_at', '>=', $startDate)
-            ->groupBy('kode_sparepart');
+            ->where('spareparts.kode_owner', $this->getThisUser()->id_upline)
+            ->where('detail_sparepart_penjualans.created_at', '>=', $startDate)
+            ->groupBy('detail_sparepart_penjualans.kode_sparepart');
 
-        $salesFromServices = DetailPartServices::select(
-                'kode_sparepart',
-                DB::raw('SUM(qty_part) as total_qty')
+        $salesFromServices = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+            ->select(
+                'detail_part_services.kode_sparepart',
+                DB::raw('SUM(detail_part_services.qty_part) as total_qty')
             )
-            ->where('created_at', '>=', $startDate)
-            ->groupBy('kode_sparepart');
+            ->where('spareparts.kode_owner', $this->getThisUser()->id_upline)
+            ->where('detail_part_services.created_at', '>=', $startDate)
+            ->groupBy('detail_part_services.kode_sparepart');
 
         // Gabungkan kedua query
         $combinedSales = $salesFromPenjualan->unionAll($salesFromServices);
@@ -206,12 +211,14 @@ class StockManagementController extends Controller
         }
 
         // Hitung penjualan per hari
-        $salesPerDay = DetailSparepartPenjualan::select(
-                DB::raw('DATE(created_at) as sale_date'),
-                DB::raw('COUNT(DISTINCT kode_penjualan) as sales_count'),
-                DB::raw('SUM(qty_sparepart) as total_items')
+        $salesPerDay = DetailSparepartPenjualan::join('spareparts', 'detail_sparepart_penjualans.kode_sparepart', '=', 'spareparts.id')
+            ->select(
+                DB::raw('DATE(detail_sparepart_penjualans.created_at) as sale_date'),
+                DB::raw('COUNT(DISTINCT detail_sparepart_penjualans.kode_penjualan) as sales_count'),
+                DB::raw('SUM(detail_sparepart_penjualans.qty_sparepart) as total_items')
             )
-            ->where('created_at', '>=', $startDate)
+            ->where('spareparts.kode_owner', $this->getThisUser()->id_upline)
+            ->where('detail_sparepart_penjualans.created_at', '>=', $startDate)
             ->groupBy('sale_date')
             ->get();
 
@@ -223,12 +230,14 @@ class StockManagementController extends Controller
         }
 
         // Hitung service per hari
-        $servicesPerDay = DetailPartServices::select(
-                DB::raw('DATE(created_at) as service_date'),
-                DB::raw('COUNT(DISTINCT kode_services) as service_count'),
-                DB::raw('SUM(qty_part) as total_items')
+        $servicesPerDay = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+            ->select(
+                DB::raw('DATE(detail_part_services.created_at) as service_date'),
+                DB::raw('COUNT(DISTINCT detail_part_services.kode_services) as service_count'),
+                DB::raw('SUM(detail_part_services.qty_part) as total_items')
             )
-            ->where('created_at', '>=', $startDate)
+            ->where('spareparts.kode_owner', $this->getThisUser()->id_upline)
+            ->where('detail_part_services.created_at', '>=', $startDate)
             ->groupBy('service_date')
             ->get();
 
@@ -247,7 +256,9 @@ class StockManagementController extends Controller
      */
     public function getReorderRecommendation(Request $request, $itemId)
     {
-        $sparepart = Sparepart::findOrFail($itemId);
+        $sparepart = Sparepart::where('id', $itemId)
+            ->where('kode_owner', $this->getThisUser()->id_upline)
+            ->firstOrFail();
 
         // Parameter untuk perhitungan
         $leadTime = $request->input('lead_time', 7); // dalam hari
@@ -255,7 +266,7 @@ class StockManagementController extends Controller
         $periodSales = $this->getItemSales($itemId, 90); // penjualan 90 hari terakhir
 
         // Rata-rata penjualan harian
-        $dailyAverage = $periodSales / 90;
+        $dailyAverage = $periodSales > 0 ? $periodSales / 90 : 0;
 
         // Jumlah yang perlu dipesan = (Lead Time * Average Daily Sales) + Safety Stock - Current Stock
         $reorderQuantity = ceil(($leadTime * $dailyAverage) + $safetyStock - $sparepart->stok_sparepart);
@@ -295,7 +306,9 @@ class StockManagementController extends Controller
      */
     public function getItemStockAndSalesChart($itemId)
     {
-        $sparepart = Sparepart::findOrFail($itemId);
+        $sparepart = Sparepart::where('id', $itemId)
+            ->where('kode_owner', $this->getThisUser()->id_upline)
+            ->firstOrFail();
 
         // Data 30 hari terakhir
         $endDate = Carbon::now();

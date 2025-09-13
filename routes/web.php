@@ -423,7 +423,7 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
 
     Route::resource('customer', CustomerController::class);
      // Routes untuk inventory management
-     Route::prefix('admin/inventory')->name('admin.inventory.')->middleware(['auth'])->group(function () {
+    Route::prefix('admin/inventory')->name('admin.inventory.')->middleware(['auth'])->group(function () {
         // Dashboard dan laporan
         Route::get('/home', [StockManagementController::class, 'dashboard'])->name('home');
         Route::get('/restock-report', [StockManagementController::class, 'restockReport'])->name('restock-report');

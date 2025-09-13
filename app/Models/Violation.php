@@ -41,4 +41,6 @@ class Violation extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+    // Dalam model Violation
+
 }
