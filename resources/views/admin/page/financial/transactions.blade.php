@@ -88,94 +88,93 @@
                 <h3 class="card-title">Histori Transaksi</h3>
             </div>
             <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-bordered table-striped">
-                        <thead>
+                {{-- Table-responsive sudah ada di dalam datatables, jadi bisa dihapus --}}
+                <table id="tabel-buku-besar" class="table table-bordered table-striped">
+                    <thead>
+                        <tr>
+                            <th width="5%">No</th>
+                            <th>Tanggal</th>
+                            <th>Deskripsi</th>
+                            <th class="text-right">Debit (Masuk)</th>
+                            <th class="text-right">Kredit (Keluar)</th>
+                            <th class="text-right">Saldo</th>
+                            <th class="text-center">Sumber</th>
+                            <th class="text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($transactions as $index => $tx)
                             <tr>
-                                <th>No</th>
-                                <th>Tanggal</th>
-                                <th>Deskripsi</th>
-                                <th>Debit (Masuk)</th>
-                                <th>Kredit (Keluar)</th>
-                                <th>Saldo</th>
-                                <th>Sumber</th>
-                                <th>Aksi</th>
+                                <td>{{ $transactions->firstItem() + $index }}</td>
+                                <td>{{ \Carbon\Carbon::parse($tx->tanggal)->format('d/m/Y H:i') }}</td>
+                                <td>{{ $tx->deskripsi }}</td>
+                                <td class="text-right">
+                                    @if ($tx->debit > 0)
+                                        <span class="text-success font-weight-bold">Rp
+                                            {{ number_format($tx->debit, 0, ',', '.') }}</span>
+                                    @else
+                                        -
+                                    @endif
+                                </td>
+                                <td class="text-right">
+                                    @if ($tx->kredit > 0)
+                                        <span class="text-danger font-weight-bold">Rp
+                                            {{ number_format($tx->kredit, 0, ',', '.') }}</span>
+                                    @else
+                                        -
+                                    @endif
+                                </td>
+                                <td class="text-right">Rp {{ number_format($tx->saldo, 0, ',', '.') }}</td>
+                                <td class="text-center">
+                                    @if (str_contains($tx->sourceable_type, 'TransaksiModal'))
+                                        <span class="badge badge-dark">Modal</span>
+                                    @elseif (str_contains($tx->sourceable_type, 'Sevices') || str_contains($tx->sourceable_type, 'Pengambilan'))
+                                        <span class="badge badge-primary">Service</span>
+                                    @elseif (str_contains($tx->sourceable_type, 'Penjualan'))
+                                        <span class="badge badge-info">Penjualan</span>
+                                    @elseif (str_contains($tx->sourceable_type, 'PengeluaranOperasional'))
+                                        <span class="badge badge-warning">Operasional</span>
+                                    @elseif (str_contains($tx->sourceable_type, 'PengeluaranToko'))
+                                        <span class="badge badge-secondary">Toko</span>
+                                    @elseif (str_contains($tx->sourceable_type, 'Pembelian'))
+                                        <span class="badge badge-success">Pembelian</span>
+                                    @elseif (str_contains($tx->sourceable_type, 'DistribusiLaba'))
+                                        <span class="badge"
+                                            style="background-color: #6f42c1; color: white;">Distribusi</span>
+                                    @else
+                                        <span class="badge badge-light">Manual</span>
+                                    @endif
+                                </td>
+                                <td class="text-center">
+                                    @if (!$tx->sourceable_type)
+                                        <div class="btn-group">
+                                            <a href="{{ route('financial.edit', $tx->id) }}"
+                                                class="btn btn-sm btn-warning" title="Edit"><i
+                                                    class="fas fa-edit"></i></a>
+                                            {{-- Tombol hapus tidak perlu diubah --}}
+                                        </div>
+                                    @else
+                                        <button type="button" class="btn btn-sm btn-secondary"
+                                            title="Transaksi sistem tidak dapat diubah/dihapus" disabled><i
+                                                class="fas fa-lock"></i></button>
+                                    @endif
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            @forelse ($transactions as $index => $tx)
-                                <tr>
-                                    <td>{{ $transactions->firstItem() + $index }}</td>
-                                    <td>{{ \Carbon\Carbon::parse($tx->tanggal)->format('d/m/Y H:i') }}</td>
-                                    <td>{{ $tx->deskripsi }}</td>
-                                    <td>
-                                        @if ($tx->debit > 0)
-                                            <span class="text-success font-weight-bold">Rp
-                                                {{ number_format($tx->debit, 0, ',', '.') }}</span>
-                                        @else
-                                            -
-                                        @endif
-                                    </td>
-                                    <td>
-                                        @if ($tx->kredit > 0)
-                                            <span class="text-danger font-weight-bold">Rp
-                                                {{ number_format($tx->kredit, 0, ',', '.') }}</span>
-                                        @else
-                                            -
-                                        @endif
-                                    </td>
-                                    <td>Rp {{ number_format($tx->saldo, 0, ',', '.') }}</td>
-                                    <td>
-                                        @if (str_contains($tx->sourceable_type, 'TransaksiModal'))
-                                            <span class="badge badge-dark">Modal</span>
-                                        @elseif (str_contains($tx->sourceable_type, 'Sevices') || str_contains($tx->sourceable_type, 'Pengambilan'))
-                                            <span class="badge badge-primary">Service</span>
-                                        @elseif (str_contains($tx->sourceable_type, 'Penjualan'))
-                                            <span class="badge badge-info">Penjualan</span>
-                                        @elseif (str_contains($tx->sourceable_type, 'PengeluaranOperasional'))
-                                            <span class="badge badge-warning">Operasional</span>
-                                        @elseif (str_contains($tx->sourceable_type, 'PengeluaranToko'))
-                                            <span class="badge badge-secondary">Toko</span>
-                                        @elseif (str_contains($tx->sourceable_type, 'Pembelian'))
-                                            <span class="badge badge-success">Pembelian</span>
-                                        @elseif (str_contains($tx->sourceable_type, 'DistribusiLaba'))
-                                            <span class="badge"
-                                                style="background-color: #6f42c1; color: white;">Distribusi</span>
-                                        @else
-                                            <span class="badge badge-light">Manual</span>
-                                        @endif
-                                    </td>
-                                    <td>
-                                        @if (!$tx->sourceable_type)
-                                            <div class="btn-group">
-                                                <a href="{{ route('financial.edit', $tx->id) }}"
-                                                    class="btn btn-sm btn-warning" title="Edit"><i
-                                                        class="fas fa-edit"></i></a>
-                                                <button type="button" class="btn btn-sm btn-danger" data-toggle="modal"
-                                                    data-target="#delete-modal-{{ $tx->id }}" title="Hapus"><i
-                                                        class="fas fa-trash"></i></button>
-                                            </div>
-                                        @else
-                                            <button type="button" class="btn btn-sm btn-secondary"
-                                                title="Transaksi sistem tidak dapat diubah/dihapus" disabled><i
-                                                    class="fas fa-lock"></i></button>
-                                        @endif
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="8" class="text-center">Tidak ada transaksi yang cocok dengan
-                                        filter.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
+                        @empty
+                            <tr>
+                                <td colspan="8" class="text-center">Tidak ada transaksi yang cocok dengan
+                                    filter.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
             </div>
             <div class="card-footer clearfix">
-                {{ $transactions->appends(request()->query())->links() }}
+                {{-- Paginasi bawaan Laravel akan kita sembunyikan karena DataTables sudah punya paginasi sendiri --}}
+                {{-- {{ $transactions->appends(request()->query())->links() }} --}}
             </div>
         </div>
+
     </div>
 </section>
 

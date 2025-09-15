@@ -93,45 +93,60 @@ class PengeluaranApiController extends Controller
     // }
 
     public function getBebanOperasionalList(): JsonResponse
-{
-    try {
-        $ownerId = $this->getThisUser()->id_upline;
-        $awalBulan = Carbon::now()->startOfMonth();
-        $akhirBulan = Carbon::now()->endOfMonth();
+    {
+        try {
+            $ownerId = $this->getThisUser()->id_upline;
 
-        $daftarBeban = BebanOperasional::where('kode_owner', $ownerId)
-            ->with(['pengeluaranOperasional' => function ($query) use ($awalBulan, $akhirBulan) {
-                $query->whereBetween('tgl_pengeluaran', [$awalBulan, $akhirBulan]);
-            }])
-            ->orderBy('nama_beban', 'asc')
-            ->get();
+            // Ambil semua beban, eager load semua pengeluaran dari awal tahun ini untuk efisiensi
+            $awalTahunIni = Carbon::now()->startOfYear();
+            $daftarBeban = BebanOperasional::where('kode_owner', $ownerId)
+                ->with(['pengeluaranOperasional' => function ($query) use ($awalTahunIni) {
+                    $query->where('tgl_pengeluaran', '>=', $awalTahunIni);
+                }])
+                ->orderBy('nama_beban', 'asc')
+                ->get();
 
-        $result = $daftarBeban->map(function ($item) {
-            $terpakai = $item->pengeluaranOperasional->sum('jml_pengeluaran');
+            // Siapkan variabel untuk tanggal bulan ini
+            $awalBulanIni = Carbon::now()->startOfMonth();
+            $akhirBulanIni = Carbon::now()->endOfMonth();
 
-            // Perbaikan 1: Pastikan hasil perhitungan adalah float
-            $sisa_jatah = (float) $item->jumlah_bulanan - $terpakai;
+            $result = $daftarBeban->map(function ($item) use ($awalBulanIni, $akhirBulanIni) {
 
-            return [
-                'id' => $item->id,
-                'nama_beban' => $item->nama_beban,
-                // Perbaikan 2: Casting jumlah_bulanan ke float
-                'jumlah_bulanan' => (float) $item->jumlah_bulanan,
-                'sisa_jatah' => $sisa_jatah > 0 ? $sisa_jatah : 0,
-            ];
-        });
+                // Tentukan pengeluaran yang relevan berdasarkan periode
+                if ($item->periode == 'tahunan') {
+                    // Untuk tahunan, semua pengeluaran yang di-load dari awal tahun relevan
+                    $pengeluaranPeriodeIni = $item->pengeluaranOperasional;
+                } else { // Default ke 'bulanan'
+                    // Untuk bulanan, filter lagi dari data yang sudah di-load untuk bulan ini saja
+                    $pengeluaranPeriodeIni = $item->pengeluaranOperasional->whereBetween('tgl_pengeluaran', [$awalBulanIni, $akhirBulanIni]);
+                }
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Daftar beban operasional berhasil diambil',
-            'data' => $result
-        ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false, 'message' => 'Gagal mengambil data', 'error' => $e->getMessage()
-        ], 500);
+                // Hitung properti
+                $terpakai = $pengeluaranPeriodeIni->sum('jml_pengeluaran');
+                // Gunakan kolom 'nominal' yang baru
+                $sisa_jatah = (float) $item->nominal - $terpakai;
+
+                return [
+                    'id' => $item->id,
+                    'nama_beban' => $item->nama_beban,
+                    'periode' => $item->periode, // Kirim juga info periode
+                    // Gunakan kolom 'nominal' dan pastikan tipenya float
+                    'jumlah_bulanan' => (float) $item->nominal, // Dibiarkan agar Flutter tidak perlu diubah
+                    'sisa_jatah' => $sisa_jatah > 0 ? $sisa_jatah : 0,
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Daftar beban operasional berhasil diambil',
+                'data' => $result
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false, 'message' => 'Gagal mengambil data', 'error' => $e->getMessage()
+            ], 500);
+        }
     }
-}
 
     /**
      * Get single pengeluaran toko by ID
@@ -420,109 +435,77 @@ class PengeluaranApiController extends Controller
      */
     public function storePengeluaranOperasional(Request $request): JsonResponse
     {
-        try {
-            Log::info('Memulai proses storePengeluaranOperasional', ['request' => $request->all()]);
+        // LOG 1: Mencatat semua data yang masuk dari Flutter
+        Log::info('API Store Pengeluaran Opex Dimulai', ['request_data' => $request->all()]);
 
-            $request->validate([
-                'tgl_pengeluaran' => 'required|string',
-                'beban_operasional_id' => 'nullable|integer|exists:beban_operasionals,id',
+        try {
+            $validatedData = $request->validate([
+                'tgl_pengeluaran' => 'required|date',
                 'nama_pengeluaran' => 'required|string|max:255',
-                'kategori' => 'required|string|max:100',
-                'kode_pegawai' => 'nullable|string',
-                'jml_pengeluaran' => 'required|string',
-                'desc_pengeluaran' => 'required|string',
+                'beban_operasional_id' => 'nullable|integer|exists:beban_operasional,id',
+                'kode_pegawai' => 'nullable|integer|exists:users,id',
+                'jml_pengeluaran' => 'required|numeric|min:1',
+                'desc_pengeluaran' => 'nullable|string',
                 'id_kategorilaci' => 'nullable|integer'
             ]);
 
-            Log::debug('Validasi berhasil', ['data' => $request->all()]);
+            // Validasi Sisa Jatah (sudah benar)
+            if (isset($validatedData['beban_operasional_id'])) {
+                $beban = BebanOperasional::findOrFail($validatedData['beban_operasional_id']);
+                $pengeluaranBaru = (float) $validatedData['jml_pengeluaran'];
 
-            if ($request->filled('beban_operasional_id')) {
-            $beban = BebanOperasional::findOrFail($request->beban_operasional_id);
-            $pengeluaranBaru = $request->jml_pengeluaran;
+                if ($beban->periode == 'tahunan') {
+                    $awalPeriode = Carbon::parse($validatedData['tgl_pengeluaran'])->startOfYear();
+                    $akhirPeriode = Carbon::parse($validatedData['tgl_pengeluaran'])->endOfYear();
+                } else {
+                    $awalPeriode = Carbon::parse($validatedData['tgl_pengeluaran'])->startOfMonth();
+                    $akhirPeriode = Carbon::parse($validatedData['tgl_pengeluaran'])->endOfMonth();
+                }
 
-            $awalBulan = Carbon::parse($request->tgl_pengeluaran)->startOfMonth();
-            $akhirBulan = Carbon::parse($request->tgl_pengeluaran)->endOfMonth();
+                $sudahTerpakai = PengeluaranOperasional::where('beban_operasional_id', $beban->id)
+                    ->whereBetween('tgl_pengeluaran', [$awalPeriode, $akhirPeriode])
+                    ->sum('jml_pengeluaran');
 
-            $sudahTerpakai = PengeluaranOperasional::where('beban_operasional_id', $beban->id)
-                ->whereBetween('tgl_pengeluaran', [$awalBulan, $akhirBulan])
-                ->sum('jml_pengeluaran');
+                $sisaJatah = (float) $beban->nominal - $sudahTerpakai;
 
-            $sisaJatah = $beban->jumlah_bulanan - $sudahTerpakai;
-
-            if ($pengeluaranBaru > $sisaJatah) {
-                $pesanError = "Jumlah melebihi sisa jatah untuk '" . $beban->nama_beban . "'. Sisa jatah: " . number_format($sisaJatah);
-                return response()->json(['success' => false, 'message' => $pesanError], 422);
+                if ($pengeluaranBaru > $sisaJatah) {
+                    $pesanError = "Jumlah melebihi sisa jatah untuk '" . $beban->nama_beban . "'. Sisa jatah: " . number_format($sisaJatah);
+                    return response()->json(['success' => false, 'message' => $pesanError], 422);
+                }
             }
-        }
 
-            $pegawai = $this->getThisUser()->kode_user;
-            Log::debug('Nilai pegawai yang diproses', ['pegawai' => $pegawai]);
+            DB::beginTransaction();
 
-            $pengeluaran = PengeluaranOperasional::create([
-                'tgl_pengeluaran' => $request->tgl_pengeluaran,
-                'beban_operasional_id' => $request->beban_operasional_id,
-                'nama_pengeluaran' => $request->nama_pengeluaran,
-                'kategori' => $beban ? $beban->nama_beban : 'Lainnya',
-                'kode_pegawai' => $pegawai,
-                'jml_pengeluaran' => $request->jml_pengeluaran,
-                'desc_pengeluaran' => $request->desc_pengeluaran ?? '',
-                'kode_owner' => $this->getThisUser()->id_upline
-            ]);
+            $validatedData['kategori'] = 'Lainnya';
+            if (isset($validatedData['beban_operasional_id'])) {
+                $validatedData['kategori'] = BebanOperasional::find($validatedData['beban_operasional_id'])->nama_beban;
+            }
 
-            Log::info('Pengeluaran berhasil dibuat', ['pengeluaran' => $pengeluaran->toArray()]);
+            $validatedData['kode_owner'] = $this->getThisUser()->id_upline;
+
+            $validatedData['kode_pegawai'] = $this->getThisUser()->kode_user;
+
+            // LOG 2: Mencatat data final sebelum disimpan ke database
+            Log::info('Data Siap Disimpan ke Database', ['data_to_create' => $validatedData]);
+
+            $pengeluaran = PengeluaranOperasional::create($validatedData);
+
             $this->catatKas(
                 $pengeluaran, 0, $pengeluaran->jml_pengeluaran,
                 'Pengeluaran Opex (API): ' . $pengeluaran->nama_pengeluaran,
                 $pengeluaran->tgl_pengeluaran
             );
-            // Record laci history if kategori laci is provided
-            if ($request->id_kategorilaci) {
-                $kategoriId = $request->id_kategorilaci;
-                $uangKeluar = (int) str_replace(',', '', $request->jml_pengeluaran);
-                $keterangan = $request->kategori . " - " . $request->nama_pengeluaran . ": " . $request->desc_pengeluaran;
 
+            if (isset($validatedData['id_kategorilaci'])) {
+                $keterangan = $validatedData['kategori'] . " - " . $validatedData['nama_pengeluaran'];
                 $this->recordLaciHistory(
-                    $kategoriId,
-                    null, // uang masuk
-                    $uangKeluar, // uang keluar
-                    $keterangan,
-                    'pengeluaran_operasional',
-                    $pengeluaran->id,
-                    'OPX-' . $pengeluaran->id
+                    $validatedData['id_kategorilaci'], null, $validatedData['jml_pengeluaran'], $keterangan,
+                    'pengeluaran_operasional', $pengeluaran->id, 'OPX-' . $pengeluaran->id
                 );
-
-                Log::info('History laci berhasil dicatat', [
-                    'kategori_id' => $kategoriId,
-                    'uang_keluar' => $uangKeluar,
-                    'keterangan' => $keterangan
-                ]);
             }
 
-            // Update employee balance if it's payroll
-            if ($pegawai && $pegawai !== '-') {
-                Log::debug('Memproses update saldo pegawai', ['kode_pegawai' => $pegawai]);
-
-                $pegawaiDetail = UserDetail::where('kode_user', $pegawai)->first();
-
-                if ($pegawaiDetail) {
-                    $jmlPengeluaran = (int) str_replace(',', '', $request->jml_pengeluaran);
-                    Log::debug('Detail pegawai ditemukan', [
-                        'pegawaiDetail' => $pegawaiDetail->toArray(),
-                        'jml_pengeluaran' => $jmlPengeluaran
-                    ]);
-
-                    $pegawaiDetail->update([
-                        'saldo' => $pegawaiDetail->saldo + $jmlPengeluaran
-                    ]);
-
-                    Log::info('Saldo pegawai berhasil diupdate', [
-                        'kode_pegawai' => $pegawai,
-                        'saldo_baru' => $pegawaiDetail->saldo
-                    ]);
-                } else {
-                    Log::warning('Detail pegawai tidak ditemukan', ['kode_pegawai' => $pegawai]);
-                }
-            }
+            DB::commit();
+            Log::info('Pengeluaran Opex Berhasil Disimpan', ['pengeluaran_id' => $pengeluaran->id]);
 
             return response()->json([
                 'success' => true,
@@ -531,23 +514,16 @@ class PengeluaranApiController extends Controller
             ], 201);
 
         } catch (ValidationException $e) {
-            Log::error('Validasi gagal', ['errors' => $e->errors(), 'request' => $request->all()]);
-            return response()->json([
-                'success' => false,
-                'message' => 'Validasi gagal',
-                'errors' => $e->errors()
-            ], 422);
+            return response()->json(['success' => false, 'message' => 'Validasi gagal', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            Log::error('Gagal menambahkan pengeluaran operasional', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'request' => $request->all()
+            DB::rollBack();
+            // LOG 3: Mencatat detail error jika terjadi kegagalan
+            Log::error('Gagal Simpan Pengeluaran Opex API: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
             ]);
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menambahkan pengeluaran operasional',
-                'error' => $e->getMessage()
-            ], 500);
+            return response()->json(['success' => false, 'message' => 'Gagal menambahkan pengeluaran operasional', 'error' => $e->getMessage()], 500);
         }
     }
 
@@ -557,67 +533,68 @@ class PengeluaranApiController extends Controller
     public function updatePengeluaranOperasional(Request $request, $id): JsonResponse
     {
         try {
-            $request->validate([
-                'tgl_pengeluaran' => 'required|string',
+            $validatedData = $request->validate([
+                'tgl_pengeluaran' => 'required|date',
                 'nama_pengeluaran' => 'required|string|max:255',
-                'kategori' => 'required|string|max:100',
-                'kode_pegawai' => 'nullable|string',
-                'jml_pengeluaran' => 'required|string',
-                'desc_pengeluaran' => 'required|string',
+                'beban_operasional_id' => 'nullable|integer|exists:beban_operasional,id',
+                'kode_pegawai' => 'nullable|integer|exists:users,id',
+                'jml_pengeluaran' => 'required|numeric|min:1',
+                'desc_pengeluaran' => 'nullable|string',
                 'id_kategorilaci' => 'nullable|integer'
             ]);
 
             $pengeluaran = PengeluaranOperasional::where('kode_owner', $this->getThisUser()->id_upline)
                                                 ->findOrFail($id);
 
-            // Get old data for history comparison
+            // Simpan jumlah lama untuk perbandingan di history laci nanti
             $oldAmount = $pengeluaran->jml_pengeluaran;
-            $oldNama = $pengeluaran->nama_pengeluaran;
-            $oldKategori = $pengeluaran->kategori;
 
-            $pegawai = $request->kategori == 'Penggajian' ? $request->kode_pegawai : null;
+            // Validasi Sisa Jatah saat Update
+            if (isset($validatedData['beban_operasional_id'])) {
+                $beban = BebanOperasional::findOrFail($validatedData['beban_operasional_id']);
+                $pengeluaranBaru = (float) $validatedData['jml_pengeluaran'];
 
-            $pengeluaran->update([
-                'tgl_pengeluaran' => $request->tgl_pengeluaran,
-                'nama_pengeluaran' => $request->nama_pengeluaran,
-                'kategori' => $request->kategori,
-                'kode_pegawai' => $pegawai,
-                'jml_pengeluaran' => $request->jml_pengeluaran,
-                'desc_pengeluaran' => $request->desc_pengeluaran ?? '',
-            ]);
+                if ($beban->periode == 'tahunan') {
+                    $awalPeriode = Carbon::parse($validatedData['tgl_pengeluaran'])->startOfYear();
+                    $akhirPeriode = Carbon::parse($validatedData['tgl_pengeluaran'])->endOfYear();
+                } else {
+                    $awalPeriode = Carbon::parse($validatedData['tgl_pengeluaran'])->startOfMonth();
+                    $akhirPeriode = Carbon::parse($validatedData['tgl_pengeluaran'])->endOfMonth();
+                }
 
-            // Handle laci history if kategori laci is provided
-            if ($request->id_kategorilaci) {
-                $kategoriId = $request->id_kategorilaci;
-                $newAmount = (int) str_replace(',', '', $request->jml_pengeluaran);
-                $oldAmountClean = (int) str_replace(',', '', $oldAmount);
+                $sudahTerpakai = PengeluaranOperasional::where('beban_operasional_id', $beban->id)
+                    ->where('id', '!=', $id) // <-- Jangan hitung data yang sedang diedit
+                    ->whereBetween('tgl_pengeluaran', [$awalPeriode, $akhirPeriode])
+                    ->sum('jml_pengeluaran');
 
-                // If amount changed, record the adjustment
-                if ($newAmount != $oldAmountClean) {
-                    $keterangan = "Update " . $request->kategori . " - " . $request->nama_pengeluaran . ": " . $request->desc_pengeluaran . " (Penyesuaian dari " . number_format($oldAmountClean) . " ke " . number_format($newAmount) . ")";
+                $sisaJatah = (float) $beban->nominal - $sudahTerpakai;
 
-                    if ($newAmount > $oldAmountClean) {
-                        // Additional expense
-                        $this->recordLaciHistory(
-                            $kategoriId,
-                            null, // uang masuk
-                            $newAmount - $oldAmountClean, // additional amount out
-                            $keterangan,
-                            'pengeluaran_operasional_update',
-                            $pengeluaran->id,
-                            'OPX-UPD-' . $pengeluaran->id
-                        );
+                if ($pengeluaranBaru > $sisaJatah) {
+                    $pesanError = "Jumlah melebihi sisa jatah untuk '" . $beban->nama_beban . "'. Sisa jatah: " . number_format($sisaJatah);
+                    return response()->json(['success' => false, 'message' => $pesanError], 422);
+                }
+            }
+
+            $validatedData['kategori'] = 'Lainnya';
+            if (isset($validatedData['beban_operasional_id'])) {
+                $validatedData['kategori'] = BebanOperasional::find($validatedData['beban_operasional_id'])->nama_beban;
+            }
+
+            if (strtolower($validatedData['kategori']) != 'penggajian') {
+                $validatedData['kode_pegawai'] = null;
+            }
+
+            $pengeluaran->update($validatedData);
+
+            // Logika untuk penyesuaian history laci saat update (sudah benar)
+            if (isset($validatedData['id_kategorilaci'])) {
+                $newAmount = (float) $validatedData['jml_pengeluaran'];
+                if ($newAmount != $oldAmount) {
+                    $keterangan = "Update Pengeluaran: " . $validatedData['nama_pengeluaran'] . " (dari " . number_format($oldAmount) . " ke " . number_format($newAmount) . ")";
+                    if ($newAmount > $oldAmount) {
+                        $this->recordLaciHistory($validatedData['id_kategorilaci'], null, $newAmount - $oldAmount, $keterangan, 'pengeluaran_operasional_update', $pengeluaran->id, 'OPX-UPD-' . $pengeluaran->id);
                     } else {
-                        // Reduction in expense (money back to laci)
-                        $this->recordLaciHistory(
-                            $kategoriId,
-                            $oldAmountClean - $newAmount, // money back in
-                            null, // uang keluar
-                            $keterangan,
-                            'pengeluaran_operasional_update',
-                            $pengeluaran->id,
-                            'OPX-UPD-' . $pengeluaran->id
-                        );
+                        $this->recordLaciHistory($validatedData['id_kategorilaci'], $oldAmount - $newAmount, null, $keterangan, 'pengeluaran_operasional_update', $pengeluaran->id, 'OPX-UPD-' . $pengeluaran->id);
                     }
                 }
             }
@@ -629,17 +606,10 @@ class PengeluaranApiController extends Controller
             ]);
 
         } catch (ValidationException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validasi gagal',
-                'errors' => $e->errors()
-            ], 422);
+            return response()->json(['success' => false, 'message' => 'Validasi gagal', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mengupdate pengeluaran operasional',
-                'error' => $e->getMessage()
-            ], 500);
+            Log::error('Gagal Update Pengeluaran Opex API: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Gagal mengupdate pengeluaran operasional', 'error' => $e->getMessage()], 500);
         }
     }
 

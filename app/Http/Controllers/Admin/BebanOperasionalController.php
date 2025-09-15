@@ -21,40 +21,51 @@ class BebanOperasionalController extends Controller
      */
     public function index()
     {
-        $page = "Kelola Beban Tetap Bulanan";
+        $page = "Kelola Beban Tetap"; // Judul diubah sedikit
         $ownerId = $this->getOwnerId();
 
-        // Tentukan rentang tanggal untuk bulan ini
-        $awalBulan = Carbon::now()->startOfMonth();
-        $akhirBulan = Carbon::now()->endOfMonth();
-
-        // Mengambil nama bulan dan tahun saat ini (misal: "September 2025")
         $namaBulan = Carbon::now()->locale('id')->isoFormat('MMMM YYYY');
 
+        // Ambil semua beban, eager load semua pengeluaran dari awal tahun ini untuk efisiensi
+        $awalTahunIni = Carbon::now()->startOfYear();
         $beban = BebanOperasional::where('kode_owner', $ownerId)
-            ->with(['pengeluaranOperasional' => function ($query) use ($awalBulan, $akhirBulan) {
-                $query->whereBetween('tgl_pengeluaran', [$awalBulan, $akhirBulan]);
+            ->with(['pengeluaranOperasional' => function ($query) use ($awalTahunIni) {
+                $query->where('tgl_pengeluaran', '>=', $awalTahunIni);
             }])
+            ->orderBy('periode', 'desc') // Tampilkan tahunan dulu
+            ->orderBy('nama_beban', 'asc')
             ->get();
 
-        $beban->map(function ($item) {
-            $item->terpakai_bulan_ini = $item->pengeluaranOperasional->sum('jml_pengeluaran');
-            $item->sisa_jatah = $item->jumlah_bulanan - $item->terpakai_bulan_ini;
+        // Siapkan variabel untuk tanggal bulan ini
+        $awalBulanIni = Carbon::now()->startOfMonth();
+        $akhirBulanIni = Carbon::now()->endOfMonth();
+
+        $beban->map(function ($item) use ($awalBulanIni, $akhirBulanIni) {
+
+            // Tentukan pengeluaran yang relevan berdasarkan periode
+            if ($item->periode == 'tahunan') {
+                // Untuk tahunan, semua pengeluaran yang di-load relevan
+                $pengeluaranPeriodeIni = $item->pengeluaranOperasional;
+            } else { // Default ke 'bulanan'
+                // Untuk bulanan, filter lagi dari data yang sudah di-load
+                $pengeluaranPeriodeIni = $item->pengeluaranOperasional->whereBetween('tgl_pengeluaran', [$awalBulanIni, $akhirBulanIni]);
+            }
+
+            // Hitung properti baru
+            $item->terpakai_periode_ini = $pengeluaranPeriodeIni->sum('jml_pengeluaran');
+            $item->sisa_jatah = $item->nominal - $item->terpakai_periode_ini;
+
+            // Hitung beban ekuivalen bulanan untuk kalkulasi total yang akurat
+            $item->beban_ekuivalen_bulanan = ($item->periode == 'tahunan') ? $item->nominal / 12 : $item->nominal;
+
             return $item;
         });
 
-        // 👇 TAMBAHKAN INI UNTUK MENGHITUNG TOTAL KESELURUHAN 👇
-        $totalJatah = $beban->sum('jumlah_bulanan');
-        $totalTerpakai = $beban->sum('terpakai_bulan_ini');
-        $totalSisa = $beban->sum('sisa_jatah');
+        // Kalkulasi total berdasarkan beban ekuivalen bulanan
+        $totalJatahBulanan = $beban->sum('beban_ekuivalen_bulanan');
 
         $content = view('admin.page.beban.index', compact(
-            'page',
-            'beban',
-            'namaBulan', // Kirim nama bulan ke view
-            'totalJatah', // Kirim total ke view
-            'totalTerpakai',
-            'totalSisa'
+            'page', 'beban', 'namaBulan', 'totalJatahBulanan'
         ));
         return view('admin.layout.blank_page', compact('page', 'content'));
     }
@@ -67,28 +78,25 @@ class BebanOperasionalController extends Controller
     {
         $request->validate([
             'nama_beban' => 'required|string|max:255',
-            'jumlah_bulanan' => 'required|numeric|min:0',
+            'periode' => 'required|in:bulanan,tahunan', // Validasi periode
+            'nominal' => 'required|numeric|min:0', // Ganti dari jumlah_bulanan
             'keterangan' => 'nullable|string',
         ]);
 
         BebanOperasional::create($request->all() + ['kode_owner' => $this->getOwnerId()]);
-
         return redirect()->route('beban.index')->with('success', 'Beban tetap baru berhasil ditambahkan.');
     }
 
-    /**
-     * Memperbarui data beban tetap.
-     */
     public function update(Request $request, $id)
     {
         $request->validate([
             'nama_beban' => 'required|string|max:255',
-            'jumlah_bulanan' => 'required|numeric|min:0',
+            'periode' => 'required|in:bulanan,tahunan', // Validasi periode
+            'nominal' => 'required|numeric|min:0', // Ganti dari jumlah_bulanan
         ]);
 
         $beban = BebanOperasional::where('kode_owner', $this->getOwnerId())->findOrFail($id);
         $beban->update($request->all());
-
         return redirect()->route('beban.index')->with('success', 'Data beban berhasil diperbarui.');
     }
 
@@ -99,7 +107,6 @@ class BebanOperasionalController extends Controller
     {
         $beban = BebanOperasional::where('kode_owner', $this->getOwnerId())->findOrFail($id);
         $beban->delete();
-
         return redirect()->route('beban.index')->with('success', 'Data beban berhasil dihapus.');
     }
 }

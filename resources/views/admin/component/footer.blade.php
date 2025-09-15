@@ -153,6 +153,21 @@
               "info": true,
               "autoWidth": false,
           });
+
+          $("#tabel-buku-besar").DataTable({
+              "responsive": true,
+              "lengthChange": true, // Menampilkan pilihan jumlah data per halaman
+              "autoWidth": false,
+              "paging": true, // Mengaktifkan paginasi
+              "searching": true, // Mengaktifkan fitur pencarian
+              "ordering": false, // Mengaktifkan sorting
+              "info": true, // Menampilkan info halaman (contoh: Showing 1 to 10 of 57 entries)
+              "order": [
+                  [0, "desc"]
+              ], // Default sorting: kolom tanggal (indeks ke-1) secara descending
+              "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"]
+          }).buttons().container().appendTo('#tabel-buku-besar_wrapper .col-md-6:eq(0)');
+          // ==========================================================
       });
   </script>
   @stack('scripts')

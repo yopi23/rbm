@@ -163,15 +163,15 @@ class PengeluaranController extends Controller
                     <th>Aksi</th>';
         $tbody = '';
         $no = 1;
-        $data_opex = PengeluaranOperasional::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
+        // Eager load relasi pegawai untuk efisiensi
+        $data_opex = PengeluaranOperasional::with('pegawai')->where('kode_owner', $this->getThisUser()->id_upline)->latest()->get();
         foreach ($data_opex as $item) {
             $edit = Request::create(route('edit_pengeluaran_opex', $item->id));
             $delete = Request::create(route('delete_pengeluaran_opex', $item->id));
-            $kategori = $item->kategori;
-            if ($item->kategori = 'Penggajian') {
-                $data_user = User::where('id', '=', $item->kode_pegawai)->get()->first();
-                $kategori = $item->kategori . ' (' . $data_user->name . ')';
-            }
+
+            // Perbaikan Bug: Gunakan '==' untuk perbandingan
+            $kategori = (strtolower($item->kategori) == 'penggajian' && $item->pegawai) ? $item->kategori . ' (' . $item->pegawai->name . ')' : $item->kategori;
+
             $tbody .= '<tr>
                         <td>' . $no++ . '</td>
                         <td>' . $item->tgl_pengeluaran . '</td>
@@ -180,7 +180,7 @@ class PengeluaranController extends Controller
                         <td>' . $item->desc_pengeluaran . '</td>
                         <td>Rp.' . number_format($item->jml_pengeluaran) . ',-</td>
                         <td>
-                        <form action="' . $delete->url() . '" onsubmit="' . "return confirm('Apakah Anda yakin ?')" . '" method="POST">
+                        <form action="' . $delete->url() . '" onsubmit="return confirm(\'Apakah Anda yakin ?\')" method="POST">
                                     ' . $this->getHiddenItemForm('DELETE') . '
                                     <a href="' . $edit->url() . '" class="btn btn-warning"><i class="fas fa-edit"></i></a>
                                     <button type="submit" class="btn btn-danger"><i class="fas fa-trash"></i></button>
@@ -191,121 +191,125 @@ class PengeluaranController extends Controller
         $data = $this->getTable($thead, $tbody);
         return view('admin.layout.card_layout', compact(['page', 'data', 'link_tambah']));
     }
+
     public function create_pengeluaran_opex(Request $request)
     {
         $page = "Tambah Pengeluaran Operasional";
         $user = User::join('user_details', 'users.id', '=', 'user_details.kode_user')->where([['user_details.jabatan', '!=', '0'], ['user_details.jabatan', '!=', '1'], ['user_details.status_user', '=', '1'], ['user_details.id_upline', '=', $this->getThisUser()->id_upline]])->get(['users.*']);
 
-        $awalBulan = Carbon::now()->startOfMonth();
-        $akhirBulan = Carbon::now()->endOfMonth();
-
+        // Logika perhitungan sisa jatah disamakan dengan BebanOperasionalController
+        $awalTahunIni = Carbon::now()->startOfYear();
         $daftarBeban = BebanOperasional::where('kode_owner', $this->getThisUser()->id_upline)
-            ->with(['pengeluaranOperasional' => function ($query) use ($awalBulan, $akhirBulan) {
-                $query->whereBetween('tgl_pengeluaran', [$awalBulan, $akhirBulan]);
+            ->with(['pengeluaranOperasional' => function ($query) use ($awalTahunIni) {
+                $query->where('tgl_pengeluaran', '>=', $awalTahunIni);
             }])
             ->orderBy('nama_beban', 'asc')
             ->get();
-        // GANTI INI: Ambil ID dan nama beban dari BebanOperasional
-        $daftarBeban->map(function ($item) {
-            $terpakai = $item->pengeluaranOperasional->sum('jml_pengeluaran');
-            $item->sisa_jatah = $item->jumlah_bulanan - $terpakai;
+
+        $awalBulanIni = Carbon::now()->startOfMonth();
+        $akhirBulanIni = Carbon::now()->endOfMonth();
+
+        $daftarBeban->map(function ($item) use ($awalBulanIni, $akhirBulanIni) {
+            if ($item->periode == 'tahunan') {
+                $pengeluaranPeriodeIni = $item->pengeluaranOperasional;
+            } else {
+                $pengeluaranPeriodeIni = $item->pengeluaranOperasional->whereBetween('tgl_pengeluaran', [$awalBulanIni, $akhirBulanIni]);
+            }
+            $item->terpakai_periode_ini = $pengeluaranPeriodeIni->sum('jml_pengeluaran');
+            // Ganti 'jumlah_bulanan' menjadi 'nominal'
+            $item->sisa_jatah = $item->nominal - $item->terpakai_periode_ini;
             return $item;
         });
 
-        // Ambil ID beban yang dipilih dari URL (jika ada)
         $selectedBebanId = $request->query('beban_id');
-
         return view('admin.forms.pengeluaran_opex', compact(['page', 'user', 'daftarBeban', 'selectedBebanId']));
     }
+
+    // PERBAIKAN PADA FUNGSI EDIT
     public function edit_pengeluaran_opex(Request $request, $id)
     {
         $page = "Edit Pengeluaran Operasional";
         $user = User::join('user_details', 'users.id', '=', 'user_details.kode_user')->where([['user_details.jabatan', '!=', '0'], ['user_details.jabatan', '!=', '1'], ['user_details.status_user', '=', '1'], ['user_details.id_upline', '=', $this->getThisUser()->id_upline]])->get(['users.*']);
         $data = PengeluaranOperasional::findOrFail($id);
 
-        $awalBulan = Carbon::now()->startOfMonth();
-        $akhirBulan = Carbon::now()->endOfMonth();
-
+        // Logika perhitungan sisa jatah disamakan (seperti di create)
+        $awalTahunIni = Carbon::now()->startOfYear();
         $daftarBeban = BebanOperasional::where('kode_owner', $this->getThisUser()->id_upline)
-            ->with(['pengeluaranOperasional' => function ($query) use ($awalBulan, $akhirBulan) {
-                $query->whereBetween('tgl_pengeluaran', [$awalBulan, $akhirBulan]);
+            ->with(['pengeluaranOperasional' => function ($query) use ($awalTahunIni, $id) {
+                // Saat edit, jangan hitung pengeluaran yang sedang diedit
+                $query->where('tgl_pengeluaran', '>=', $awalTahunIni)->where('id', '!=', $id);
             }])
             ->orderBy('nama_beban', 'asc')
             ->get();
-        // GANTI INI: Ambil ID dan nama beban dari BebanOperasional
-        $daftarBeban->map(function ($item) {
-            $terpakai = $item->pengeluaranOperasional->sum('jml_pengeluaran');
-            $item->sisa_jatah = $item->jumlah_bulanan - $terpakai;
+
+        $awalBulanIni = Carbon::now()->startOfMonth();
+        $akhirBulanIni = Carbon::now()->endOfMonth();
+
+        $daftarBeban->map(function ($item) use ($awalBulanIni, $akhirBulanIni) {
+            if ($item->periode == 'tahunan') {
+                $pengeluaranPeriodeIni = $item->pengeluaranOperasional;
+            } else {
+                $pengeluaranPeriodeIni = $item->pengeluaranOperasional->whereBetween('tgl_pengeluaran', [$awalBulanIni, $akhirBulanIni]);
+            }
+            $item->terpakai_periode_ini = $pengeluaranPeriodeIni->sum('jml_pengeluaran');
+            $item->sisa_jatah = $item->nominal - $item->terpakai_periode_ini;
             return $item;
         });
 
-        $selectedBebanId = $data->beban_operasional_id; // Ambil dari data yang diedit
-
+        $selectedBebanId = $data->beban_operasional_id;
         return view('admin.forms.pengeluaran_opex', compact(['page', 'user', 'data', 'daftarBeban', 'selectedBebanId']));
     }
 
+    // PERBAIKAN PADA FUNGSI STORE
     public function store_pengeluaran_opex(Request $request)
     {
-        $request->validate([
-            'tgl_pengeluaran' => ['required'],
-            'nama_pengeluaran' => ['required'],
-            // 'kategori' tidak wajib lagi jika memilih dari daftar
-            'jml_pengeluaran' => 'required|numeric|min:1', // Minimal 1
+        $validatedData = $request->validate([
+            'tgl_pengeluaran' => ['required', 'date'],
+            'nama_pengeluaran' => ['required', 'string', 'max:255'],
+            'beban_operasional_id' => ['nullable', 'exists:beban_operasional,id'],
+            'kode_pegawai' => ['nullable', 'exists:users,id'],
+            'jml_pengeluaran' => ['required', 'numeric', 'min:1'],
+            'desc_pengeluaran' => ['nullable', 'string'],
         ]);
 
         if ($request->filled('beban_operasional_id')) {
-        $beban = BebanOperasional::findOrFail($request->beban_operasional_id);
-        $jatahBulanan = $beban->jumlah_bulanan;
-        $pengeluaranBaru = $request->jml_pengeluaran;
+            $beban = BebanOperasional::findOrFail($request->beban_operasional_id);
+            $pengeluaranBaru = $request->jml_pengeluaran;
 
-        // Hitung total yang sudah terpakai bulan ini untuk beban tersebut
-        $awalBulan = Carbon::parse($request->tgl_pengeluaran)->startOfMonth();
-        $akhirBulan = Carbon::parse($request->tgl_pengeluaran)->endOfMonth();
+            if ($beban->periode == 'tahunan') {
+                $awalPeriode = Carbon::parse($request->tgl_pengeluaran)->startOfYear();
+                $akhirPeriode = Carbon::parse($request->tgl_pengeluaran)->endOfYear();
+            } else {
+                $awalPeriode = Carbon::parse($request->tgl_pengeluaran)->startOfMonth();
+                $akhirPeriode = Carbon::parse($request->tgl_pengeluaran)->endOfMonth();
+            }
 
-        $sudahTerpakai = PengeluaranOperasional::where('beban_operasional_id', $beban->id)
-            ->whereBetween('tgl_pengeluaran', [$awalBulan, $akhirBulan])
-            ->sum('jml_pengeluaran');
+            $sudahTerpakai = PengeluaranOperasional::where('beban_operasional_id', $beban->id)
+                ->whereBetween('tgl_pengeluaran', [$awalPeriode, $akhirPeriode])
+                ->sum('jml_pengeluaran');
 
-        $sisaJatah = $jatahBulanan - $sudahTerpakai;
+            // Ganti 'jumlah_bulanan' menjadi 'nominal'
+            $sisaJatah = $beban->nominal - $sudahTerpakai;
 
-        // Jika pengeluaran baru lebih besar dari sisa jatah, tolak!
-        if ($pengeluaranBaru > $sisaJatah) {
-            $pesanError = "Gagal! Jumlah pengeluaran (Rp " . number_format($pengeluaranBaru) . ") melebihi sisa jatah untuk '" . $beban->nama_beban . "' bulan ini. Sisa jatah Anda adalah Rp " . number_format($sisaJatah) . ".";
-
-            // Kembali ke halaman form dengan pesan error dan input sebelumnya
-            return back()->with('error', $pesanError)->withInput();
+            if ($pengeluaranBaru > $sisaJatah) {
+                $pesanError = "Gagal! Jumlah pengeluaran (Rp " . number_format($pengeluaranBaru) . ") melebihi sisa jatah untuk '" . $beban->nama_beban . "'. Sisa jatah: Rp " . number_format($sisaJatah) . ".";
+                return back()->with('error', $pesanError)->withInput();
+            }
         }
-    }
 
         DB::beginTransaction();
         try {
-            $pegawai = $this->getThisUser()->kode_user ? $request->kode_pegawai : '-';
-
-            // Logika baru untuk menentukan kategori
-            $kategoriNama = $request->kategori;
+            $validatedData['kategori'] = 'Lainnya'; // Default kategori
             if ($request->filled('beban_operasional_id')) {
-                $beban = BebanOperasional::find($request->beban_operasional_id);
-                if ($beban) {
-                    $kategoriNama = $beban->nama_beban;
-                }
+                // Ambil nama kategori dari master beban
+                $validatedData['kategori'] = BebanOperasional::find($request->beban_operasional_id)->nama_beban;
             }
 
-            $pengeluaran = PengeluaranOperasional::create([
-                'tgl_pengeluaran' => $request->tgl_pengeluaran,
-                'nama_pengeluaran' => $request->nama_pengeluaran,
-                'kategori' => $kategoriNama, // Simpan nama kategori
-                'beban_operasional_id' => $request->beban_operasional_id, // Simpan ID relasi
-                'kode_pegawai' => $this->getThisUser()->kode_user,
-                'jml_pengeluaran' => $request->jml_pengeluaran,
-                'desc_pengeluaran' => $request->desc_pengeluaran ?? '',
-                'kode_owner' => $this->getThisUser()->id_upline
-            ]);
+            $validatedData['kode_owner'] = $this->getThisUser()->id_upline;
+            $validatedData['kode_pegawai'] = $this->getThisUser()->kode_user;
 
-            // Catatan: Logika penambahan saldo ke pegawai di sini mungkin perlu direvisi.
-            // Seharusnya pembayaran gaji dicatat sebagai pengeluaran, bukan penambahan saldo.
-            // Namun, untuk integrasi kas, kita catat sebagai pengeluaran.
+            $pengeluaran = PengeluaranOperasional::create($validatedData);
 
-            // 3. Catat di Buku Besar
             $this->catatKas(
                 $pengeluaran, 0, $pengeluaran->jml_pengeluaran,
                 'Pengeluaran Opex: ' . $pengeluaran->nama_pengeluaran,
@@ -320,33 +324,61 @@ class PengeluaranController extends Controller
         }
     }
 
+    // PERBAIKAN PADA FUNGSI UPDATE
     public function update_pengeluaran_opex(Request $request, $id)
     {
-        $validate = $request->validate([
-            'tgl_pengeluaran' => ['required'],
-            'nama_pengeluaran' => ['required'],
-            'kategori' => ['required'],
+        $validatedData = $request->validate([
+            'tgl_pengeluaran' => ['required', 'date'],
+            'nama_pengeluaran' => ['required', 'string', 'max:255'],
+            'beban_operasional_id' => ['nullable', 'exists:beban_operasional,id'],
+            'kode_pegawai' => ['nullable', 'exists:users,id'],
+            'jml_pengeluaran' => ['required', 'numeric', 'min:1'],
+            'desc_pengeluaran' => ['nullable', 'string'],
         ]);
-        if ($validate) {
-            $update = PengeluaranOperasional::findOrFail($id);
-            $pegawai = $request->kategori == 'Penggajian' ? $request->kode_pegawai : '-';
-            $update->update([
-                'tgl_pengeluaran' => $request->tgl_pengeluaran,
-                'nama_pengeluaran' => $request->nama_pengeluaran,
-                'kategori' => $request->kategori,
-                'kode_pegawai' => $pegawai,
-                'jml_pengeluaran' => $request->jml_pengeluaran,
-                'desc_pengeluaran' => $request->desc_pengeluaran != null ? $request->desc_pengeluaran : '',
-            ]);
-            if ($update) {
-                return redirect()->route('pengeluaran_operasional')
-                    ->with([
-                        'success' => 'Pengeluaran Operasional Berhasil DiEdit'
-                    ]);
+
+        $pengeluaran = PengeluaranOperasional::where('kode_owner', $this->getThisUser()->id_upline)->findOrFail($id);
+
+        // Validasi Sisa Jatah saat Update
+        if ($request->filled('beban_operasional_id')) {
+            $beban = BebanOperasional::findOrFail($request->beban_operasional_id);
+            $pengeluaranBaru = $request->jml_pengeluaran;
+
+            if ($beban->periode == 'tahunan') {
+                $awalPeriode = Carbon::parse($request->tgl_pengeluaran)->startOfYear();
+                $akhirPeriode = Carbon::parse($request->tgl_pengeluaran)->endOfYear();
+            } else {
+                $awalPeriode = Carbon::parse($request->tgl_pengeluaran)->startOfMonth();
+                $akhirPeriode = Carbon::parse($request->tgl_pengeluaran)->endOfMonth();
             }
-            return redirect()->back()->with('error', "Oops, Something Went Wrong");
+            // Hitung pemakaian lain tanpa menyertakan data yang sedang diedit
+            $sudahTerpakai = PengeluaranOperasional::where('beban_operasional_id', $beban->id)
+                ->where('id', '!=', $id)
+                ->whereBetween('tgl_pengeluaran', [$awalPeriode, $akhirPeriode])
+                ->sum('jml_pengeluaran');
+
+            $sisaJatah = $beban->nominal - $sudahTerpakai;
+
+            if ($pengeluaranBaru > $sisaJatah) {
+                $pesanError = "Gagal! Jumlah pengeluaran (Rp " . number_format($pengeluaranBaru) . ") melebihi sisa jatah untuk '" . $beban->nama_beban . "'. Sisa jatah: Rp " . number_format($sisaJatah) . ".";
+                return back()->with('error', $pesanError)->withInput();
+            }
         }
+
+        $validatedData['kategori'] = 'Lainnya';
+        if ($request->filled('beban_operasional_id')) {
+            $validatedData['kategori'] = BebanOperasional::find($request->beban_operasional_id)->nama_beban;
+        }
+
+        // Jika kategori bukan penggajian, pastikan kode_pegawai null
+        if (strtolower($validatedData['kategori']) != 'penggajian') {
+            $validatedData['kode_pegawai'] = null;
+        }
+
+        $pengeluaran->update($validatedData);
+
+        return redirect()->route('pengeluaran_operasional')->with('success', 'Pengeluaran Operasional Berhasil Diperbarui');
     }
+
     public function delete_pengeluaran_opex(Request $request, $id)
     {
         $data = PengeluaranOperasional::findOrFail($id);

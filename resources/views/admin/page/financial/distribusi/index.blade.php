@@ -114,45 +114,121 @@
             <div class="col-lg-7">
                 <div class="card">
                     <div class="card-header">
-                        <h3 class="card-title">3. Histori Distribusi Laba</h3>
+                        <h3 class="card-title">3. Histori & Laporan Distribusi Laba</h3>
                     </div>
-                    <div class="card-body table-responsive p-0">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Periode</th>
-                                    <th>Laba Bersih</th>
-                                    <th>Alokasi Owner</th>
-                                    <th>Alokasi Aset</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse($histori as $item)
+                    <div class="card-body">
+                        {{-- FORM FILTER BARU --}}
+                        <form method="GET" action="{{ route('distribusi.index') }}">
+                            <div class="row align-items-end">
+                                <div class="col-md-5 form-group">
+                                    <label for="start_date_filter">Tanggal Awal</label>
+                                    <input type="date" id="start_date_filter" name="start_date" class="form-control"
+                                        value="{{ $startDate }}">
+                                </div>
+                                <div class="col-md-5 form-group">
+                                    <label for="end_date_filter">Tanggal Akhir</label>
+                                    <input type="date" id="end_date_filter" name="end_date" class="form-control"
+                                        value="{{ $endDate }}">
+                                </div>
+                                <div class="col-md-2 form-group">
+                                    <button type="submit" class="btn btn-secondary w-100">Filter</button>
+                                </div>
+                            </div>
+                        </form>
+                        <hr>
+
+                        {{-- SUMMARY/TOTAL BARU --}}
+                        <h5>Summary Periode: {{ \Carbon\Carbon::parse($startDate)->format('d M Y') }} -
+                            {{ \Carbon\Carbon::parse($endDate)->format('d M Y') }}</h5>
+                        <div class="row">
+                            <div class="col-12 mb-2">
+                                <div class="info-box bg-success">
+                                    <span class="info-box-icon"><i class="fas fa-dollar-sign"></i></span>
+                                    <div class="info-box-content">
+                                        <span class="info-box-text">Total Laba Bersih Didistribusikan</span>
+                                        <span class="info-box-number">Rp
+                                            {{ number_format($summary->total_laba_bersih ?? 0) }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <ul class="list-group">
+                                    <li class="list-group-item d-flex justify-content-between"><span>Alokasi
+                                            Owner</span> <strong>Rp
+                                            {{ number_format($summary->total_alokasi_owner ?? 0) }}</strong></li>
+                                    <li class="list-group-item d-flex justify-content-between"><span>Alokasi
+                                            Investor</span> <strong>Rp
+                                            {{ number_format($summary->total_alokasi_investor ?? 0) }}</strong></li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <ul class="list-group">
+                                    <li class="list-group-item d-flex justify-content-between"><span>Bonus
+                                            Karyawan</span> <strong>Rp
+                                            {{ number_format($summary->total_alokasi_karyawan ?? 0) }}</strong></li>
+                                    <li class="list-group-item d-flex justify-content-between"><span>Kas Aset</span>
+                                        <strong>Rp {{ number_format($summary->total_alokasi_kas_aset ?? 0) }}</strong>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                        <hr>
+
+                        {{-- TABEL HISTORI YANG DIPERBARUI --}}
+                        <h5 class="mt-4">Rincian Histori</h5>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
                                     <tr>
-                                        <td>
-                                            <small>
-                                                {{ \Carbon\Carbon::parse($item->tanggal_mulai)->format('d/m/y') }} -
-                                                {{ \Carbon\Carbon::parse($item->tanggal_selesai)->format('d/m/y') }}
-                                            </small>
-                                        </td>
-                                        <td><span class="badge badge-success">Rp
-                                                {{ number_format($item->laba_bersih) }}</span></td>
-                                        <td><small>Rp {{ number_format($item->alokasi_owner) }}</small></td>
-                                        <td><small>Rp {{ number_format($item->alokasi_kas_aset) }}</small></td>
+                                        <th>Periode</th>
+                                        <th class="text-right">Laba Bersih</th>
+                                        <th class="text-right">Owner</th>
+                                        <th class="text-right">Investor</th>
+                                        <th class="text-right">Bonus</th>
+                                        <th class="text-right">Aset</th>
                                     </tr>
-                                @empty
-                                    <tr>
-                                        <td colspan="4" class="text-center py-4">Belum ada histori.</td>
-                                    </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    @forelse($histori as $item)
+                                        <tr>
+                                            <td>
+                                                <small>
+                                                    {{ \Carbon\Carbon::parse($item->tanggal_mulai)->format('d/m/y') }}
+                                                    -
+                                                    {{ \Carbon\Carbon::parse($item->tanggal_selesai)->format('d/m/y') }}
+                                                    <br>
+                                                    <span
+                                                        class="text-muted">({{ $item->created_at->format('d/m/y H:i') }})</span>
+                                                </small>
+                                            </td>
+                                            <td class="text-right"><span class="badge badge-success">Rp
+                                                    {{ number_format($item->laba_bersih) }}</span></td>
+                                            <td class="text-right"><small>Rp
+                                                    {{ number_format($item->alokasi_owner) }}</small></td>
+                                            <td class="text-right"><small>Rp
+                                                    {{ number_format($item->alokasi_investor) }}</small></td>
+                                            <td class="text-right"><small>Rp
+                                                    {{ number_format($item->alokasi_karyawan) }}</small></td>
+                                            <td class="text-right"><small>Rp
+                                                    {{ number_format($item->alokasi_kas_aset) }}</small></td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="6" class="text-center py-4">Tidak ada histori distribusi
+                                                pada periode yang dipilih.</td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                     <div class="card-footer clearfix">
-                        {{ $histori->links() }}
+                        {{-- Menambahkan parameter filter ke link paginasi --}}
+                        {{ $histori->appends(request()->query())->links() }}
                     </div>
                 </div>
             </div>
+
         </div>
     </div>
 </section>

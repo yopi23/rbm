@@ -30,14 +30,45 @@ class DistribusiLabaController extends Controller
         return ($user->userDetail->jabatan == '1') ? $user->id : $user->userDetail->id_upline;
     }
 
-    public function index()
+    public function index(Request $request)
     {
         $page = "Tutup Buku & Distribusi Laba";
         $ownerId = $this->getOwnerId();
         $settings = DistribusiSetting::where('kode_owner', $ownerId)->get()->keyBy('role');
-        $histori = DistribusiLaba::where('kode_owner', $ownerId)->orderBy('tanggal_selesai', 'desc')->paginate(10);
 
-        $content = view('admin.page.financial.distribusi.index', compact('page', 'settings', 'histori'));
+        // --- LOGIKA BARU UNTUK FILTER DAN SUMMARY ---
+
+        // 1. Tentukan rentang tanggal
+        // Jika ada input dari user, gunakan itu. Jika tidak, gunakan rentang bulan ini.
+        $startDate = $request->input('start_date', Carbon::now()->startOfMonth()->format('Y-m-d'));
+        $endDate = $request->input('end_date', Carbon::now()->endOfMonth()->format('Y-m-d'));
+
+        // 2. Query dasar untuk histori distribusi pada rentang tanggal yang dipilih
+        $historiQuery = DistribusiLaba::where('kode_owner', $ownerId)
+            ->whereBetween('tanggal_selesai', [$startDate, $endDate]);
+
+        // 3. Ambil data histori dengan paginasi
+        $histori = (clone $historiQuery)->orderBy('tanggal_selesai', 'desc')->paginate(10);
+
+        // 4. Hitung total untuk summary (tanpa paginasi)
+        $summary = (clone $historiQuery)->selectRaw("
+                SUM(laba_bersih) as total_laba_bersih,
+                SUM(alokasi_owner) as total_alokasi_owner,
+                SUM(alokasi_investor) as total_alokasi_investor,
+                SUM(alokasi_karyawan) as total_alokasi_karyawan,
+                SUM(alokasi_kas_aset) as total_alokasi_kas_aset
+            ")->first();
+
+        // --- AKHIR LOGIKA BARU ---
+
+        $content = view('admin.page.financial.distribusi.index', compact(
+            'page',
+            'settings',
+            'histori',
+            'summary',      // Kirim data summary ke view
+            'startDate',    // Kirim tanggal filter ke view
+            'endDate'       // Kirim tanggal filter ke view
+        ));
         return view('admin.layout.blank_page', compact('page', 'content'));
     }
 
@@ -114,11 +145,30 @@ class DistribusiLabaController extends Controller
         $startDate = Carbon::parse($request->start_date)->startOfDay();
         $endDate = Carbon::parse($request->end_date)->endOfDay();
 
-        // Buat query dasar untuk rentang tanggal yang dipilih
-        $queryPeriode = KasPerusahaan::where('kode_owner', $ownerId)->whereBetween('tanggal', [$startDate, $endDate]);
+        // ==========================================================
+        //          👇 TAMBAHKAN BLOK VALIDASI TUMPANG TINDIH INI 👇
+        // ==========================================================
+        $cekTumpangTindih = DistribusiLaba::where('kode_owner', $ownerId)
+            // Cari record yang rentangnya bersinggungan dengan rentang baru.
+            // Kondisi: (akhir_lama >= awal_baru) AND (awal_lama <= akhir_baru)
+            ->where('tanggal_selesai', '>=', $startDate)
+            ->where('tanggal_mulai', '<=', $endDate)
+            ->first();
 
-        // Hitung Laba Bersih menggunakan metode HPP
-        $labaResult = $this->hitungLabaBersih($queryPeriode);
+        if ($cekTumpangTindih) {
+            $pesanError = "Gagal memproses. Sebagian atau seluruh tanggal dalam rentang yang Anda pilih sudah pernah didistribusikan sebelumnya dalam periode " .
+                        Carbon::parse($cekTumpangTindih->tanggal_mulai)->format('d/m/Y') . " - " .
+                        Carbon::parse($cekTumpangTindih->tanggal_selesai)->format('d/m/Y') . ".";
+            return back()->with('error', $pesanError);
+        }
+        // ==========================================================
+        //                      ✅ AKHIR BLOK VALIDASI ✅
+        // ==========================================================
+
+
+        // Buat query dasar untuk rentang tanggal yang dipilih
+        // PERBAIKAN KECIL: Argumen hitungLabaBersih harus string tanggal
+        $labaResult = $this->hitungLabaBersih($request->start_date, $request->end_date);
         $labaBersihPeriodik = $labaResult['laba_bersih'];
 
         if ($labaBersihPeriodik <= 0) {
@@ -127,7 +177,7 @@ class DistribusiLabaController extends Controller
 
         // Lanjutkan proses distribusi
         return $this->distribusikanLaba(
-            $ownerId, $labaBersihPeriodik, $labaResult['laba_kotor'], $labaResult['total_penjualan'], $startDate, $endDate
+            $ownerId, $labaBersihPeriodik, $labaResult['laba_kotor'], $labaResult['total_pendapatan'], $startDate, $endDate
         );
     }
 
@@ -141,66 +191,56 @@ class DistribusiLabaController extends Controller
         $startRange = \Carbon\Carbon::parse($tanggalMulai)->startOfDay();
         $endRange = \Carbon\Carbon::parse($tanggalSelesai)->endOfDay();
 
-        // A.1 Hitung Total PENDAPATAN DIAKUI dari Penjualan (saat Lunas)
-        $totalPendapatanPenjualan = \App\Models\Penjualan::where('kode_owner', $ownerId)
-            ->where('status_penjualan', '1') // Status Lunas
-            ->whereBetween('updated_at', [$startRange, $endRange])
-            ->sum('total_penjualan');
-
-        // A.2 Hitung Total PENDAPATAN DIAKUI dari Jasa Service (saat Diambil)
-        $totalPendapatanService = \App\Models\Sevices::where('kode_owner', $ownerId)
-            ->where('status_services', 'Diambil')
-            ->whereBetween('updated_at', [$startRange, $endRange])
-            ->sum('total_biaya');
-
+        // A. Perhitungan Pendapatan (Sudah Benar)
+        $totalPendapatanPenjualan = \App\Models\Penjualan::where('kode_owner', $ownerId)->where('status_penjualan', '1')->whereBetween('updated_at', [$startRange, $endRange])->sum('total_penjualan');
+        $totalPendapatanService = \App\Models\Sevices::where('kode_owner', $ownerId)->where('status_services', 'Diambil')->whereBetween('updated_at', [$startRange, $endRange])->sum('total_biaya');
         $totalPendapatan = $totalPendapatanPenjualan + $totalPendapatanService;
 
-        // B.1 Hitung HPP dari Penjualan yang pendapatannya diakui
-        $penjualanIds = \App\Models\Penjualan::where('kode_owner', $ownerId)
-            ->where('status_penjualan', '1')
-            ->whereBetween('updated_at', [$startRange, $endRange])
-            ->pluck('id');
+        // B. Perhitungan HPP (Sudah Benar)
+        $penjualanIds = \App\Models\Penjualan::where('kode_owner', $ownerId)->where('status_penjualan', '1')->whereBetween('updated_at', [$startRange, $endRange])->pluck('id');
         $hppSparepartJual = \App\Models\DetailSparepartPenjualan::whereIn('kode_penjualan', $penjualanIds)->sum(DB::raw('detail_harga_modal * qty_sparepart'));
         $hppBarangJual = \App\Models\DetailBarangPenjualan::whereIn('kode_penjualan', $penjualanIds)->sum(DB::raw('detail_harga_modal * qty_barang'));
-
-        // B.2 Hitung HPP dari Jasa Service yang pendapatannya diakui
-        $serviceIdsDiambil = \App\Models\Sevices::where('kode_owner', $ownerId)
-            ->where('status_services', 'Diambil')
-            ->whereBetween('updated_at', [$startRange, $endRange])
-            ->pluck('id');
+        $serviceIdsDiambil = \App\Models\Sevices::where('kode_owner', $ownerId)->where('status_services', 'Diambil')->whereBetween('updated_at', [$startRange, $endRange])->pluck('id');
         $hppPartTokoService = \App\Models\DetailPartServices::whereIn('kode_services', $serviceIdsDiambil)->sum(DB::raw('detail_modal_part_service * qty_part'));
         $hppPartLuarService = \App\Models\DetailPartLuarService::whereIn('kode_services', $serviceIdsDiambil)->sum(DB::raw('harga_part * qty_part'));
-
         $totalHpp = $hppSparepartJual + $hppBarangJual + $hppPartTokoService + $hppPartLuarService;
 
-        // C. Hitung Laba Kotor (Gross Profit)
+        // C. Laba Kotor (Sudah Benar)
         $labaKotor = $totalPendapatan - $totalHpp;
 
-        // D.1 Hitung Biaya Operasional Insidental (dicatat saat terjadi)
-        $biayaOperasionalInsidental = \App\Models\PengeluaranOperasional::where('kode_owner', $ownerId)
-            ->whereBetween('tgl_pengeluaran', [$startRange, $endRange])
-            ->sum('jml_pengeluaran');
-
-        // D.2 Hitung Biaya Komisi Teknisi (kewajiban timbul saat service 'Selesai')
-        $serviceIdsSelesai = \App\Models\Sevices::where('kode_owner', $ownerId)
-            ->whereIn('status_services', ['Selesai','Diambil'])
-            ->whereBetween('updated_at', [$startRange, $endRange])
-            ->pluck('id');
+        // D. Biaya Variabel (Sudah Benar)
+        $biayaOperasionalInsidental = \App\Models\PengeluaranOperasional::where('kode_owner', $ownerId)->whereBetween('tgl_pengeluaran', [$startRange, $endRange])->sum('jml_pengeluaran');
+        $serviceIdsSelesai = \App\Models\Sevices::where('kode_owner', $ownerId)->whereIn('status_services', ['Selesai','Diambil'])->whereBetween('updated_at', [$startRange, $endRange])->pluck('id');
         $biayaKomisi = \App\Models\ProfitPresentase::whereIn('kode_service', $serviceIdsSelesai)->sum('profit');
 
-        // E. Hitung Beban Harian Wajib (Penyusutan & Tetap)
+
+        // ======================================================================
+        //          👇 BLOK PERHITUNGAN BEBAN TETAP & PENYUSUTAN YANG DIPERBARUI 👇
+        // ======================================================================
+        $jumlahHariPeriode = $startRange->diffInDays($endRange) + 1;
+
+        // E.1 Beban dari Aset Tetap (Penyusutan)
         $totalPenyusutanBulanan = \App\Models\Aset::where('kode_owner', $ownerId)->sum(DB::raw('(nilai_perolehan - nilai_residu) / masa_manfaat_bulan'));
-        $totalBebanTetapBulanan = \App\Models\BebanOperasional::where('kode_owner', $ownerId)->sum('jumlah_bulanan');
-        $jumlahHariDalamBulan = Carbon::parse($startRange)->daysInMonth;
-        $jumlahHariPeriode = $startRange->diffInDays($endRange) + 1; // Jumlah hari dalam rentang yang dipilih
-        $bebanPenyusutanPeriodik = ($jumlahHariDalamBulan > 0) ? ($totalPenyusutanBulanan / $jumlahHariDalamBulan) * $jumlahHariPeriode : 0;
-        $bebanTetapPeriodik = ($jumlahHariDalamBulan > 0) ? ($totalBebanTetapBulanan / $jumlahHariDalamBulan) * $jumlahHariPeriode : 0;
+        $bebanPenyusutanHarian = ($startRange->daysInMonth > 0) ? $totalPenyusutanBulanan / $startRange->daysInMonth : 0;
+        $bebanPenyusutanPeriodik = $bebanPenyusutanHarian * $jumlahHariPeriode;
+
+        // E.2 Beban dari Operasional Tetap (Bulanan & Tahunan) - Logika Baru
+        $totalBebanBulanan = \App\Models\BebanOperasional::where('kode_owner', $ownerId)
+            ->where('periode', 'bulanan')->sum('nominal');
+        $totalBebanTahunan = \App\Models\BebanOperasional::where('kode_owner', $ownerId)
+            ->where('periode', 'tahunan')->sum('nominal');
+
+        $bebanHarianDariBulanan = ($startRange->daysInMonth > 0) ? $totalBebanBulanan / $startRange->daysInMonth : 0;
+        $bebanHarianDariTahunan = ($startRange->daysInYear > 0) ? $totalBebanTahunan / $startRange->daysInYear : 0;
+
+        $totalBebanTetapHarian = $bebanHarianDariBulanan + $bebanHarianDariTahunan;
+        $bebanTetapPeriodik = $totalBebanTetapHarian * $jumlahHariPeriode;
+        // ======================================================================
 
         // F. Hitung Laba Bersih Final
         $labaBersih = $labaKotor - $biayaOperasionalInsidental - $biayaKomisi - $bebanPenyusutanPeriodik - $bebanTetapPeriodik;
 
-        // Log untuk debugging
-        Log::info('--- PERHITUNGAN LABA BERSIH AKRUAL ---', [
+        Log::info('--- PERHITUNGAN LABA BERSIH AKRUAL (DistribusiLabaController) ---', [
             'Periode' => $startRange->format('Y-m-d') . ' to ' . $endRange->format('Y-m-d'),
             'Total Pendapatan Diakui' => $totalPendapatan, 'Total HPP' => $totalHpp, 'Laba Kotor' => $labaKotor,
             'Biaya Op. Insidental' => $biayaOperasionalInsidental, 'Biaya Komisi Teknisi' => $biayaKomisi,
@@ -212,7 +252,7 @@ class DistribusiLabaController extends Controller
             'laba_bersih' => $labaBersih,
             'laba_kotor' => $labaKotor,
             'total_pendapatan' => $totalPendapatan,
-            'beban' => [ // Tambahkan array ini
+            'beban' => [
                 'Biaya Operasional Insidental' => $biayaOperasionalInsidental,
                 'Biaya Komisi Teknisi' => $biayaKomisi,
                 'Beban Penyusutan Periodik' => $bebanPenyusutanPeriodik,

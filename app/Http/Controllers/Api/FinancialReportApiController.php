@@ -2602,60 +2602,77 @@ class FinancialReportApiController extends Controller
 
     // 👇 FUNGSI PRIVATE HELPER UNTUK MENGHITUNG LABA BERSIH (Adaptasi dari DistribusiLabaController)
     private function _calculateNetProfit($kode_owner, $tanggalMulai, $tanggalSelesai)
-    {
-        $startRange = Carbon::parse($tanggalMulai)->startOfDay();
-        $endRange = Carbon::parse($tanggalSelesai)->endOfDay();
+{
+    $startRange = Carbon::parse($tanggalMulai)->startOfDay();
+    $endRange = Carbon::parse($tanggalSelesai)->endOfDay();
 
-        $totalPendapatanPenjualan = Penjualan::where('kode_owner', $kode_owner)
-            ->where('status_penjualan', '1')->whereBetween('updated_at', [$startRange, $endRange])->sum('total_penjualan');
+    // A.1 & A.2: Perhitungan Pendapatan (Sudah Benar)
+    $totalPendapatanPenjualan = Penjualan::where('kode_owner', $kode_owner)
+        ->where('status_penjualan', '1')->whereBetween('updated_at', [$startRange, $endRange])->sum('total_penjualan');
+    $totalPendapatanService = Sevices::where('kode_owner', $kode_owner)
+        ->where('status_services', 'Diambil')->whereBetween('updated_at', [$startRange, $endRange])->sum('total_biaya');
+    $totalPendapatan = $totalPendapatanPenjualan + $totalPendapatanService;
 
-        $totalPendapatanService = Sevices::where('kode_owner', $kode_owner)
-            ->where('status_services', 'Diambil')->whereBetween('updated_at', [$startRange, $endRange])->sum('total_biaya');
+    // B.1 & B.2: Perhitungan HPP (Sudah Benar)
+    $penjualanIds = Penjualan::where('kode_owner', $kode_owner)->where('status_penjualan', '1')
+        ->whereBetween('updated_at', [$startRange, $endRange])->pluck('id');
+    $hppSparepartJual = DetailSparepartPenjualan::whereIn('kode_penjualan', $penjualanIds)->sum(DB::raw('detail_harga_modal * qty_sparepart'));
+    $hppBarangJual = DetailBarangPenjualan::whereIn('kode_penjualan', $penjualanIds)->sum(DB::raw('detail_harga_modal * qty_barang'));
+    $serviceIdsDiambil = Sevices::where('kode_owner', $kode_owner)->where('status_services', 'Diambil')
+        ->whereBetween('updated_at', [$startRange, $endRange])->pluck('id');
+    $hppPartTokoService = DetailPartServices::whereIn('kode_services', $serviceIdsDiambil)->sum(DB::raw('detail_modal_part_service * qty_part'));
+    $hppPartLuarService = DetailPartLuarService::whereIn('kode_services', $serviceIdsDiambil)->sum(DB::raw('harga_part * qty_part'));
+    $totalHpp = $hppSparepartJual + $hppBarangJual + $hppPartTokoService + $hppPartLuarService;
 
-        $totalPendapatan = $totalPendapatanPenjualan + $totalPendapatanService;
+    // C. Hitung Laba Kotor (Sudah Benar)
+    $labaKotor = $totalPendapatan - $totalHpp;
 
-        $penjualanIds = Penjualan::where('kode_owner', $kode_owner)->where('status_penjualan', '1')
-            ->whereBetween('updated_at', [$startRange, $endRange])->pluck('id');
-        $hppSparepartJual = DetailSparepartPenjualan::whereIn('kode_penjualan', $penjualanIds)->sum(DB::raw('detail_harga_modal * qty_sparepart'));
-        $hppBarangJual = DetailBarangPenjualan::whereIn('kode_penjualan', $penjualanIds)->sum(DB::raw('detail_harga_modal * qty_barang'));
+    // D.1 & D.2: Biaya Variabel (Sudah Benar)
+    $biayaOperasionalInsidental = PengeluaranOperasionalModel::where('kode_owner', $kode_owner)
+        ->whereBetween('tgl_pengeluaran', [$startRange, $endRange])->sum('jml_pengeluaran');
+    $serviceIdsSelesai = Sevices::where('kode_owner', $kode_owner)->whereIn('status_services', ['Selesai', 'Diambil'])
+        ->whereBetween('tgl_service', [$startRange, $endRange])->pluck('id');
+    $biayaKomisi = ProfitPresentase::whereIn('kode_service', $serviceIdsSelesai)->sum('profit');
 
-        $serviceIdsDiambil = Sevices::where('kode_owner', $kode_owner)->where('status_services', 'Diambil')
-            ->whereBetween('updated_at', [$startRange, $endRange])->pluck('id');
-        $hppPartTokoService = DetailPartServices::whereIn('kode_services', $serviceIdsDiambil)->sum(DB::raw('detail_modal_part_service * qty_part'));
-        $hppPartLuarService = DetailPartLuarService::whereIn('kode_services', $serviceIdsDiambil)->sum(DB::raw('harga_part * qty_part'));
 
-        $totalHpp = $hppSparepartJual + $hppBarangJual + $hppPartTokoService + $hppPartLuarService;
+    // ======================================================================
+    //          👇 BLOK PERHITUNGAN BEBAN TETAP YANG DIPERBARUI 👇
+    // ======================================================================
+    $jumlahHariPeriode = $startRange->diffInDays($endRange) + 1;
 
-        $labaKotor = $totalPendapatan - $totalHpp;
+    // E.1 Beban dari Aset Tetap (Penyusutan) - Sudah Benar
+    $totalPenyusutanBulanan = Aset::where('kode_owner', $kode_owner)->sum(DB::raw('(nilai_perolehan - nilai_residu) / masa_manfaat_bulan'));
+    $bebanPenyusutanHarian = ($startRange->daysInMonth > 0) ? $totalPenyusutanBulanan / $startRange->daysInMonth : 0;
+    $bebanPenyusutanPeriodik = $bebanPenyusutanHarian * $jumlahHariPeriode;
 
-        $biayaOperasionalInsidental = PengeluaranOperasionalModel::where('kode_owner', $kode_owner)
-            ->whereBetween('tgl_pengeluaran', [$startRange, $endRange])->sum('jml_pengeluaran');
+    // E.2 Beban dari Operasional Tetap (Bulanan & Tahunan) - Logika Baru
+    $totalBebanBulanan = BebanOperasional::where('kode_owner', $kode_owner)
+        ->where('periode', 'bulanan')->sum('nominal');
+    $totalBebanTahunan = BebanOperasional::where('kode_owner', $kode_owner)
+        ->where('periode', 'tahunan')->sum('nominal');
 
-        $serviceIdsSelesai = Sevices::where('kode_owner', $kode_owner)->whereIn('status_services', ['Selesai', 'Diambil'])
-            ->whereBetween('tgl_service', [$startRange, $endRange])->pluck('id');
-        $biayaKomisi = ProfitPresentase::whereIn('kode_service', $serviceIdsSelesai)->sum('profit');
+    $bebanHarianDariBulanan = ($startRange->daysInMonth > 0) ? $totalBebanBulanan / $startRange->daysInMonth : 0;
+    $bebanHarianDariTahunan = ($startRange->daysInYear > 0) ? $totalBebanTahunan / $startRange->daysInYear : 0;
 
-        $totalPenyusutanBulanan = Aset::where('kode_owner', $kode_owner)->sum(DB::raw('(nilai_perolehan - nilai_residu) / masa_manfaat_bulan'));
-        $totalBebanTetapBulanan = BebanOperasional::where('kode_owner', $kode_owner)->sum('jumlah_bulanan');
-        $jumlahHariDalamBulan = Carbon::parse($startRange)->daysInMonth;
-        $jumlahHariPeriode = $startRange->diffInDays($endRange) + 1;
-        $bebanPenyusutanPeriodik = ($jumlahHariDalamBulan > 0) ? ($totalPenyusutanBulanan / $jumlahHariDalamBulan) * $jumlahHariPeriode : 0;
-        $bebanTetapPeriodik = ($jumlahHariDalamBulan > 0) ? ($totalBebanTetapBulanan / $jumlahHariDalamBulan) * $jumlahHariPeriode : 0;
+    $totalBebanTetapHarian = $bebanHarianDariBulanan + $bebanHarianDariTahunan;
+    $bebanTetapPeriodik = $totalBebanTetapHarian * $jumlahHariPeriode;
+    // ======================================================================
 
-        $labaBersih = $labaKotor - $biayaOperasionalInsidental - $biayaKomisi - $bebanPenyusutanPeriodik - $bebanTetapPeriodik;
+    // F. Hitung Laba Bersih Final
+    $labaBersih = $labaKotor - $biayaOperasionalInsidental - $biayaKomisi - $bebanPenyusutanPeriodik - $bebanTetapPeriodik;
 
-        return [
-            'laba_bersih' => $labaBersih,
-            'laba_kotor' => $labaKotor,
-            'beban' => [
-                'HPP (Modal Pokok Penjualan)' => $totalHpp,
-                'Biaya Operasional Insidental' => $biayaOperasionalInsidental,
-                'Biaya Komisi Teknisi' => $biayaKomisi,
-                'Beban Penyusutan Aset' => $bebanPenyusutanPeriodik,
-                'Beban Tetap Bulanan' => $bebanTetapPeriodik,
-            ]
-        ];
-    }
+    return [
+        'laba_bersih' => $labaBersih,
+        'laba_kotor' => $labaKotor,
+        'beban' => [
+            'HPP (Modal Pokok Penjualan)' => $totalHpp,
+            'Biaya Operasional Insidental' => $biayaOperasionalInsidental,
+            'Biaya Komisi Teknisi' => $biayaKomisi,
+            'Beban Penyusutan Aset' => $bebanPenyusutanPeriodik,
+            'Beban Tetap Periodik' => $bebanTetapPeriodik, // Menggunakan nama variabel yang sudah ada
+        ]
+    ];
+}
 
     public function getAllocationBalances(Request $request)
     {

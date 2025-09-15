@@ -190,6 +190,9 @@
                         </tbody>
                     </table>
                 </div>
+                 <div class="card-footer text-center">
+                <a href="{{ route('financial.transactions') }}" class="uppercase">Lihat Semua Transaksi</a>
+            </div>
             </div>
         </div>
     </div>
