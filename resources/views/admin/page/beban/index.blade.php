@@ -1,7 +1,7 @@
 <section class="content">
     <div class="container-fluid">
         <div class="row">
-            {{-- Bagian Form Tambah Beban (Tidak ada perubahan) --}}
+            {{-- Bagian Form Tambah Beban --}}
             <div class="col-md-5">
                 <div class="card card-primary">
                     <div class="card-header">
@@ -10,17 +10,28 @@
                     <form action="{{ route('beban.store') }}" method="POST">
                         @csrf
                         <div class="card-body">
-                            <p>Daftarkan semua biaya rutin bulanan di sini (sewa, internet, gaji, dll).</p>
                             <div class="form-group">
                                 <label>Nama Beban</label>
                                 <input type="text" name="nama_beban" class="form-control" required
                                     placeholder="Contoh: Sewa Ruko">
                             </div>
+
+                            {{-- Input Baru: Periode --}}
                             <div class="form-group">
-                                <label>Jumlah per Bulan (Rp)</label>
-                                <input type="number" name="jumlah_bulanan" class="form-control" required
-                                    placeholder="Contoh: 3000000">
+                                <label>Periode Pembayaran</label>
+                                <select name="periode" class="form-control" required>
+                                    <option value="bulanan">Bulanan</option>
+                                    <option value="tahunan">Tahunan</option>
+                                </select>
                             </div>
+
+                            {{-- Input Diubah: Nominal Jatah --}}
+                            <div class="form-group">
+                                <label>Nominal Jatah (Rp)</label>
+                                <input type="number" name="nominal" class="form-control" required
+                                    placeholder="Masukkan nominal sesuai periode">
+                            </div>
+
                             <div class="form-group">
                                 <label>Keterangan</label>
                                 <textarea name="keterangan" class="form-control" rows="2"></textarea>
@@ -37,16 +48,15 @@
             <div class="col-md-7">
                 <div class="card">
                     <div class="card-header">
-                        {{-- Tambahan: Judul dinamis dengan nama bulan --}}
                         <h3 class="card-title">Daftar Beban Tetap - <strong>{{ $namaBulan }}</strong></h3>
                     </div>
-                    <div class="card-body p-0"> {{-- p-0 agar tabel lebih rapi --}}
+                    <div class="card-body p-0">
                         <table class="table table-bordered">
                             <thead>
                                 <tr>
-                                    <th style="width: 25%">Nama Beban</th>
-                                    <th class="text-center">Jatah/Bulan</th>
-                                    <th class="text-center">Terpakai</th>
+                                    <th>Nama Beban</th>
+                                    <th class="text-center">Nominal Jatah</th>
+                                    <th class="text-center">Terpakai Periode Ini</th>
                                     <th class="text-center">Sisa Jatah</th>
                                     <th style="width: 150px">Aksi</th>
                                 </tr>
@@ -56,10 +66,18 @@
                                     <tr>
                                         <td>
                                             {{ $item->nama_beban }}
+                                            {{-- Badge untuk menandakan periode --}}
+                                            <span
+                                                class="badge
+                                                @if ($item->periode == 'tahunan') badge-danger
+                                                @elseif($item->periode == 'bulanan') badge-info
+                                                @else badge-secondary @endif ml-2">
+                                                {{ ucfirst($item->periode) }}
+                                            </span>
                                             @php
                                                 $persentase =
-                                                    $item->jumlah_bulanan > 0
-                                                        ? ($item->terpakai_bulan_ini / $item->jumlah_bulanan) * 100
+                                                    $item->nominal > 0
+                                                        ? ($item->terpakai_periode_ini / $item->nominal) * 100
                                                         : 0;
                                                 $progressColor =
                                                     $persentase > 90
@@ -73,33 +91,25 @@
                                                     style="width: {{ $persentase }}%"></div>
                                             </div>
                                         </td>
-                                        <td class="text-right">{{ number_format($item->jumlah_bulanan) }}</td>
-                                        <td class="text-right">{{ number_format($item->terpakai_bulan_ini) }}</td>
+                                        <td class="text-right">{{ number_format($item->nominal) }}</td>
+                                        <td class="text-right">{{ number_format($item->terpakai_periode_ini) }}</td>
                                         <td class="text-right font-weight-bold">{{ number_format($item->sisa_jatah) }}
                                         </td>
                                         <td>
                                             <div class="btn-group">
-                                                {{-- Tombol untuk mencatat pembayaran --}}
                                                 <a href="{{ route('create_pengeluaran_opex', ['beban_id' => $item->id]) }}"
                                                     class="btn btn-sm btn-success" title="Bayar/Catat Pengeluaran"><i
                                                         class="fas fa-money-bill-wave"></i></a>
-
-                                                {{-- Tambahan: Tombol untuk melihat rincian transaksi --}}
                                                 <button class="btn btn-sm btn-info" data-toggle="modal"
                                                     data-target="#detailModal-{{ $item->id }}"
                                                     title="Lihat Rincian"><i class="fas fa-list-ul"></i></button>
-
-                                                {{-- Tombol Edit --}}
                                                 <button class="btn btn-sm btn-warning" data-toggle="modal"
                                                     data-target="#editModal-{{ $item->id }}" title="Edit Beban"><i
                                                         class="fas fa-edit"></i></button>
-
-                                                {{-- Tombol Hapus --}}
                                                 <form action="{{ route('beban.destroy', $item->id) }}" method="POST"
                                                     onsubmit="return confirm('Yakin ingin menghapus beban ini?');"
                                                     class="d-inline">
-                                                    @csrf
-                                                    @method('DELETE')
+                                                    @csrf @method('DELETE')
                                                     <button type="submit" class="btn btn-sm btn-danger"
                                                         title="Hapus Beban"><i class="fas fa-trash"></i></button>
                                                 </form>
@@ -113,14 +123,11 @@
                                     </tr>
                                 @endforelse
                             </tbody>
-                            {{-- Tambahan: Footer tabel untuk menampilkan total --}}
                             <tfoot class="bg-light">
                                 <tr>
-                                    <th class="text-right">TOTAL KESELURUHAN</th>
-                                    <th class="text-right">{{ number_format($totalJatah) }}</th>
-                                    <th class="text-right">{{ number_format($totalTerpakai) }}</th>
-                                    <th class="text-right font-weight-bold">{{ number_format($totalSisa) }}</th>
-                                    <th></th>
+                                    <th colspan="4" class="text-right">Total Beban (Ekuivalen Bulanan)</th>
+                                    <th class="text-right font-weight-bold">{{ number_format($totalJatahBulanan) }}
+                                    </th>
                                 </tr>
                             </tfoot>
                         </table>
@@ -131,12 +138,9 @@
     </div>
 </section>
 
-{{-- ================================================================= --}}
-{{--                      MODAL UNTUK EDIT & RINCIAN                      --}}
-{{-- ================================================================= --}}
-
+{{-- MODAL UNTUK EDIT & RINCIAN --}}
 @foreach ($beban as $item)
-    {{-- Modal untuk Edit Beban (Tidak ada perubahan) --}}
+    {{-- Modal untuk Edit Beban --}}
     <div class="modal fade" id="editModal-{{ $item->id }}">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -149,9 +153,22 @@
                     <div class="modal-body">
                         <div class="form-group"><label>Nama Beban</label><input type="text" name="nama_beban"
                                 class="form-control" required value="{{ $item->nama_beban }}"></div>
-                        <div class="form-group"><label>Jumlah per Bulan (Rp)</label><input type="number"
-                                name="jumlah_bulanan" class="form-control" required
-                                value="{{ $item->jumlah_bulanan }}"></div>
+
+                        {{-- Edit Periode --}}
+                        <div class="form-group">
+                            <label>Periode Pembayaran</label>
+                            <select name="periode" class="form-control" required>
+                                <option value="bulanan" {{ $item->periode == 'bulanan' ? 'selected' : '' }}>Bulanan
+                                </option>
+                                <option value="tahunan" {{ $item->periode == 'tahunan' ? 'selected' : '' }}>Tahunan
+                                </option>
+                            </select>
+                        </div>
+
+                        {{-- Edit Nominal --}}
+                        <div class="form-group"><label>Nominal Jatah (Rp)</label><input type="number" name="nominal"
+                                class="form-control" required value="{{ $item->nominal }}"></div>
+
                         <div class="form-group"><label>Keterangan</label>
                             <textarea name="keterangan" class="form-control" rows="2">{{ $item->keterangan }}</textarea>
                         </div>
@@ -164,17 +181,17 @@
         </div>
     </div>
 
-    {{-- Tambahan: Modal untuk Rincian Transaksi --}}
+    {{-- Modal untuk Rincian Transaksi --}}
     <div class="modal fade" id="detailModal-{{ $item->id }}">
-        <div class="modal-dialog modal-lg"> {{-- modal-lg agar lebih lebar --}}
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h4 class="modal-title">Rincian Pengeluaran: {{ $item->nama_beban }}</h4>
-                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h4 class="modal-title">Rincian Pengeluaran: {{ $item->nama_beban }}</h4><button type="button"
+                        class="close" data-dismiss="modal">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <p>Daftar semua pengeluaran untuk <strong>{{ $item->nama_beban }}</strong> pada bulan
-                        <strong>{{ $namaBulan }}</strong>.</p>
+                    <p>Daftar semua pengeluaran untuk <strong>{{ $item->nama_beban }}</strong> pada periode
+                        {{ $item->periode == 'tahunan' ? 'tahun ini' : 'bulan ini' }}.</p>
                     <table class="table table-striped">
                         <thead>
                             <tr>
@@ -193,22 +210,21 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="3" class="text-center">Belum ada pengeluaran untuk beban ini di
-                                        bulan ini.</td>
+                                    <td colspan="3" class="text-center">Belum ada pengeluaran untuk beban ini pada
+                                        periode ini.</td>
                                 </tr>
                             @endforelse
                         </tbody>
                         <tfoot class="font-weight-bold">
                             <tr>
                                 <td colspan="2" class="text-right">Total Terpakai:</td>
-                                <td class="text-right">{{ number_format($item->terpakai_bulan_ini) }}</td>
+                                <td class="text-right">{{ number_format($item->terpakai_periode_ini) }}</td>
                             </tr>
                         </tfoot>
                     </table>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-default" data-dismiss="modal">Tutup</button>
-                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-default"
+                        data-dismiss="modal">Tutup</button></div>
             </div>
         </div>
     </div>
