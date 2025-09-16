@@ -558,7 +558,8 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
             Route::get('/report-detail/{id}', [EmployeeManagementController::class, 'reportDetail'])->name('admin.employee.report-detail');
             Route::get('/report-print/{id}', [EmployeeManagementController::class, 'reportPrint'])->name('admin.employee.report-print');
             Route::get('/balance-info/{userId}', [EmployeeManagementController::class, 'getEmployeeBalanceInfo'])->name('admin.employees.balance-info');
-            Route::post('/generate-monthly-report/{year}/{month}', [EmployeeManagementController::class, 'generateMonthlyReport'])->name('admin.employee.generate-monthly-report');
+            // routes/web.php
+Route::post('/monthly-report/generate', [EmployeeManagementController::class, 'generateMonthlyReport'])->name('admin.employee.generate-monthly-report');
             Route::post('/finalize-report', [EmployeeManagementController::class, 'finalizeReport'])->name('admin.employee.finalize-report');
             Route::post('/mark-paid', [EmployeeManagementController::class, 'markAsPaid'])->name('admin.employee.mark-paid');
         });

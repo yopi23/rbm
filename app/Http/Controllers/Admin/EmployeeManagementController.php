@@ -1044,25 +1044,29 @@ public function reversePenalty(Request $request)
     // MONTHLY REPORT GENERATION
     // ===================================================================
 
-    public function generateMonthlyReport($year, $month)
-    {
-         // UPDATED: Support both URL params dan POST data
-        $year = $request->year ?? $request->route('year') ?? date('Y');
-        $month = $request->month ?? $request->route('month') ?? date('m');
+    public function generateMonthlyReport(Request $request)
+{
+    // Mengambil tahun dan bulan dari data form POST dengan aman.
+    $year = $request->input('year', date('Y'));
+    $month = $request->input('month', date('m'));
 
-        // UPDATED: Gunakan owner scope (sama dengan logic original)
-        $employees = $this->getCurrentOwnerEmployees();
+    // UPDATED: Gunakan owner scope (sama dengan logic original)
+    $employees = $this->getCurrentOwnerEmployees();
 
-        if ($employees->isEmpty()) {
-            return redirect()->back()->with('error', 'Tidak ada karyawan ditemukan untuk owner ini');
-        }
-
-        foreach ($employees as $employee) {
-            $this->generateEmployeeMonthlyReport($employee->id_user, $year, $month);
-        }
-
-        return redirect()->back()->with('success', 'Laporan bulanan berhasil digenerate untuk ' . $employees->count() . ' karyawan');
+    if ($employees->isEmpty()) {
+        // Redirect kembali ke halaman laporan dengan pesan error
+        return redirect()->route('admin.employee.monthly-report')
+                         ->with('error', 'Tidak ada karyawan yang ditemukan untuk digenerate laporannya.');
     }
+
+    foreach ($employees as $employee) {
+        $this->generateEmployeeMonthlyReport($employee->id_user, $year, $month);
+    }
+
+    // Redirect kembali ke halaman laporan dengan bulan dan tahun yang dipilih
+    return redirect()->route('admin.employee.monthly-report', ['year' => $year, 'month' => $month])
+                     ->with('success', 'Laporan bulanan berhasil digenerate untuk ' . $employees->count() . ' karyawan.');
+}
 
     private function generateEmployeeMonthlyReport($userId, $year, $month)
     {

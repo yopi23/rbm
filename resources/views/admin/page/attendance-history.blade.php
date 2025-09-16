@@ -1,10 +1,11 @@
-<!-- resources/views/admin/page/attendance-history.blade.php -->
+{{-- @extends('admin.layout.main') --}}
+
+{{-- @section('content') --}}
 
 @section('attendance_history', 'active')
 @section('main', 'menu-is-opening menu-open')
 
 <div class="row">
-    <!-- Filter Card -->
     <div class="col-md-12">
         <div class="card card-outline card-info collapsed-card">
             <div class="card-header">
@@ -90,7 +91,7 @@
 
                     <div class="col-md-2">
                         <div class="form-group">
-                            <label>&nbsp;</label><br>
+                            <label> </label><br>
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-search"></i> Filter
                             </button>
@@ -106,7 +107,6 @@
 </div>
 
 <div class="row">
-    <!-- Statistics Cards -->
     <div class="col-lg-3 col-6">
         <div class="small-box bg-info">
             <div class="inner">
@@ -157,7 +157,6 @@
 </div>
 
 <div class="row">
-    <!-- Attendance Rate Card -->
     <div class="col-md-6">
         <div class="card card-outline card-success">
             <div class="card-header">
@@ -167,12 +166,12 @@
                 <div class="progress mb-3">
                     <div class="progress-bar bg-success" role="progressbar"
                         style="width: {{ $stats['attendance_rate'] }}%"
-                        aria-valuenow="{{ $stats['attendance_rate'] }}" aria-valuemin="0" aria-valuemax="100">
-                        {{ $stats['attendance_rate'] }}%
+                        aria-valuenow="{{ $stats['attendance_rate'] }}" aria-valuemin="0" aria-valuamax="100">
+                        {{ number_format($stats['attendance_rate'], 2) }}%
                     </div>
                 </div>
                 <p class="mb-0">
-                    <strong>{{ $stats['attendance_rate'] }}%</strong> tingkat kehadiran
+                    <strong>{{ number_format($stats['attendance_rate'], 2) }}%</strong> tingkat kehadiran
                     @if ($stats['avg_late_minutes'] > 0)
                         <br><small class="text-muted">Rata-rata keterlambatan: {{ $stats['avg_late_minutes'] }}
                             menit</small>
@@ -210,7 +209,6 @@
 </div>
 
 <div class="row">
-    <!-- Main Attendance History Table -->
     <div class="col-md-12">
         <div class="card card-outline card-primary">
             <div class="card-header">
@@ -232,7 +230,8 @@
             <div class="card-body">
                 @if ($attendances->count() > 0)
                     <div class="table-responsive">
-                        <table class="table table-bordered table-striped">
+                        {{-- PENAMBAHAN ID PADA TABEL --}}
+                        <table id="attendance_history_table" class="table table-bordered table-striped">
                             <thead>
                                 <tr>
                                     <th width="5%">#</th>
@@ -348,7 +347,7 @@
                                             @if ($attendance->late_minutes > 0)
                                                 <span class="badge badge-danger">
                                                     <i class="fas fa-clock"></i>
-                                                    @lateFormat($attendance->late_minutes)
+                                                    {{ $attendance->late_minutes }} menit
                                                 </span>
                                             @else
                                                 <span class="text-success">
@@ -364,7 +363,7 @@
                                                     </span>
                                                     <br><small class="text-muted">{{ $attendance->location }}</small>
                                                 @elseif(strpos($attendance->location, ',') !== false)
-                                                    <a href="https://maps.google.com/?q={{ $attendance->location }}"
+                                                    <a href="https://www.google.com/maps/search/?api=1&query={{ $attendance->location }}"
                                                         target="_blank" class="text-primary">
                                                         <i class="fas fa-map-marker-alt"></i> Lihat Lokasi
                                                     </a>
@@ -391,7 +390,6 @@
                         </table>
                     </div>
 
-                    <!-- Pagination -->
                     <div class="row mt-3">
                         <div class="col-sm-12 col-md-5">
                             <div class="dataTables_info">
@@ -420,6 +418,28 @@
     </div>
 </div>
 
+{{-- PENAMBAHAN SCRIPT UNTUK INISIALISASI DATATABLES --}}
+{{-- @push('scripts') --}}
+<script>
+    $(function() {
+
+
+        $("#attendance_history_table").DataTable({
+            "responsive": true,
+            "lengthChange": true, // Menampilkan pilihan jumlah data per halaman
+            "autoWidth": false,
+            "paging": true, // Mengaktifkan paginasi
+            "searching": true, // Mengaktifkan fitur pencarian
+            "ordering": false, // Mengaktifkan sorting
+            "info": true, // Menampilkan info halaman (contoh: Showing 1 to 10 of 57 entries)
+
+            "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"]
+        }).buttons().container().appendTo('#tabel-buku-besar_wrapper .col-md-6:eq(0)');
+    });
+</script>
+{{-- @endpush --}}
+
+
 <script>
     function toggleDateFilter() {
         const viewType = document.querySelector('select[name="view_type"]').value;
@@ -438,18 +458,18 @@
     // Auto-expand filter card if there are active filters
     document.addEventListener('DOMContentLoaded', function() {
         const urlParams = new URLSearchParams(window.location.search);
-        const hasFilters = urlParams.get('employee_id') ||
-            urlParams.get('month') !== '{{ date('m') }}' ||
-            urlParams.get('year') !== '{{ date('Y') }}' ||
+        // Pengecekan filter yang lebih akurat
+        const hasFilters = urlParams.has('employee_id') ||
+            urlParams.has('month') ||
+            urlParams.has('year') ||
+            urlParams.has('date') ||
             urlParams.get('view_type') === 'daily';
 
-        if (hasFilters) {
-            const filterCard = document.querySelector('.collapsed-card .card-body');
-            const collapseBtn = document.querySelector('.collapsed-card .btn-tool i');
-            if (filterCard && collapseBtn) {
-                filterCard.style.display = 'block';
-                collapseBtn.classList.remove('fa-plus');
-                collapseBtn.classList.add('fa-minus');
+        if (hasFilters && urlParams.toString() !== '') {
+            const filterCard = document.querySelector('.card.collapsed-card');
+            if (filterCard) {
+                // Menggunakan fungsi bawaan AdminLTE untuk membuka card
+                $(filterCard).CardWidget('expand');
             }
         }
     });
@@ -491,3 +511,5 @@
         border-top: 3px solid #007bff;
     }
 </style>
+
+{{-- @endsection --}}

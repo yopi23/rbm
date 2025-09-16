@@ -11,7 +11,7 @@
                     Laporan Bulanan Karyawan
                 </div>
                 <div class="card-tools">
-                    <form id="reportForm" method="POST" class="form-inline">
+                    <form id="reportForm" action="{{ route('admin.employee.generate-monthly-report') }}" method="POST" class="form-inline">
                         @csrf
                         <select name="year" id="yearSelect" class="form-control mr-2">
                             @for ($i = date('Y'); $i >= date('Y') - 5; $i--)
@@ -126,7 +126,13 @@
                     report_id: reportId
                 },
                 success: function(response) {
-                    window.location.reload();
+                    if (response.success) {
+                        alert('Laporan berhasil difinalisasi.');
+                        window.location.reload();
+                    }
+                },
+                error: function() {
+                    alert('Terjadi kesalahan. Silakan coba lagi.');
                 }
             });
         }
@@ -142,10 +148,25 @@
                     report_id: reportId
                 },
                 success: function(response) {
-                    window.location.reload();
+                    if (response.success) {
+                        alert('Laporan ditandai sebagai sudah dibayar.');
+                        window.location.reload();
+                    }
+                },
+                error: function() {
+                    alert('Terjadi kesalahan. Silakan coba lagi.');
                 }
             });
         }
+    }
+
+    // FUNGSI YANG DIPERBAIKI
+    function submitReport() {
+        const form = document.getElementById('reportForm');
+
+        // Cukup definisikan action sekali saja, karena sudah benar
+        form.action = "{{ route('admin.employee.generate-monthly-report') }}";
+        form.submit();
     }
 </script>
 <script>
