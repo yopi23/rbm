@@ -85,7 +85,7 @@
                 <h3 class="card-title">Detail Kehadiran</h3>
             </div>
             <div class="card-body">
-                <table class="table table-bordered">
+                <table class="table table-bordered" id="table_Kehadiran">
                     <thead>
                         <tr>
                             <th>Tanggal</th>
@@ -147,7 +147,7 @@
                 <h3 class="card-title">Detail Service</h3>
             </div>
             <div class="card-body">
-                <table class="table table-bordered">
+                <table class="table table-bordered" id="table_Service">
                     <thead>
                         <tr>
                             <th>Tanggal</th>
@@ -184,7 +184,7 @@
                 <h3 class="card-title">Detail Pelanggaran</h3>
             </div>
             <div class="card-body">
-                <table class="table table-bordered">
+                <table class="table table-bordered" id="table_Pelanggaran">
                     <thead>
                         <tr>
                             <th>Tanggal</th>
@@ -252,3 +252,40 @@
         </div>
     </div>
 </div>
+<script>
+    $(function() {
+        $("#table_Kehadiran").DataTable({
+            "responsive": true,
+            "lengthChange": true, // Menampilkan pilihan jumlah data per halaman
+            "autoWidth": false,
+            "paging": true, // Mengaktifkan paginasi
+            "searching": true, // Mengaktifkan fitur pencarian
+            "ordering": false, // Mengaktifkan sorting
+            "info": true, // Menampilkan info halaman (contoh: Showing 1 to 10 of 57 entries)
+
+            //   "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"]
+        }).buttons().container().appendTo('#table_Kehadiran_wrapper .col-md-6:eq(0)');
+        $("#table_Service").DataTable({
+            "responsive": true,
+            "lengthChange": true, // Menampilkan pilihan jumlah data per halaman
+            "autoWidth": false,
+            "paging": true, // Mengaktifkan paginasi
+            "searching": true, // Mengaktifkan fitur pencarian
+            "ordering": false, // Mengaktifkan sorting
+            "info": true, // Menampilkan info halaman (contoh: Showing 1 to 10 of 57 entries)
+
+            //   "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"]
+        }).buttons().container().appendTo('#table_Service_wrapper .col-md-6:eq(0)');
+        $("#table_Pelanggaran").DataTable({
+            "responsive": true,
+            "lengthChange": true, // Menampilkan pilihan jumlah data per halaman
+            "autoWidth": false,
+            "paging": true, // Mengaktifkan paginasi
+            "searching": true, // Mengaktifkan fitur pencarian
+            "ordering": false, // Mengaktifkan sorting
+            "info": true, // Menampilkan info halaman (contoh: Showing 1 to 10 of 57 entries)
+
+            //   "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"]
+        }).buttons().container().appendTo('#table_Pelanggaran_wrapper .col-md-6:eq(0)');
+    });
+</script>

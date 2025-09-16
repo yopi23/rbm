@@ -1113,7 +1113,7 @@ public function reversePenalty(Request $request)
 
         // Hitung service
         $services = modelServices::where('id_teknisi', $userId)
-            ->where('status_services', 'Selesai')
+            ->whereIn('status_services', ['Selesai','Diambil'])
             ->whereBetween('updated_at', [$startDate, $endDate])
             ->get();
 
@@ -2024,13 +2024,6 @@ public function getThisUser()
             'paid_at' => Carbon::now(),
         ]);
 
-        // Update saldo karyawan saat laporan di-mark as paid
-        $userDetail = UserDetail::where('kode_user', $report->user_id)->first();
-        if ($userDetail) {
-            $userDetail->saldo += $report->final_salary;
-            $userDetail->save();
-        }
-
         return response()->json(['success' => true]);
     }
 
@@ -2048,7 +2041,7 @@ public function getThisUser()
 
         // Get service data
         $services = modelServices::where('id_teknisi', $report->user_id)
-            ->where('status_services', 'Selesai')
+            ->whereIn('status_services', ['Selesai','Diambil'])
             ->whereYear('updated_at', $report->year)
             ->whereMonth('updated_at', $report->month)
             ->orderBy('updated_at')

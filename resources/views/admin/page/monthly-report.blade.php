@@ -11,7 +11,8 @@
                     Laporan Bulanan Karyawan
                 </div>
                 <div class="card-tools">
-                    <form id="reportForm" action="{{ route('admin.employee.generate-monthly-report') }}" method="POST" class="form-inline">
+                    <form id="reportForm" action="{{ route('admin.employee.generate-monthly-report') }}" method="POST"
+                        class="form-inline">
                         @csrf
                         <select name="year" id="yearSelect" class="form-control mr-2">
                             @for ($i = date('Y'); $i >= date('Y') - 5; $i--)
@@ -90,11 +91,6 @@
                                                 onclick="finalizeReport({{ $report->id }})">
                                                 <i class="fas fa-check"></i> Finalisasi
                                             </button>
-                                        @elseif($report->status == 'finalized')
-                                            <button class="btn btn-info btn-xs"
-                                                onclick="markAsPaid({{ $report->id }})">
-                                                <i class="fas fa-money-bill"></i> Tandai Dibayar
-                                            </button>
                                         @endif
                                         <a href="{{ route('admin.employee.report-detail', $report->id) }}"
                                             class="btn btn-primary btn-xs">
@@ -138,27 +134,7 @@
         }
     }
 
-    function markAsPaid(reportId) {
-        if (confirm('Apakah Anda yakin ingin menandai laporan ini sebagai dibayar?')) {
-            $.ajax({
-                url: "{{ route('admin.employee.mark-paid') }}",
-                method: 'POST',
-                data: {
-                    _token: '{{ csrf_token() }}',
-                    report_id: reportId
-                },
-                success: function(response) {
-                    if (response.success) {
-                        alert('Laporan ditandai sebagai sudah dibayar.');
-                        window.location.reload();
-                    }
-                },
-                error: function() {
-                    alert('Terjadi kesalahan. Silakan coba lagi.');
-                }
-            });
-        }
-    }
+
 
     // FUNGSI YANG DIPERBAIKI
     function submitReport() {
