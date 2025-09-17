@@ -24,11 +24,12 @@ use App\Models\SubKategoriSparepart;
 use App\Models\KategoriSparepart;
 use Carbon\Carbon; // Added for date handling
 use Illuminate\Validation\Rule;
+use App\Traits\ManajemenKasTrait;
 
 
 class SparepartApiController extends Controller
 {
-    use KategoriLaciTrait;
+    use KategoriLaciTrait, ManajemenKasTrait;
     // Helper to get the authenticated user's detail.
     // Assuming this method exists in your base Controller or a trait.
     // If not, you'll need to define it or pass user details differently.
@@ -359,6 +360,7 @@ class SparepartApiController extends Controller
                     'total_biaya' => $service->total_biaya,
                     'dp' => $service->dp,
                     'harga_sp' => $service->harga_sp,
+                    'claimed_from_service_id' => $service->claimed_from_service_id,
                     'created_at' => $service->created_at,
                     'updated_at' => $service->updated_at,
                     // Add technician name if available
@@ -760,220 +762,140 @@ private function getLaciBalance($kategoriLaciId)
         }
     }
 
-    /**
-     * Internal helper method to perform the commission recalculation logic.
-     * This method is transactional and expects to be called within an existing transaction
-     * or to start its own if not. It's safer if the caller manages the transaction.
-     */
-    // private function performCommissionRecalculation($serviceId)
-    // {
-    //     Log::info("Internal: Starting performCommissionRecalculation for Service ID: $serviceId");
-    //     // NOTE: This method now expects a transaction to be started by the calling public method.
-    //     // If it's to be called directly, consider adding DB::beginTransaction() and DB::commit()/rollback() here.
 
-    //     $service = modelServices::findOrFail($serviceId);
+    private function performCommissionRecalculation($serviceId)
+    {
+        Log::info("Internal: Starting performCommissionRecalculation for Service ID: $serviceId");
 
-    //     // Fetch all associated spare parts (toko and luar)
-    //     $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
-    //         ->where('detail_part_services.kode_services', $serviceId)
-    //         ->get(['detail_part_services.detail_harga_part_service', 'detail_part_services.qty_part']);
+        $service = modelServices::findOrFail($serviceId);
 
-    //     $part_luar_toko_service = DetailPartLuarService::where('kode_services', $serviceId)->get(['harga_part', 'qty_part']);
 
-    //     // Recalculate total_part (harga_sp)
-    //     $total_part = 0;
-    //     foreach ($part_toko_service as $part) {
-    //         $total_part += $part->detail_harga_part_service * $part->qty_part;
-    //     }
-    //     foreach ($part_luar_toko_service as $part) {
-    //         $total_part += $part->harga_part * $part->qty_part;
-    //     }
+        // Fetch all associated spare parts (toko and luar)
+        $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+            ->where('detail_part_services.kode_services', $serviceId)
+            ->get(['detail_part_services.detail_harga_part_service', 'detail_part_services.qty_part']);
 
-    //     // Update the service's harga_sp
-    //     $service->update(['harga_sp' => $total_part]);
-    //     Log::info("Internal: Service Harga SP updated to: $total_part for Service ID: $serviceId");
+        $part_luar_toko_service = DetailPartLuarService::where('kode_services', $serviceId)->get(['harga_part', 'qty_part']);
 
-    //     // Recalculate technician profit ONLY if service is "Selesai" and a technician is assigned
-    //     if ($service->status_services == 'Selesai' && $service->id_teknisi) {
-    //         $id_teknisi = $service->id_teknisi;
-    //         $presentaseSetting = SalarySetting::where('user_id', $id_teknisi)->first();
-    //         $teknisi = UserDetail::where('kode_user', $id_teknisi)->first();
-
-    //         if (!$teknisi) {
-    //             Log::warning("Internal: Technician not found for ID: {$id_teknisi} for Service ID: $serviceId. Commission not updated.");
-    //             return [
-    //                 'service_id' => $service->id,
-    //                 'new_harga_sp' => $service->harga_sp,
-    //                 'new_profit' => 0,
-    //                 'warning' => 'Technician not found, commission skipped.'
-    //             ];
-    //         }
-
-    //         // Retrieve old profit if it exists for this service
-    //         $oldProfitPresentase = ProfitPresentase::where('kode_service', $serviceId)->first();
-    //         $oldProfitAmount = 0;
-
-    //         if ($oldProfitPresentase) {
-    //             $oldProfitAmount = $oldProfitPresentase->profit;
-    //             // Deduct old profit from technician's current saldo before calculating new profit
-    //             $teknisi->update([
-    //                 'saldo' => $teknisi->saldo - $oldProfitAmount,
-    //             ]);
-    //             Log::info("Internal: Old profit deducted: {$oldProfitAmount} from Technician ID: {$id_teknisi}");
-    //         }
-
-    //         // Calculate new profit
-    //         $profit = $service->total_biaya - $total_part;
-    //         $fix_profit = 0;
-
-    //         if ($presentaseSetting && $presentaseSetting->compensation_type == 'percentage') {
-    //             if ($profit < 0) {
-    //                 $fix_profit = $profit * $presentaseSetting->max_percentage / 100;
-    //             } else {
-    //                 $fix_profit = $profit * $presentaseSetting->percentage_value / 100;
-    //             }
-    //         }
-    //         Log::info("Internal: New calculated profit: {$fix_profit} for Technician ID: {$id_teknisi}");
-
-    //         // Update or create ProfitPresentase record
-    //         $komisi = ProfitPresentase::updateOrCreate(
-    //             ['kode_service' => $serviceId],
-    //             [
-    //                 'tgl_profit' => now(),
-    //                 'kode_presentase' => $presentaseSetting ? $presentaseSetting->id : null,
-    //                 'kode_user' => $id_teknisi,
-    //                 'profit' => $fix_profit,
-    //                 'saldo' => $teknisi->saldo + $fix_profit, // Provisional saldo
-    //                 'profit_toko'=>$profit-$fix_profit,
-    //             ]
-    //         );
-
-    //         // Add the new profit to the technician's saldo
-    //         $teknisi->update([
-    //             'saldo' => $teknisi->saldo + $fix_profit,
-    //         ]);
-    //         Log::info("Internal: Technician new saldo: {$teknisi->saldo} for Technician ID: {$id_teknisi}");
-
-    //         // Update ProfitPresentase 'saldo' to final value after technician's saldo is updated
-    //         $komisi->update(['saldo' => $teknisi->saldo]);
-    //     }
-    //     Log::info("Internal: performCommissionRecalculation finished for Service ID: $serviceId");
-
-    //     return [
-    //         'service_id' => $service->id,
-    //         'new_harga_sp' => $service->harga_sp,
-    //         'new_profit' => isset($fix_profit) ? $fix_profit : 0,
-    //     ];
-    // }
-private function performCommissionRecalculation($serviceId)
-{
-    Log::info("Internal: Starting performCommissionRecalculation for Service ID: $serviceId");
-
-    $service = modelServices::findOrFail($serviceId);
-
-    // Fetch all associated spare parts (toko and luar)
-    $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
-        ->where('detail_part_services.kode_services', $serviceId)
-        ->get(['detail_part_services.detail_harga_part_service', 'detail_part_services.qty_part']);
-
-    $part_luar_toko_service = DetailPartLuarService::where('kode_services', $serviceId)->get(['harga_part', 'qty_part']);
-
-    // Recalculate total_part (harga_sp)
-    $total_part = 0;
-    foreach ($part_toko_service as $part) {
-        $total_part += $part->detail_harga_part_service * $part->qty_part;
-    }
-    foreach ($part_luar_toko_service as $part) {
-        $total_part += $part->harga_part * $part->qty_part;
-    }
-
-    // Update the service's harga_sp
-    $service->update(['harga_sp' => $total_part]);
-    Log::info("Internal: Service Harga SP updated to: $total_part for Service ID: $serviceId");
-
-    // Recalculate profit ONLY if service is "Selesai" and a technician is assigned
-    if (in_array(strtolower($service->status_services), ['selesai','diambil'])
-    && $service->id_teknisi) {
-
-    $serviceId = $service->id;
-    $id_teknisi = $service->id_teknisi;
-
-    DB::transaction(function () use ($service, $serviceId, $id_teknisi, $total_part) {
-        $presentaseSetting = SalarySetting::where('user_id', $id_teknisi)->first();
-        $teknisi = UserDetail::where('kode_user', $id_teknisi)->first();
-
-        if (!$teknisi || !$presentaseSetting) {
-            Log::warning("Internal: Technician or SalarySetting not found for ID: {$id_teknisi}. Commission not updated.");
-            return [
-                'service_id'   => $serviceId,
-                'new_harga_sp' => $service->harga_sp,
-                'new_profit'   => 0,
-                'warning'      => 'Technician or salary setting not found, commission skipped.'
-            ];
+        // Recalculate total_part (harga_sp)
+        $total_part = 0;
+        foreach ($part_toko_service as $part) {
+            $total_part += $part->detail_harga_part_service * $part->qty_part;
+        }
+        foreach ($part_luar_toko_service as $part) {
+            $total_part += $part->harga_part * $part->qty_part;
         }
 
-        // Hapus profit lama dari saldo teknisi (jika ada)
-        $oldProfitPresentase = ProfitPresentase::where('kode_service', $serviceId)->first();
-        if ($oldProfitPresentase) {
-            $teknisi->decrement('saldo', $oldProfitPresentase->profit);
-            Log::info("Internal: Old profit deducted: {$oldProfitPresentase->profit} from Technician ID: {$id_teknisi}");
-        }
+        // Update the service's harga_sp
+        $service->update(['harga_sp' => $total_part]);
+        Log::info("Internal: Service Harga SP updated to: $total_part for Service ID: $serviceId");
 
-        // Hitung ulang profit dari service
-        $total_service_profit = $service->total_biaya - $total_part;
+        if ($service->claimed_from_service_id !== null) {
+            // --- LOGIKA UNTUK SERVICE KLAIM GARANSI ---
+            Log::info("Internal: Service ID {$serviceId} is a warranty claim. Commission set to 0.");
 
-        $fix_profit_teknisi = 0;
-        $profit_untuk_toko = 0;
-
-        if ($presentaseSetting->compensation_type === 'percentage') {
-            if ($total_service_profit < 0) {
-                // Komisi negatif (rugi)
-                $fix_profit_teknisi = $total_service_profit * $presentaseSetting->max_percentage / 100;
-            } else {
-                // Untung
-                $fix_profit_teknisi = $total_service_profit * $presentaseSetting->percentage_value / 100;
+            // Hapus komisi lama jika ada (untuk mengembalikan saldo teknisi)
+            $oldProfit = ProfitPresentase::where('kode_service', $serviceId)->first();
+            if($oldProfit) {
+                $teknisi = UserDetail::where('kode_user', $oldProfit->kode_user)->first();
+                if($teknisi) {
+                    $teknisi->decrement('saldo', $oldProfit->profit);
+                }
+                $oldProfit->delete();
             }
-            $profit_untuk_toko = $total_service_profit - $fix_profit_teknisi;
 
-            Log::info("Internal (Percentage): New calculated profit: {$fix_profit_teknisi} for Technician ID: {$id_teknisi}");
+            // Tidak ada komisi baru yang dihitung, cukup kembalikan status
+            return [
+                'service_id' => $service->id,
+                'new_harga_sp' => $service->harga_sp,
+                'new_profit' => 0,
+                'info' => 'Warranty claim, no commission awarded.'
+            ];
+
         } else {
-            // Gaji tetap
-            $fix_profit_teknisi = 0;
-            $profit_untuk_toko = $total_service_profit;
+            // Recalculate profit ONLY if service is "Selesai" and a technician is assigned
+            if (in_array(strtolower($service->status_services), ['selesai','diambil'])
+                && $service->id_teknisi) {
 
-            Log::info("Internal (Fixed): Profit generated for store: {$profit_untuk_toko} by Technician ID: {$id_teknisi}");
+                $serviceId = $service->id;
+                $id_teknisi = $service->id_teknisi;
+
+                DB::transaction(function () use ($service, $serviceId, $id_teknisi, $total_part) {
+                    $presentaseSetting = SalarySetting::where('user_id', $id_teknisi)->first();
+                    $teknisi = UserDetail::where('kode_user', $id_teknisi)->first();
+
+                    if (!$teknisi || !$presentaseSetting) {
+                        Log::warning("Internal: Technician or SalarySetting not found for ID: {$id_teknisi}. Commission not updated.");
+                        return [
+                            'service_id'   => $serviceId,
+                            'new_harga_sp' => $service->harga_sp,
+                            'new_profit'   => 0,
+                            'warning'      => 'Technician or salary setting not found, commission skipped.'
+                        ];
+                    }
+
+                    // Hapus profit lama dari saldo teknisi (jika ada)
+                    $oldProfitPresentase = ProfitPresentase::where('kode_service', $serviceId)->first();
+                    if ($oldProfitPresentase) {
+                        $teknisi->decrement('saldo', $oldProfitPresentase->profit);
+                        Log::info("Internal: Old profit deducted: {$oldProfitPresentase->profit} from Technician ID: {$id_teknisi}");
+                    }
+
+                    // Hitung ulang profit dari service
+                    $total_service_profit = $service->total_biaya - $total_part;
+
+                    $fix_profit_teknisi = 0;
+                    $profit_untuk_toko = 0;
+
+                    if ($presentaseSetting->compensation_type === 'percentage') {
+                        if ($total_service_profit < 0) {
+                            // Komisi negatif (rugi)
+                            $fix_profit_teknisi = $total_service_profit * $presentaseSetting->max_percentage / 100;
+                        } else {
+                            // Untung
+                            $fix_profit_teknisi = $total_service_profit * $presentaseSetting->percentage_value / 100;
+                        }
+                        $profit_untuk_toko = $total_service_profit - $fix_profit_teknisi;
+
+                        Log::info("Internal (Percentage): New calculated profit: {$fix_profit_teknisi} for Technician ID: {$id_teknisi}");
+                    } else {
+                        // Gaji tetap
+                        $fix_profit_teknisi = 0;
+                        $profit_untuk_toko = $total_service_profit;
+
+                        Log::info("Internal (Fixed): Profit generated for store: {$profit_untuk_toko} by Technician ID: {$id_teknisi}");
+                    }
+
+                    // Simpan atau update profit
+                    $komisi = ProfitPresentase::updateOrCreate(
+                        ['kode_service' => $serviceId],
+                        [
+                            'tgl_profit'      => now(),
+                            'kode_presentase' => $presentaseSetting->id,
+                            'kode_user'       => $id_teknisi,
+                            'profit'          => $fix_profit_teknisi,
+                            'profit_toko'     => $profit_untuk_toko,
+                        ]
+                    );
+
+                    // Tambahkan profit baru (bisa positif atau negatif) ke saldo teknisi
+                    $teknisi->increment('saldo', $fix_profit_teknisi);
+
+                    // Update saldo final di record komisi
+                    $komisi->update(['saldo' => $teknisi->fresh()->saldo]);
+
+                    Log::info("Internal: Technician new saldo: {$teknisi->fresh()->saldo} for Technician ID: {$id_teknisi}");
+                });
+            }
         }
+        Log::info("Internal: performCommissionRecalculation finished for Service ID: $serviceId");
 
-        // Simpan atau update profit
-        $komisi = ProfitPresentase::updateOrCreate(
-            ['kode_service' => $serviceId],
-            [
-                'tgl_profit'      => now(),
-                'kode_presentase' => $presentaseSetting->id,
-                'kode_user'       => $id_teknisi,
-                'profit'          => $fix_profit_teknisi,
-                'profit_toko'     => $profit_untuk_toko,
-            ]
-        );
-
-        // Tambahkan profit baru (bisa positif atau negatif) ke saldo teknisi
-        $teknisi->increment('saldo', $fix_profit_teknisi);
-
-        // Update saldo final di record komisi
-        $komisi->update(['saldo' => $teknisi->fresh()->saldo]);
-
-        Log::info("Internal: Technician new saldo: {$teknisi->fresh()->saldo} for Technician ID: {$id_teknisi}");
-    });
-}
-
-    Log::info("Internal: performCommissionRecalculation finished for Service ID: $serviceId");
-
-    return [
-        'service_id' => $service->id,
-        'new_harga_sp' => $service->harga_sp,
-        'new_profit' => isset($fix_profit_teknisi) ? $fix_profit_teknisi : 0,
-    ];
-}
+        return [
+            'service_id' => $service->id,
+            'new_harga_sp' => $service->harga_sp,
+            'new_profit' => isset($fix_profit_teknisi) ? $fix_profit_teknisi : 0,
+        ];
+    }
 
     /**
      * Functions for COMPLETED Services - Sparepart Toko (Store Parts)
@@ -1404,12 +1326,12 @@ private function performCommissionRecalculation($serviceId)
      */
 
     // Generic function to add/update store parts (for uncompleted or initial assignment)
-    public function storeSparepartToko(Request $request) // Original name retained for generic use
+    public function storeSparepartToko(Request $request)
     {
         try {
             $validator = Validator::make($request->all(), [
-                'kode_services' => 'required',
-                'kode_sparepart' => 'required',
+                'kode_services' => 'required|exists:sevices,id',
+                'kode_sparepart' => 'required|exists:spareparts,id',
                 'qty_part' => 'required|integer|min:1'
             ]);
 
@@ -1421,7 +1343,7 @@ private function performCommissionRecalculation($serviceId)
                 ], 422);
             }
 
-            $sparepart = Sparepart::find($request->kode_sparepart);
+            $sparepart = \App\Models\Sparepart::find($request->kode_sparepart);
             if (!$sparepart) {
                 return response()->json([
                     'success' => false,
@@ -1431,7 +1353,11 @@ private function performCommissionRecalculation($serviceId)
 
             DB::beginTransaction();
             try {
-                $cek = DetailPartServices::where([
+                // Ambil data service untuk cek status klaim
+                $service = \App\Models\Sevices::findOrFail($request->kode_services);
+                $isWarrantyClaim = $service->claimed_from_service_id !== null;
+
+                $cek = \App\Models\DetailPartServices::where([
                     ['kode_services', '=', $request->kode_services],
                     ['kode_sparepart', '=', $request->kode_sparepart]
                 ])->first();
@@ -1439,26 +1365,37 @@ private function performCommissionRecalculation($serviceId)
                 $currentStockInDb = (int) $sparepart->stok_sparepart;
 
                 // ============================================================
-                // LOGIKA HARGA FINAL (ALL OR NOTHING)
+                // PERSIAPAN DATA KEUANGAN
                 // ============================================================
-                $hargaKhusus = DB::table('harga_khususes')
-                    ->where('id_sp', $request->kode_sparepart)
-                    ->first();
-
-                // 1. Siapkan harga default menggunakan harga jual standar
-                $hargaPartService = $sparepart->harga_jual;
+                $hargaPartService = 0;
                 $isHargaKhusus = false;
+                // Hitung biaya modal SEKARANG karena akan digunakan di bawah
+                $biayaModalPart = $sparepart->harga_beli * $request->qty_part;
 
-                // 2. Cek apakah ada harga khusus DAN nilainya valid (lebih dari 0)
-                if ($hargaKhusus && isset($hargaKhusus->harga_toko) && $hargaKhusus->harga_toko > 0) {
-                    // Jika ya, timpa harga default dengan harga_toko khusus
-                    $hargaPartService = $hargaKhusus->harga_toko;
-                    $isHargaKhusus = true;
-                }
-                // Jika tidak, maka $hargaPartService akan tetap berisi harga jual standar.
                 // ============================================================
+                // LOGIKA HARGA FINAL (DENGAN PENGECEKAN KLAIM GARANSI)
+                // ============================================================
+                if ($isWarrantyClaim) {
+                    // Jika ini service klaim garansi, harga jual untuk pelanggan adalah 0.
+                    $hargaPartService = 0;
+                    Log::info("Warranty claim service: setting part price to 0 for service ID {$service->id}");
+                } else {
+                    // Jika BUKAN service klaim, jalankan logika harga normal
+                    $hargaKhusus = DB::table('harga_khususes')
+                        ->where('id_sp', $request->kode_sparepart)
+                        ->first();
 
-                if ($cek) {
+                    // 1. Siapkan harga default
+                    $hargaPartService = $sparepart->harga_jual;
+
+                    // 2. Timpa dengan harga khusus jika ada
+                    if ($hargaKhusus && isset($hargaKhusus->harga_toko) && $hargaKhusus->harga_toko > 0) {
+                        $hargaPartService = $hargaKhusus->harga_toko;
+                        $isHargaKhusus = true;
+                    }
+                }
+
+                if ($cek) { // Jika sparepart sudah pernah ditambahkan ke service ini
                     $oldQtyForService = (int) $cek->qty_part;
                     $newTotalQtyForService = $oldQtyForService + $request->qty_part;
                     $projectedNewOverallStock = $currentStockInDb - $request->qty_part;
@@ -1467,31 +1404,29 @@ private function performCommissionRecalculation($serviceId)
                         DB::rollBack();
                         return response()->json([
                             'success' => false,
-                            'message' => 'Gagal ditambahkan karna Stock: ' . $currentStockInDb
+                            'message' => 'Gagal ditambahkan karena Stok tidak cukup: ' . $currentStockInDb
                         ], 400);
                     }
 
-                    // Update dengan harga yang sudah ditentukan (standar atau khusus)
                     $cek->update([
                         'qty_part' => $newTotalQtyForService,
-                        'detail_harga_part_service' => $hargaPartService, // Selalu update harga saat menambah
+                        'detail_harga_part_service' => $hargaPartService,
                         'user_input' => auth()->user()->id,
                     ]);
                     $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
 
-                } else {
+                } else { // Jika sparepart baru ditambahkan ke service ini
                     $projectedNewOverallStock = $currentStockInDb - $request->qty_part;
 
                     if ($projectedNewOverallStock < 0) {
                         DB::rollBack();
                         return response()->json([
                             'success' => false,
-                            'message' => 'Stock tidak Cukup: ' . $currentStockInDb
+                            'message' => 'Stok tidak cukup: ' . $currentStockInDb
                         ], 400);
                     }
 
-                    // Buat record baru dengan harga yang sudah ditentukan (standar atau khusus)
-                    DetailPartServices::create([
+                    \App\Models\DetailPartServices::create([
                         'kode_services' => $request->kode_services,
                         'kode_sparepart' => $request->kode_sparepart,
                         'detail_modal_part_service' => $sparepart->harga_beli,
@@ -1502,26 +1437,42 @@ private function performCommissionRecalculation($serviceId)
                     $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
                 }
 
+                // PANGGIL TRAIT UNTUK MENCATAT KERUGIAN KE BUKU BESAR (JIKA KLAIM)
+                if ($isWarrantyClaim) {
+                    $deskripsiKerugian = "Biaya Garansi: Part {$sparepart->nama_sparepart} (x{$request->qty_part}) untuk Service {$service->kode_service}";
+
+                    $this->catatKas(
+                        $service,
+                        0,
+                        $biayaModalPart,
+                        $deskripsiKerugian
+                    );
+
+                    Log::info("Warranty cost recorded to ledger: {$biayaModalPart} for service ID {$service->id}");
+                }
+
                 DB::commit();
 
                 return response()->json([
                     'success' => true,
-                    'message' => 'Sparepart transaction successful',
+                    'message' => 'Transaksi sparepart berhasil',
                     'data' => [
                         'kode_services' => $request->kode_services,
                         'kode_sparepart' => $request->kode_sparepart,
                         'qty' => $request->qty_part,
-                        'remaining_stock' => $sparepart->stok_sparepart,
+                        'remaining_stock' => $sparepart->fresh()->stok_sparepart,
                         'harga_used' => $hargaPartService,
-                        'is_harga_khusus' => $isHargaKhusus
+                        'is_harga_khusus' => $isHargaKhusus,
+                        'is_warranty_claim' => $isWarrantyClaim
                     ]
                 ], 200);
+
             } catch (\Exception $e) {
                 DB::rollBack();
                 Log::error("Store Sparepart Toko Error: " . $e->getMessage());
                 return response()->json([
                     'success' => false,
-                    'message' => 'Transaction failed: ' . $e->getMessage(),
+                    'message' => 'Transaksi gagal: ' . $e->getMessage(),
                     'error' => $e->getMessage()
                 ], 500);
             }
@@ -1532,38 +1483,59 @@ private function performCommissionRecalculation($serviceId)
                 'error' => $e->getMessage()
             ], 500);
         }
-
     }
 
 
     // Generic function to delete store parts (for uncompleted or general use)
-    public function deleteSparepartToko($id) // Original name retained for generic use
+    public function deletePartTokoFromService($detailPartId)
     {
         DB::beginTransaction();
         try {
-            $data = DetailPartServices::findOrFail($id);
-            $serviceId = $data->kode_services; // Get service ID
+            $detailPart = DetailPartServices::findOrFail($detailPartId);
 
-            $update_sparepart = Sparepart::findOrFail($data->kode_sparepart);
-            $stok_baru = (int) $update_sparepart->stok_sparepart + (int) $data->qty_part; // Ensure integer casting
+            // Dapatkan data terkait (masih perlu untuk nama part dan update stok)
+            $service = $detailPart->service;
+            $sparepart = $detailPart->sparepart;
 
-            $update_sparepart->update(['stok_sparepart' => $stok_baru]);
-            $data->delete();
+            // =========================================================================
+            // PERBAIKAN KUNCI: Mengambil modal dari snapshot saat transaksi terjadi
+            // Ini memastikan akurasi jika harga di tabel master sparepart berubah.
+            $modalPartYangDihapus = $detailPart->detail_modal_part_service * $detailPart->qty_part;
+            // =========================================================================
 
-            // IMPORTANT: This generic deleteSparepartToko DOES NOT trigger recalculation here.
-            // Recalculation is triggered when service status changes to 'Selesai' or through explicit 'recalculateCommission' endpoint.
-            // Or via the deletePartTokoFromCompletedService method for already completed services.
+            // 2. Kembalikan stok sparepart
+            $sparepart->increment('stok_sparepart', $detailPart->qty_part);
+
+            // 3. Lakukan koreksi di buku besar (jika ini service klaim)
+            if ($service && $service->claimed_from_service_id !== null) {
+                $deskripsiKoreksi = "Koreksi/Hapus Part Garansi: {$sparepart->nama_sparepart} (x{$detailPart->qty_part}) untuk Service {$service->kode_service}";
+
+                $this->catatKas(
+                    $service,
+                    $modalPartYangDihapus, // Uang "masuk" kembali ke kas dengan nilai yang akurat
+                    0,
+                    $deskripsiKoreksi
+                );
+                Log::info("Warranty cost REVERSED from ledger: {$modalPartYangDihapus} for service ID {$service->id}");
+            }
+
+            // 4. Hapus record part dari service
+            $detailPart->delete();
 
             DB::commit();
 
-            return response()->json(['message' => 'Sparepart deleted successfully.'], 200);
+            return response()->json([
+                'success' => true,
+                'message' => 'Part berhasil dihapus dan stok telah dikembalikan.'
+            ], 200);
+
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             DB::rollBack();
-            return response()->json(['message' => 'Sparepart not found.'], 404);
+            return response()->json(['success' => false, 'message' => 'Data part tidak ditemukan.'], 404);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error("Error deleting generic sparepart toko {$id}: " . $e->getMessage());
-            return response()->json(['message' => 'Failed to delete sparepart.', 'error' => $e->getMessage()], 500);
+            Log::error("Delete Service Part Error: " . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Gagal menghapus part.', 'error' => $e->getMessage()], 500);
         }
     }
 

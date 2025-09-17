@@ -167,7 +167,7 @@
                                 <td>{{ $service->type_unit }}</td>
                                 <td>Rp {{ number_format($service->total_biaya, 0, ',', '.') }}</td>
                                 <td>Rp
-                                    {{ number_format($service->total_biaya * ($report->user->salarySetting->service_percentage / 100), 0, ',', '.') }}
+                                    {{ number_format($service->komisi_teknisi ?? 0, 0, ',', '.') }}
                                 </td>
                             </tr>
                         @endforeach

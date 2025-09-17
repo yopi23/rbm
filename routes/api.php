@@ -158,7 +158,7 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     // Sparepart Management (General / Initial Service)
     Route::get('/sparepart-toko/search', [SparepartApiController::class, 'searchSparepartToko']); // Search for store parts (generic)
     Route::post('/sparepart-toko', [SparepartApiController::class, 'storeSparepartToko']); // Add store part (generic, no commission recalculation here)
-    Route::delete('/sparepart-toko/{id}', [SparepartApiController::class, 'deleteSparepartToko']); // Delete store part (generic, no commission recalculation here)
+    Route::delete('/sparepart-toko/{detailPartId}', [SparepartApiController::class, 'deletePartTokoFromService']); // Delete store part (generic, no commission recalculation here)
 
     // **ROUTE SPAREPART LUAR GENERIC - DARI FILE LAMA**
     Route::post('/sparepart-luar', [SparepartApiController::class, 'storeSparepartLuar']); // GENERIC untuk service belum selesai
@@ -221,6 +221,9 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::put('/warranty/{id}', [SparepartApiController::class, 'updateGaransiService']);
     Route::delete('/warranty/{id}', [SparepartApiController::class, 'deleteGaransiService']);
     Route::get('/warranty/{kode_service}', [SparepartApiController::class, 'getGaransiService']);
+
+    // claim garansi
+    Route::post('/services/{originalServiceId}/claim-warranty', [ServiceApiController::class, 'initiateWarrantyClaim']);
 
     // Service Notes routes
     Route::post('/service-notes/store', [SparepartApiController::class, 'storeCatatanService']);

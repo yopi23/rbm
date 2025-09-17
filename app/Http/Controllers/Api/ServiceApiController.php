@@ -212,95 +212,6 @@ class ServiceApiController extends Controller
     }
 }
 
-
-    /**
-     * Search all services with enhanced functionality
-     */
-    // public function allservice(Request $request)
-    // {
-    //     try {
-    //         $kodeOwner = $this->getThisUser()->id_upline;
-    //         $search = $request->input('search');
-    //         $page = $request->get('page', 1);
-    //         $limit = min($request->get('limit', 20), 50);
-    //         $status = $request->get('status'); // Filter by status
-    //         $year = $request->get('year', date('Y'));
-
-    //         if (empty($search)) {
-    //             return response()->json([
-    //                 'success' => true,
-    //                 'message' => 'Silakan masukkan kata kunci pencarian.',
-    //                 'data' => [],
-    //                 'pagination' => null
-    //             ], 200);
-    //         }
-
-    //         $cacheKey = "all_services_{$kodeOwner}_{$search}_{$page}_{$limit}_{$status}_{$year}";
-
-    //         $result = Cache::remember($cacheKey, 180, function () use ($kodeOwner, $search, $page, $limit, $status, $year) {
-    //             $query = modelServices::where('kode_owner', $kodeOwner)
-    //                 ->where(function ($q) use ($search) {
-    //                     $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
-    //                       ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
-    //                       ->orWhere('sevices.kode_service', $search)
-    //                       ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
-    //                 })
-    //                 ->whereYear('sevices.created_at', $year)
-    //                 ->join('users', 'sevices.id_teknisi', '=', 'users.id')
-    //                 ->select('sevices.*', 'users.name as teknisi');
-
-    //             if ($status) {
-    //                 $query->where('sevices.status_services', $status);
-    //             }
-
-    //             $totalCount = $query->count();
-    //             $services = $query->orderBy('sevices.created_at', 'desc')
-    //                              ->offset(($page - 1) * $limit)
-    //                              ->limit($limit)
-    //                              ->get();
-
-    //             // Enhance with additional data
-    //             $services = $services->map(function ($service) {
-    //                 $service->has_warranty = Garansi::where('kode_garansi', $service->kode_service)
-    //                     ->where('type_garansi', 'service')
-    //                     ->exists();
-
-    //                 $service->has_notes = DetailCatatanService::where('kode_services', $service->id)->exists();
-
-    //                 $service->part_count = [
-    //                     'toko' => DetailPartServices::where('kode_services', $service->id)->count(),
-    //                     'luar' => DetailPartLuarService::where('kode_services', $service->id)->count()
-    //                 ];
-
-    //                 return $service;
-    //             });
-
-    //             return [
-    //                 'data' => $services,
-    //                 'pagination' => [
-    //                     'current_page' => (int) $page,
-    //                     'per_page' => (int) $limit,
-    //                     'total' => (int) $totalCount,
-    //                     'total_pages' => ceil($totalCount / $limit),
-    //                 ]
-    //             ];
-    //         });
-
-    //         return response()->json([
-    //             'success' => true,
-    //             'message' => 'Data layanan ditemukan.',
-    //             'data' => $result['data'],
-    //             'pagination' => $result['pagination'],
-    //             'search_query' => $search
-    //         ], 200);
-    //     } catch (\Exception $e) {
-    //         Log::error("All Service Search Error: " . $e->getMessage());
-    //         return response()->json([
-    //             'success' => false,
-    //             'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-    //         ], 500);
-    //     }
-    // }
     public function allservice(Request $request)
 {
     try {
@@ -1568,98 +1479,7 @@ class ServiceApiController extends Controller
 /**
  * FIXED: Calculate summary for daily report with CORRECT payment logic
  */
-// private function calculateDailySummary($date_from, $date_to)
-// {
-//     try {
-//         $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
-//             ->whereIn('status_services', ['Selesai', 'Diambil']);
 
-//         if ($date_from) {
-//             $query->whereDate('updated_at', '>=', $date_from);
-//         }
-
-//         if ($date_to) {
-//             $query->whereDate('updated_at', '<=', $date_to);
-//         }
-
-//         $services = $query->get();
-
-//         $summary = [
-//             'total_services' => $services->count(),
-//             'completed_services' => $services->where('status_services', 'Selesai')->count(),
-//             'taken_services' => $services->where('status_services', 'Diambil')->count(),
-//             'total_omset' => 0, // Uang yang benar-benar masuk
-//             'completed_omset' => 0,
-//             'taken_omset' => 0,
-//             'total_dp_collected' => 0,
-//             'total_remaining_payment' => 0, // FIXED: Sisa tagihan yang benar
-//         ];
-
-//         foreach ($services as $service) {
-//             $totalBiaya = (float) $service->total_biaya;
-//             $dp = (float) $service->dp;
-//             $sisaBayar = $totalBiaya - $dp;
-//             $isLunas = $sisaBayar <= 0;
-
-//             // Total DP collected
-//             $summary['total_dp_collected'] += $dp;
-
-//             if ($service->status_services === 'Diambil') {
-//                 // FIXED: Service Diambil = PASTI LUNAS
-//                 $omsetValue = $totalBiaya; // Uang masuk = total biaya
-//                 $summary['taken_omset'] += $omsetValue;
-//                 $summary['total_omset'] += $omsetValue;
-//                 // PENTING: Service diambil TIDAK ada sisa tagihan
-//                 // $summary['total_remaining_payment'] += 0; // Tidak menambah sisa tagihan
-
-//                 Log::info("Service Diambil: {$service->nama_pelanggan} - Omset: {$omsetValue} - Sisa: 0");
-
-//             } elseif ($service->status_services === 'Selesai') {
-//                 // FIXED: Service Selesai = cek status pembayaran
-//                 if ($isLunas) {
-//                     // Selesai dan sudah lunas
-//                     $omsetValue = $totalBiaya; // Uang masuk = total biaya
-//                     $summary['completed_omset'] += $omsetValue;
-//                     $summary['total_omset'] += $omsetValue;
-//                     // Tidak ada sisa tagihan karena sudah lunas
-
-//                     Log::info("Service Selesai (Lunas): {$service->nama_pelanggan} - Omset: {$omsetValue} - Sisa: 0");
-//                 } else {
-//                     // Selesai tapi belum lunas
-//                     $omsetValue = $dp; // Uang masuk = DP saja
-//                     $summary['completed_omset'] += $omsetValue;
-//                     $summary['total_omset'] += $omsetValue;
-//                     $summary['total_remaining_payment'] += $sisaBayar; // Ada sisa tagihan
-
-//                     Log::info("Service Selesai (Belum Lunas): {$service->nama_pelanggan} - Omset: {$omsetValue} - Sisa: {$sisaBayar}");
-//                 }
-//             }
-//         }
-
-//         // VALIDASI: Pastikan tidak ada sisa tagihan jika semua service diambil
-//         if ($summary['taken_services'] > 0 && $summary['completed_services'] == 0 && $summary['total_remaining_payment'] > 0) {
-//             Log::warning("INCONSISTENCY: Ada service diambil tapi masih ada sisa tagihan!");
-//             // Reset sisa tagihan jika hanya ada service diambil
-//             $summary['total_remaining_payment'] = 0;
-//         }
-
-//         Log::info("Summary Calculation:", $summary);
-
-//         return $summary;
-//     } catch (\Exception $e) {
-//         Log::error("Calculate Daily Summary Error: " . $e->getMessage());
-//         return [
-//             'total_services' => 0,
-//             'completed_services' => 0,
-//             'taken_services' => 0,
-//             'total_omset' => 0,
-//             'completed_omset' => 0,
-//             'taken_omset' => 0,
-//             'total_dp_collected' => 0,
-//             'total_remaining_payment' => 0,
-//         ];
-//     }
-// }
 public function getDailyReportServices(Request $request)
 {
     try {
@@ -2112,6 +1932,8 @@ public function searchServiceExtended(Request $request)
                 'days_remaining' => now()->diffInDays($warranty->tgl_exp_garansi, false)
             ] : ['exists' => false];
 
+            $service->is_already_claimed = \App\Models\Sevices::where('claimed_from_service_id', $service->id)->exists();
+
             // Hitung parts
             $service->parts_count = [
                 'toko' => DetailPartServices::where('kode_services', $service->id)->count(),
@@ -2510,5 +2332,91 @@ public function searchServiceExtended(Request $request)
                 'message' => 'Terjadi kesalahan saat pencarian advanced: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    //klaim garansi
+    public function initiateWarrantyClaim(Request $request, $originalServiceId)
+    {
+        DB::beginTransaction();
+        try {
+            // 1. Validasi Service Asli
+            $originalService = \App\Models\Sevices::findOrFail($originalServiceId);
+
+            // =====================================================================
+            // KUNCI PERBAIKAN: Cek apakah service ini sudah pernah diklaim
+            // =====================================================================
+            $isAlreadyClaimed = \App\Models\Sevices::where('claimed_from_service_id', $originalService->id)->exists();
+
+            if ($isAlreadyClaimed) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Service ini sudah pernah diklaim sebelumnya. Tidak bisa membuat klaim berulang dari service yang sama.'
+                ], 409); // 409 Conflict adalah status yang tepat untuk ini
+            }
+            // =====================================================================
+
+            // 2. Verifikasi Garansi (kode ini tetap sama)
+            $warranty = \App\Models\Garansi::where('kode_garansi', $originalService->kode_service)
+                            ->where('type_garansi', 'service')
+                            ->where('tgl_exp_garansi', '>=', now())
+                            ->first();
+
+            if (!$warranty) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Garansi tidak ditemukan atau sudah kedaluwarsa untuk service ini.'
+                ], 404);
+            }
+
+            // 3. Buat Service Klaim Baru (kode ini tetap sama)
+            $newService = \App\Models\Sevices::create([
+                'kode_service' => $this->generateKodeService(),
+                'tgl_service' => now(),
+                'nama_pelanggan' => $originalService->nama_pelanggan,
+                'no_telp' => $originalService->no_telp,
+                'type_unit' => $originalService->type_unit,
+                'keterangan' => "Klaim Garansi untuk: " . $originalService->kode_service . "\nKeluhan Baru: " . $request->input('new_description', 'Tidak ada keluhan baru.'),
+                'total_biaya' => 0,
+                'dp' => 0,
+                'status_services' => 'Antri',
+                'kode_owner' => $this->getThisUser()->id_upline,
+                'claimed_from_service_id' => $originalService->id,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Service klaim garansi berhasil dibuat.',
+                'data' => $newService
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Warranty Claim Error for Service ID {$originalServiceId}: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal membuat service klaim garansi.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    private function generateKodeService()
+    {
+        // Format tanggal hari ini
+        $date = date('Ymd'); // YYYYMMDD
+
+        // Generate nomor acak dalam rentang 000 hingga 999
+        $randomNumber = str_pad(rand(0, 999), 3, '0', STR_PAD_LEFT);
+
+        // Pastikan nomor acak tersebut belum ada dalam database untuk hari yang sama
+        while (modelServices::where('kode_service', 'like', 'SV' . $date . $randomNumber . '%')->exists()) {
+            $randomNumber = str_pad(rand(0, 999), 3, '0', STR_PAD_LEFT);
+        }
+
+        // Format kode service
+        return 'SV' . $date . $randomNumber;
     }
 } // End of ServiceApiController class

@@ -2040,12 +2040,23 @@ public function getThisUser()
             ->get();
 
         // Get service data
-        $services = modelServices::where('id_teknisi', $report->user_id)
-            ->whereIn('status_services', ['Selesai','Diambil'])
-            ->whereYear('updated_at', $report->year)
-            ->whereMonth('updated_at', $report->month)
-            ->orderBy('updated_at')
-            ->get();
+        $services = modelServices::query() // Memulai query dari model
+        ->leftJoin('profit_presentases', 'sevices.id', '=', 'profit_presentases.kode_service')
+        // Menggunakan leftJoin agar service tetap tampil meskipun data komisi belum ada
+        ->select(
+            'sevices.updated_at',
+            'sevices.kode_service',
+            'sevices.nama_pelanggan',
+            'sevices.type_unit',
+            'sevices.total_biaya',
+            'profit_presentases.profit as komisi_teknisi' // Mengambil kolom 'komisi' dan menamainya 'komisi_teknisi'
+        )
+        ->where('sevices.id_teknisi', $report->user_id)
+        ->whereIn('sevices.status_services', ['Selesai', 'Diambil'])
+        ->whereYear('sevices.updated_at', $report->year)
+        ->whereMonth('sevices.updated_at', $report->month)
+        ->orderBy('sevices.updated_at')
+        ->get();
 
         // Get violations
         $violations = Violation::where('user_id', $report->user_id)
