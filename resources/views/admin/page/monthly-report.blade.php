@@ -3,6 +3,7 @@
 @section('monthly_report', 'active')
 @section('main', 'menu-is-opening menu-open')
 
+
 <div class="row">
     <div class="col-md-12">
         <div class="card card-outline card-primary">
@@ -34,22 +35,25 @@
             </div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-bordered" id="TABLES_1">
+                    <table class="table table-bordered" id="laporan_dari_absen">
                         <thead>
                             <tr>
                                 <th>#</th>
                                 <th>Nama</th>
                                 <th>Bulan/Tahun</th>
-                                <th>Hari Kerja</th>
+                                <th class="text-nowrap">Hari Kerja</th>
                                 <th>Hadir</th>
                                 <th>Absen</th>
                                 <th>Terlambat</th>
-                                <th>Unit Service</th>
-                                <th>Total Service</th>
+                                <th class="text-nowrap">Unit Service</th>
+                                <th class="text-nowrap">Total Service</th>
                                 <th>Komisi</th>
+                                <th class="text-nowrap">Profit Toko</th>
+                                <th class="text-nowrap">Garansi Dikerjakan</th>
+                                <th class="text-nowrap">Unit klaim garansi</th>
                                 <th>Bonus</th>
                                 <th>Denda</th>
-                                <th>Gaji Akhir</th>
+                                <th class="text-nowrap">Gaji Akhir</th>
                                 <th>Status</th>
                                 <th>Aksi</th>
                             </tr>
@@ -67,6 +71,9 @@
                                     <td>{{ $report->total_service_units }} unit</td>
                                     <td>Rp {{ number_format($report->total_service_amount, 0, ',', '.') }}</td>
                                     <td>Rp {{ number_format($report->total_commission, 0, ',', '.') }}</td>
+                                    <td>Rp {{ number_format($report->total_shop_profit, 0, ',', '.') }}</td>
+                                    <td>{{ $report->total_claims_handled }} unit</td>
+                                    <td>{{ $report->claims_from_own_work }} unit</td>
                                     <td>Rp {{ number_format($report->total_bonus, 0, ',', '.') }}</td>
                                     <td>Rp {{ number_format($report->total_penalties, 0, ',', '.') }}</td>
                                     <td>Rp {{ number_format($report->final_salary, 0, ',', '.') }}</td>
@@ -155,4 +162,36 @@
             .replace(':month', month);
         form.submit();
     }
+</script>
+<script>
+    $(function() {
+        $('#laporan_dari_absen').DataTable({
+            "paging": true,
+            "lengthChange": false, // Menyembunyikan "Show X entries"
+            "searching": true, // Mengaktifkan fitur pencarian
+            "ordering": true,
+            "info": true,
+            "autoWidth": false,
+            "responsive": true,
+            // Properti 'dom' ini adalah kunci untuk mengatur layout.
+            // 'f' (filter/search) dan 'p' (pagination) ditempatkan di kolom kanan.
+            "dom": "<'row'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
+                "<'row'<'col-sm-12'tr>>" +
+                "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+
+            // Opsional: Tambahkan ini untuk menerjemahkan label ke Bahasa Indonesia
+            "language": {
+                "search": "Cari:",
+                "paginate": {
+                    "next": "Berikutnya",
+                    "previous": "Sebelumnya"
+                },
+                "info": "Menampilkan _START_ sampai _END_ dari _TOTAL_ data",
+                "infoEmpty": "Menampilkan 0 sampai 0 dari 0 data",
+                "infoFiltered": "(difilter dari _MAX_ total data)",
+                "zeroRecords": "Tidak ada data yang cocok",
+                "lengthMenu": "Tampilkan _MENU_ data per halaman",
+            }
+        });
+    });
 </script>

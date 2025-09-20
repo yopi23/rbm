@@ -19,6 +19,7 @@ class SalarySetting extends Model
         'service_percentage',
         'target_bonus',
         'monthly_target',
+        'target_shop_profit',
         'percentage_value',
         'max_percentage',
         'created_by',

@@ -24,11 +24,12 @@
                                 <th>#</th>
                                 <th>Nama</th>
                                 <th>Jabatan</th>
-                                <th>Tipe Kompensasi</th>
-                                <th>Gaji Pokok</th>
+                                <th class="text-nowrap">Tipe Kompensasi</th>
+                                <th class="text-nowrap">Gaji Pokok</th>
                                 <th>Persentase</th>
-                                <th>Target Unit</th>
-                                <th>Bonus Target</th>
+                                <th class="text-nowrap">Target Unit</th>
+                                <th class="text-nowrap">Target Profit Toko</th>
+                                <th class="text-nowrap">Bonus Target</th>
                                 <th>Status</th>
                                 <th>Aksi</th>
                             </tr>
@@ -64,10 +65,8 @@
                                         @endif
                                     </td>
                                     <td>
-                                        @if ($setting && $setting->compensation_type == 'fixed')
+                                        @if ($setting)
                                             Rp {{ number_format($setting->basic_salary, 0, ',', '.') }}
-                                        @elseif($setting)
-                                            -
                                         @else
                                             -
                                         @endif
@@ -84,14 +83,21 @@
                                         @endif
                                     </td>
                                     <td>
-                                        @if ($setting && $setting->compensation_type == 'fixed')
+                                        @if ($setting)
                                             {{ $setting->monthly_target }} unit
                                         @else
                                             -
                                         @endif
                                     </td>
                                     <td>
-                                        @if ($setting && $setting->compensation_type == 'fixed')
+                                        @if ($setting)
+                                            Rp {{ number_format($setting->target_shop_profit, 0, ',', '.') }}
+                                        @else
+                                            -
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if ($setting)
                                             Rp {{ number_format($setting->target_bonus, 0, ',', '.') }}
                                         @else
                                             -
@@ -105,7 +111,7 @@
                                         @endif
                                     </td>
                                     <td>
-                                        <button class="btn btn-warning btn-sm"
+                                        <button class="btn btn-warning btn-sm my-2"
                                             onclick="editSalary({{ json_encode([
                                                 'user_id' => $employee->id_user,
                                                 'name' => $employee->name,
@@ -115,6 +121,7 @@
                                                 'target_bonus' => $setting->target_bonus ?? 0,
                                                 'monthly_target' => $setting->monthly_target ?? 0,
                                                 'percentage_value' => $setting->percentage_value ?? 0,
+                                                'target_shop_profit' => $setting->target_shop_profit ?? 0,
                                             ]) }})">
                                             <i class="fas fa-edit"></i>
                                             {{ $setting ? 'Edit' : 'Atur' }}
@@ -154,7 +161,7 @@
 
                     <div class="form-group">
                         <label><strong>Karyawan:</strong></label>
-                        <p id="employee_name_display" class="form-control-static"></p>
+                        <p id="employee_name_display" class="form-control-static font-weight-bold"></p>
                     </div>
 
                     <div class="form-group">
@@ -163,9 +170,8 @@
                             <input class="form-check-input" type="radio" name="compensation_type" id="type_fixed"
                                 value="fixed" checked>
                             <label class="form-check-label" for="type_fixed">
-                                <strong>Gaji Tetap + Komisi</strong>
-                                <small class="text-muted d-block">Gaji pokok bulanan + persentase dari service + bonus
-                                    target</small>
+                                <strong>Gaji Tetap</strong>
+                                <small class="text-muted d-block">Menerima gaji pokok bulanan.</small>
                             </label>
                         </div>
                         <div class="form-check">
@@ -173,66 +179,55 @@
                                 value="percentage">
                             <label class="form-check-label" for="type_percentage">
                                 <strong>Persentase Profit</strong>
-                                <small class="text-muted d-block">Persentase dari keuntungan bersih service</small>
+                                <small class="text-muted d-block">Hanya menerima komisi dari profit service.</small>
                             </label>
                         </div>
                     </div>
 
-                    <!-- Fixed Salary Fields -->
                     <div id="fixedFields">
-                        <div class="card border-primary">
-                            <div class="card-header bg-primary text-white">
-                                <h6 class="mb-0">Pengaturan Gaji Tetap</h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label>Gaji Pokok (Rp) *</label>
-                                            <input type="number" name="basic_salary" id="basic_salary"
-                                                class="form-control" min="0" step="1000">
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label>Persentase Komisi Service (%) *</label>
-                                            <input type="number" name="service_percentage" id="service_percentage"
-                                                class="form-control" min="0" max="100">
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label>Target Unit/Bulan *</label>
-                                            <input type="number" name="monthly_target" id="monthly_target"
-                                                class="form-control" min="0">
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label>Bonus Target (Rp) *</label>
-                                            <input type="number" name="target_bonus" id="target_bonus"
-                                                class="form-control" min="0" step="1000">
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                        <div class="form-group">
+                            <label>Gaji Pokok (Rp) *</label>
+                            <input type="number" name="basic_salary" id="basic_salary" class="form-control"
+                                min="0" step="1000">
                         </div>
                     </div>
 
-                    <!-- Percentage Fields -->
-                    <div id="percentageFields" style="display:none;">
-                        <div class="card border-success">
-                            <div class="card-header bg-success text-white">
-                                <h6 class="mb-0">Pengaturan Persentase Profit</h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="form-group">
-                                    <label>Persentase dari Profit (%) *</label>
-                                    <input type="number" name="percentage_value" id="percentage_value"
-                                        class="form-control" min="0" max="100" step="0.1">
-                                    <small class="form-text text-muted">
-                                        <i class="fas fa-info-circle"></i> Profit = Total Service - Harga Sparepart
-                                    </small>
+                    <div id="percentageFields">
+                        <div class="form-group">
+                            <label>Persentase dari Profit (%) *</label>
+                            <input type="number" name="percentage_value" id="percentage_value" class="form-control"
+                                min="0" max="100" step="0.1">
+                        </div>
+                    </div>
+
+                    <div class="card border-primary mt-3">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0">Pengaturan Target & Bonus (Berlaku untuk Semua Tipe)</h6>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted"><small>Bonus akan diberikan jika kedua target (unit dan profit)
+                                    tercapai dalam satu bulan.</small></p>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="form-group">
+                                        <label>Target Unit/Bulan *</label>
+                                        <input type="number" name="monthly_target" id="monthly_target"
+                                            class="form-control" min="0">
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group">
+                                        <label>Target Min. Profit Toko (Rp) *</label>
+                                        <input type="number" name="target_shop_profit" id="target_shop_profit"
+                                            class="form-control" min="0" step="1000">
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group">
+                                        <label>Bonus Jika Target Tercapai (Rp) *</label>
+                                        <input type="number" name="target_bonus" id="target_bonus"
+                                            class="form-control" min="0" step="1000">
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -241,13 +236,13 @@
                     <div class="alert alert-info mt-3">
                         <h6><i class="fas fa-lightbulb"></i> Catatan Penting:</h6>
                         <ul class="mb-0">
-                            <li>Kehadiran akan mempengaruhi perhitungan gaji</li>
-                            <li>Pelanggaran akan mengurangi total gaji sesuai aturan</li>
-                            <li>Pengaturan ini akan berlaku untuk perhitungan gaji bulanan</li>
+                            <li>Kehadiran akan mempengaruhi perhitungan gaji pokok (untuk tipe Gaji Tetap) atau total
+                                komisi (untuk tipe Persentase).</li>
+                            <li>Pelanggaran akan mengurangi total gaji sesuai aturan yang berlaku.</li>
                         </ul>
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer justify-content-between">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Tutup</button>
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-save"></i> Simpan Pengaturan
@@ -280,110 +275,128 @@
 
 <script>
     function addNewSalary() {
-        // Reset form
+        // Fungsi ini tidak perlu diubah, sudah benar.
         $('#salaryForm')[0].reset();
         $('#modalTitle').text('Tambah Pengaturan Kompensasi');
-        $('#employee_name_display').text('');
+        $('#employee_name_display').text('Pilih Karyawan dari Tabel'); // Beri instruksi
         $('#user_id_salary').val('');
-
-        // Show fixed fields by default
         $('#type_fixed').prop('checked', true);
         toggleCompensationType();
-
         $('#modalSalarySettings').modal('show');
     }
 
+    // ==========================================================
+    // FUNGSI EDIT SALARY YANG DIPERBARUI
+    // ==========================================================
     function editSalary(data) {
-        console.log('Edit salary data:', data); // Debug
+        $('#salaryForm')[0].reset();
 
-        $('#modalTitle').text('Edit Pengaturan Kompensasi - ' + data.name);
+        $('#modalTitle').text('Edit Pengaturan Kompensasi');
         $('#employee_name_display').text(data.name);
         $('#user_id_salary').val(data.user_id);
 
-        // Set compensation type
+        // Set tipe kompensasi
         if (data.compensation_type === 'fixed') {
             $('#type_fixed').prop('checked', true);
             $('#basic_salary').val(data.basic_salary);
-            $('#service_percentage').val(data.service_percentage);
-            $('#monthly_target').val(data.monthly_target);
-            $('#target_bonus').val(data.target_bonus);
         } else {
             $('#type_percentage').prop('checked', true);
             $('#percentage_value').val(data.percentage_value);
         }
 
+        // PERBAIKAN: Isi data target & bonus yang sekarang berlaku untuk semua tipe
+        $('#monthly_target').val(data.monthly_target);
+        $('#target_shop_profit').val(data.target_shop_profit);
+        $('#target_bonus').val(data.target_bonus);
+
         toggleCompensationType();
         $('#modalSalarySettings').modal('show');
     }
 
+    // ==========================================================
+    // FUNGSI VIEW SALARY DETAIL YANG DIPERBARUI
+    // ==========================================================
     function viewSalaryDetail(setting) {
+        // Tambahkan pengecekan jika setting tidak ada
+        if (!setting) {
+            $('#salaryDetailContent').html('<p class="text-center">Pengaturan belum dibuat untuk karyawan ini.</p>');
+            $('#modalSalaryDetail').modal('show');
+            return;
+        }
+
         let content = `
-            <div class="row">
-                <div class="col-12">
-                    <table class="table table-borderless">
-                        <tr>
-                            <td><strong>Tipe Kompensasi:</strong></td>
-                            <td>${setting.compensation_type === 'fixed' ? 'Gaji Tetap' : 'Persentase Profit'}</td>
-                        </tr>
+            <table class="table table-borderless table-sm">
+                <tr>
+                    <td width="40%"><strong>Tipe Kompensasi</strong></td>
+                    <td>: ${setting.compensation_type === 'fixed' ? '<span class="badge badge-primary">Gaji Tetap</span>' : '<span class="badge badge-success">Persentase</span>'}</td>
+                </tr>
         `;
 
         if (setting.compensation_type === 'fixed') {
             content += `
-                        <tr>
-                            <td><strong>Gaji Pokok:</strong></td>
-                            <td>Rp ${new Intl.NumberFormat('id-ID').format(setting.basic_salary)}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Komisi Service:</strong></td>
-                            <td>${setting.service_percentage}%</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Target Bulanan:</strong></td>
-                            <td>${setting.monthly_target} unit</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Bonus Target:</strong></td>
-                            <td>Rp ${new Intl.NumberFormat('id-ID').format(setting.target_bonus)}</td>
-                        </tr>
+                <tr>
+                    <td><strong>Gaji Pokok</strong></td>
+                    <td>: Rp ${new Intl.NumberFormat('id-ID').format(setting.basic_salary)}</td>
+                </tr>
             `;
-        } else {
+        } else { // percentage
             content += `
-                        <tr>
-                            <td><strong>Persentase Profit:</strong></td>
-                            <td>${setting.percentage_value}%</td>
-                        </tr>
+                <tr>
+                    <td><strong>Persentase Profit</strong></td>
+                    <td>: ${setting.percentage_value}%</td>
+                </tr>
             `;
         }
 
+        // PERBAIKAN: Tampilkan data target & bonus untuk semua tipe kompensasi
         content += `
-                    </table>
-                </div>
-            </div>
+            <tr><td colspan="2"><hr class="my-2"></td></tr>
+            <tr>
+                <td colspan="2"><strong>Pengaturan Target & Bonus</strong></td>
+            </tr>
+            <tr>
+                <td><strong>Target Unit/Bulan</strong></td>
+                <td>: ${setting.monthly_target} unit</td>
+            </tr>
+            <tr>
+                <td><strong>Target Profit Toko</strong></td>
+                <td>: Rp ${new Intl.NumberFormat('id-ID').format(setting.target_shop_profit)}</td>
+            </tr>
+            <tr>
+                <td><strong>Bonus Jika Tercapai</strong></td>
+                <td>: Rp ${new Intl.NumberFormat('id-ID').format(setting.target_bonus)}</td>
+            </tr>
         `;
+
+        content += `</table>`;
 
         $('#salaryDetailContent').html(content);
         $('#modalSalaryDetail').modal('show');
     }
 
+    // ==========================================================
+    // FUNGSI TOGGLE YANG DIPERBARUI
+    // ==========================================================
     function toggleCompensationType() {
         const isFixed = $('#type_fixed').is(':checked');
 
+        // Hanya toggle field yang spesifik per tipe
         if (isFixed) {
             $('#fixedFields').show();
             $('#percentageFields').hide();
-            // Set required attributes
-            $('#basic_salary, #service_percentage, #monthly_target, #target_bonus').prop('required', true);
+            $('#basic_salary').prop('required', true);
             $('#percentage_value').prop('required', false);
         } else {
             $('#fixedFields').hide();
             $('#percentageFields').show();
-            // Set required attributes
-            $('#basic_salary, #service_percentage, #monthly_target, #target_bonus').prop('required', false);
+            $('#basic_salary').prop('required', false);
             $('#percentage_value').prop('required', true);
         }
+        // Bagian target dan bonus (yang ada di dalam modal form) tidak lagi di-toggle,
+        // karena sudah dipisahkan dan akan selalu terlihat.
     }
 
-    // Event listeners
+    // Event listeners dan AJAX (tidak perlu diubah, sudah benar)
     $(document).ready(function() {
         $('input[name="compensation_type"]').change(function() {
             toggleCompensationType();
@@ -391,34 +404,36 @@
 
         // Initial setup
         toggleCompensationType();
-    });
 
-    // Handle form submission
-    $('#salaryForm').on('submit', function(e) {
-        e.preventDefault();
+        $('#salaryForm').on('submit', function(e) {
+            e.preventDefault();
+            const submitBtn = $(this).find('button[type="submit"]');
+            const originalText = submitBtn.html();
+            submitBtn.html('<i class="fas fa-spinner fa-spin"></i> Menyimpan...').prop('disabled',
+                true);
 
-        // Show loading
-        const submitBtn = $(this).find('button[type="submit"]');
-        const originalText = submitBtn.html();
-        submitBtn.html('<i class="fas fa-spinner fa-spin"></i> Menyimpan...').prop('disabled', true);
-
-        // Submit form
-        $.ajax({
-            url: $(this).attr('action'),
-            method: 'POST',
-            data: $(this).serialize(),
-            success: function(response) {
-                alert('Pengaturan kompensasi berhasil disimpan!');
-                $('#modalSalarySettings').modal('hide');
-                location.reload();
-            },
-            error: function(xhr) {
-                console.error('Error:', xhr);
-                alert('Terjadi kesalahan: ' + (xhr.responseJSON?.message || 'Silakan coba lagi'));
-            },
-            complete: function() {
-                submitBtn.html(originalText).prop('disabled', false);
-            }
+            $.ajax({
+                url: $(this).attr('action'),
+                method: 'POST',
+                data: $(this).serialize(),
+                success: function(response) {
+                    if (response.success) {
+                        alert('Pengaturan kompensasi berhasil disimpan!');
+                        $('#modalSalarySettings').modal('hide');
+                        location.reload();
+                    }
+                },
+                error: function(xhr) {
+                    let errorMessage = 'Terjadi kesalahan. Silakan coba lagi.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMessage = xhr.responseJSON.message;
+                    }
+                    alert(errorMessage);
+                },
+                complete: function() {
+                    submitBtn.html(originalText).prop('disabled', false);
+                }
+            });
         });
     });
 </script>

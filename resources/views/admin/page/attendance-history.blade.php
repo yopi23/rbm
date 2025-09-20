@@ -422,8 +422,6 @@
 {{-- @push('scripts') --}}
 <script>
     $(function() {
-
-
         $("#attendance_history_table").DataTable({
             "responsive": true,
             "lengthChange": true, // Menampilkan pilihan jumlah data per halaman

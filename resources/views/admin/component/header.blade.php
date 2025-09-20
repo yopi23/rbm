@@ -93,6 +93,12 @@
 
         }
     </style>
+    <style>
+    /* Mencegah teks di dalam elemen ini turun baris */
+    .text-nowrap {
+        white-space: nowrap;
+    }
+</style>
 </head>
 
 <body class="hold-transition sidebar-mini layout-fixed sidebar-collapse">

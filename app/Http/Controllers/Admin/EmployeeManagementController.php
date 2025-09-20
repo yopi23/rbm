@@ -587,14 +587,14 @@ class EmployeeManagementController extends Controller
         $rules = [
             'user_id' => 'required|exists:users,id',
             'compensation_type' => 'required|in:fixed,percentage',
+            'monthly_target' => 'required|integer|min:0',
+            'target_shop_profit' => 'required|numeric|min:0', // <-- Validasi baru
+            'target_bonus' => 'required|numeric|min:0',
         ];
 
         // Tambahkan validasi kondisional berdasarkan tipe kompensasi
         if ($request->compensation_type === 'fixed') {
             $rules['basic_salary'] = 'required|numeric|min:0';
-            $rules['service_percentage'] = 'required|integer|min:0|max:100';
-            $rules['target_bonus'] = 'required|numeric|min:0';
-            $rules['monthly_target'] = 'required|integer|min:0';
         } elseif ($request->compensation_type === 'percentage') {
             $rules['percentage_value'] = 'required|numeric|min:0|max:100';
         }
@@ -607,6 +607,9 @@ class EmployeeManagementController extends Controller
             $data = [
                 'user_id' => $request->user_id,
                 'compensation_type' => $request->compensation_type,
+                'monthly_target' => (int) $request->monthly_target,
+                'target_shop_profit' => (float) $request->target_shop_profit, // <-- Simpan data baru
+                'target_bonus' => (float) $request->target_bonus,
                 'created_by' => auth()->id(),
                 'updated_at' => now(),
             ];
@@ -615,8 +618,7 @@ class EmployeeManagementController extends Controller
                 $data['basic_salary'] = (float) $request->basic_salary;
                 $data['max_salary'] = ((float) $request->basic_salary )??0;
                 $data['service_percentage'] = (int) $request->service_percentage;
-                $data['target_bonus'] = (float) $request->target_bonus;
-                $data['monthly_target'] = (int) $request->monthly_target;
+                $data['max_percentage'] =0;
                 $data['percentage_value'] = 0;
             } else {
                 // Untuk tipe percentage, set field fixed salary ke 0
@@ -625,8 +627,6 @@ class EmployeeManagementController extends Controller
                 $data['max_percentage'] = (float) $request->percentage_value;
                 $data['basic_salary'] = 0;
                 $data['service_percentage'] = 0;
-                $data['target_bonus'] = 0;
-                $data['monthly_target'] = 0;
             }
 
             // Debug: Log data yang akan disimpan
@@ -809,100 +809,106 @@ class EmployeeManagementController extends Controller
     }
 }
 
-private function applyViolationPenalty(Violation $violation)
-{
-    try {
-        $salarySetting = SalarySetting::where('user_id', $violation->user_id)->first();
+    private function applyViolationPenalty(Violation $violation)
+    {
+        try {
+            $salarySetting = SalarySetting::where('user_id', $violation->user_id)->first();
 
-        if (!$salarySetting) {
-            Log::warning("Tidak ada pengaturan kompensasi untuk user: {$violation->user_id}");
-            return [
-                'success' => false,
-                'message' => 'Tidak ada pengaturan kompensasi untuk karyawan ini'
-            ];
-        }
-
-        $penaltyAmount = 0;
-        $originalSettings = $salarySetting->toArray();
-
-        if ($salarySetting->compensation_type === 'fixed') {
-            // Untuk gaji tetap - kurangi basic_salary
-            if ($violation->penalty_amount) {
-                $penaltyAmount = $violation->penalty_amount;
-                $newBasicSalary = max(0, $salarySetting->basic_salary - $penaltyAmount);
-                $salarySetting->update(['basic_salary' => $newBasicSalary]);
-
-                Log::info('Fixed salary penalty applied', [
-                    'violation_id' => $violation->id,
-                    'original_basic_salary' => $originalSettings['basic_salary'],
-                    'penalty_amount' => $penaltyAmount,
-                    'new_basic_salary' => $newBasicSalary
-                ]);
-
-            } elseif ($violation->penalty_percentage) {
-                $penaltyAmount = ($salarySetting->basic_salary * $violation->penalty_percentage) / 100;
-                $newBasicSalary = max(0, $salarySetting->basic_salary - $penaltyAmount);
-                $salarySetting->update(['basic_salary' => $newBasicSalary]);
-
-                Log::info('Fixed salary percentage penalty applied', [
-                    'violation_id' => $violation->id,
-                    'original_basic_salary' => $originalSettings['basic_salary'],
-                    'penalty_percentage' => $violation->penalty_percentage,
-                    'penalty_amount' => $penaltyAmount,
-                    'new_basic_salary' => $newBasicSalary
-                ]);
+            if (!$salarySetting) {
+                return ['success' => false, 'message' => 'Tidak ada pengaturan kompensasi untuk karyawan ini'];
             }
-        } else {
-            // Untuk sistem persentase - kurangi percentage_value
-            if ($violation->penalty_amount) {
-                $salarySetting->update([
-                    'percentage_value' => min(100, $salarySetting->percentage_value - $violation->penalty_percentage)
-                ]);
-            } elseif ($violation->penalty_percentage) {
-                $salarySetting->update([
-                    'percentage_value' => min(100, $salarySetting->percentage_value - $violation->penalty_percentage)
-                ]);
 
-                Log::info('Percentage salary penalty applied', [
-                    'violation_id' => $violation->id,
-                    'penalty_percentage' => $violation->penalty_percentage,
-                    'original_percentage' => $originalSettings['percentage_value'],
-                    'new_percentage' => $newPercentageValue
-                ]);
+            // Ini adalah nilai nominal yang akan dipotong dari gaji di laporan bulanan
+            $penaltyAmount = 0;
+
+            if ($salarySetting->compensation_type === 'fixed') {
+                // Untuk tipe Gaji Tetap, denda nominal akan langsung dihitung dan dicatat.
+                // Pemotongan terjadi saat generate laporan bulanan.
+                if ($violation->penalty_amount > 0) {
+                    $penaltyAmount = $violation->penalty_amount;
+                } elseif ($violation->penalty_percentage > 0) {
+                    // Denda persentase untuk gaji tetap dihitung dari gaji pokok.
+                    $penaltyAmount = ($salarySetting->basic_salary * $violation->penalty_percentage) / 100;
+                }
+            } else { // 'percentage'
+                // Untuk tipe Persentase
+                if ($violation->penalty_percentage > 0) {
+                    // Jika denda berupa PERSENTASE, kita ubah salary_settings secara permanen.
+                    $originalPercentage = $salarySetting->percentage_value;
+                    $newPercentageValue = max(0, $originalPercentage - $violation->penalty_percentage);
+
+                    $salarySetting->update(['percentage_value' => $newPercentageValue]);
+
+                    // Hitung estimasi penalty nominal berdasarkan profit bulan lalu untuk disimpan
+                    // Ini hanya untuk catatan, bukan pemotongan langsung.
+                    $lastMonthProfit = $this->calculateLastMonthProfit($violation->user_id);
+                    $penaltyAmount = ($lastMonthProfit * $violation->penalty_percentage) / 100;
+
+                    Log::info('Percentage salary penalty applied', [
+                        'violation_id' => $violation->id,
+                        'penalty_percentage' => $violation->penalty_percentage,
+                        'original_percentage' => $originalPercentage,
+                        'new_percentage' => $newPercentageValue
+                    ]);
+                } elseif ($violation->penalty_amount > 0) {
+                    // Jika denda berupa NOMINAL, kita TIDAK mengubah percentage_value.
+                    // Cukup catat nilai nominalnya untuk dipotong saat generate laporan.
+                    $penaltyAmount = $violation->penalty_amount;
+                    Log::info('Nominal penalty for percentage-based employee', [
+                        'violation_id' => $violation->id,
+                        'penalty_amount' => $penaltyAmount,
+                    ]);
+                }
             }
+
+            // Simpan nilai nominal denda yang diterapkan untuk catatan & pembatalan
+            $violation->update([
+                'applied_penalty_amount' => $penaltyAmount,
+                'applied_at' => now()
+            ]);
+
+            Log::info('Penalty successfully processed for salary settings', [
+                'violation_id' => $violation->id,
+                'compensation_type' => $salarySetting->compensation_type,
+                'applied_penalty_amount' => $penaltyAmount
+            ]);
+
+            return ['success' => true, 'penalty_amount' => $penaltyAmount];
+
+        } catch (\Exception $e) {
+            Log::error('Error applying violation penalty: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Gagal menerapkan penalty: ' . $e->getMessage()];
         }
-
-        // **PENTING: Update violation dengan applied_penalty_amount dan applied_at**
-        $violation->update([
-            'applied_penalty_amount' => $penaltyAmount,
-            'applied_at' => now()
-        ]);
-
-        Log::info('Penalty successfully applied to salary settings', [
-            'violation_id' => $violation->id,
-            'user_id' => $violation->user_id,
-            'compensation_type' => $salarySetting->compensation_type,
-            'applied_penalty_amount' => $penaltyAmount,
-            'original_settings' => $originalSettings,
-            'new_settings' => $salarySetting->fresh()->toArray(),
-            'processed_by' => auth()->id()
-        ]);
-
-        return ['success' => true, 'penalty_amount' => $penaltyAmount];
-
-    } catch (\Exception $e) {
-        Log::error('Error applying violation penalty: ' . $e->getMessage(), [
-            'violation_id' => $violation->id,
-            'user_id' => $violation->user_id,
-            'error_trace' => $e->getTraceAsString()
-        ]);
-
-        return [
-            'success' => false,
-            'message' => 'Gagal menerapkan penalty: ' . $e->getMessage()
-        ];
     }
-}
+
+    /**
+     * Helper method untuk menghitung estimasi profit bulan lalu.
+     * Letakkan ini di bawah fungsi applyViolationPenalty.
+     */
+    private function calculateLastMonthProfit($userId)
+    {
+        $lastMonth = Carbon::now()->subMonth();
+        $startDate = $lastMonth->startOfMonth();
+        $endDate = $lastMonth->endOfMonth();
+
+        $services = \App\Models\Sevices::where('id_teknisi', $userId)
+            ->whereIn('status_services', ['Selesai', 'Diambil'])
+            ->whereBetween('updated_at', [$startDate, $endDate])
+            ->get();
+
+        if ($services->isEmpty()) {
+            return 0; // Kembalikan 0 jika tidak ada service bulan lalu
+        }
+
+        $serviceIds = $services->pluck('id');
+
+        // Total profit adalah gabungan komisi teknisi dan profit toko
+        $totalProfit = \App\Models\ProfitPresentase::whereIn('kode_service', $serviceIds)
+            ->where('kode_user', $userId)
+            ->sum(DB::raw('profit + profit_toko'));
+
+        return $totalProfit;
+    }
 
 public function reversePenalty(Request $request)
 {
@@ -1075,28 +1081,20 @@ public function reversePenalty(Request $request)
 
         $salarySetting = SalarySetting::where('user_id', $userId)->first();
         if (!$salarySetting) {
-            \Log::warning("Tidak ada pengaturan kompensasi untuk user: $userId");
-            return;
+            \Log::warning("Tidak ada pengaturan kompensasi untuk user: $userId, laporan dilewati.");
+            return; // Hentikan fungsi jika tidak ada pengaturan gaji
         }
 
-        // Hitung hari kerja berdasarkan schedule yang aktual
-        $workingDaysCount = WorkSchedule::where('user_id', $userId)
-            ->where('is_working_day', true)
-            ->count();
-
-        // Hitung total hari kerja dalam bulan
+        // Hitung hari kerja berdasarkan schedule
         $daysInMonth = $endDate->day;
         $totalWorkingDays = 0;
-
         for ($day = 1; $day <= $daysInMonth; $day++) {
             $currentDate = Carbon::create($year, $month, $day);
             $dayOfWeek = $currentDate->format('l');
-
             $hasSchedule = WorkSchedule::where('user_id', $userId)
                 ->where('day_of_week', $dayOfWeek)
                 ->where('is_working_day', true)
                 ->exists();
-
             if ($hasSchedule) {
                 $totalWorkingDays++;
             }
@@ -1106,68 +1104,90 @@ public function reversePenalty(Request $request)
         $attendances = Attendance::where('user_id', $userId)
             ->whereBetween('attendance_date', [$startDate, $endDate])
             ->get();
-
         $totalPresentDays = $attendances->where('status', 'hadir')->count();
         $totalAbsentDays = $totalWorkingDays - $totalPresentDays;
         $totalLateMinutes = $attendances->sum('late_minutes');
 
-        // Hitung service
+        // Hitung data service
         $services = modelServices::where('id_teknisi', $userId)
-            ->whereIn('status_services', ['Selesai','Diambil'])
+            ->whereIn('status_services', ['Selesai', 'Diambil'])
             ->whereBetween('updated_at', [$startDate, $endDate])
             ->get();
-
         $totalServiceUnits = $services->count();
         $totalServiceAmount = $services->sum('total_biaya');
-        $totalPartCost = $services->sum('harga_sp');
+        $serviceIds = $services->pluck('id');
 
-        // === HITUNG KOMPENSASI BERDASARKAN TIPE ===
-        $totalCommission = 0;
+        // Ambil data komisi dan profit dari tabel profit_presentases
+        $totalCommission = \App\Models\ProfitPresentase::whereIn('kode_service', $serviceIds)
+            ->where('kode_user', $userId)->sum('profit');
+        $totalShopProfit = \App\Models\ProfitPresentase::whereIn('kode_service', $serviceIds)
+            ->where('kode_user', $userId)->sum('profit_toko');
+
+        // Hitung total biaya part secara akurat
+        $totalPartCost = $totalServiceAmount - ($totalCommission + $totalShopProfit);
+
+        // Hitung metrik klaim garansi
+        $totalClaimsHandled = \App\Models\Sevices::where('id_teknisi', $userId)
+            ->whereNotNull('claimed_from_service_id')
+            ->whereBetween('updated_at', [$startDate, $endDate])
+            ->count();
+        $claimsFromOwnWork = \App\Models\Sevices::query()
+            ->from('sevices as claims')
+            ->join('sevices as originals', 'claims.claimed_from_service_id', '=', 'originals.id')
+            ->where('originals.id_teknisi', $userId)
+            ->whereNotNull('claims.claimed_from_service_id')
+            ->whereBetween('claims.created_at', [$startDate, $endDate])
+            ->count();
+
+        // Hitung kompensasi berdasarkan tipe
         $totalBonus = 0;
         $basicSalary = 0;
-
         if ($salarySetting->compensation_type == 'fixed') {
-            // Sistem gaji tetap
             $basicSalary = $salarySetting->basic_salary;
-
-            // Potong gaji berdasarkan absent days
             $attendanceRate = $totalWorkingDays > 0 ? ($totalPresentDays / $totalWorkingDays) : 1;
             $basicSalary = $basicSalary * $attendanceRate;
-
-            // Hitung komisi dari service
-            $totalCommission = ($totalServiceAmount * $salarySetting->service_percentage) / 100;
-
-            // Bonus jika mencapai target
-            if ($salarySetting->monthly_target > 0 && $totalServiceUnits >= $salarySetting->monthly_target) {
-                $totalBonus = $salarySetting->target_bonus;
-            }
-        } else {
-            // Sistem persentase profit
-            $profit = $totalServiceAmount - $totalPartCost;
-            $totalCommission = ($profit * $salarySetting->percentage_value) / 100;
-
-            // Kurangi komisi berdasarkan kehadiran untuk sistem persentase
+        } else { // percentage
             $attendanceRate = $totalWorkingDays > 0 ? ($totalPresentDays / $totalWorkingDays) : 1;
             $totalCommission = $totalCommission * $attendanceRate;
         }
 
-        // === HITUNG PENALTIES DARI VIOLATIONS BIASA ===
+        // Logika bonus (berlaku untuk semua)
+        if ($salarySetting->monthly_target > 0 && $salarySetting->target_bonus > 0) {
+            if ($totalServiceUnits >= $salarySetting->monthly_target && $totalShopProfit >= $salarySetting->target_shop_profit) {
+                $totalBonus = $salarySetting->target_bonus;
+            }
+        }
+
+        // ========================================================================
+        // === PERBAIKAN LOGIKA PERHITUNGAN DENDA (PENALTIES) ===
+        // ========================================================================
         $violations = Violation::where('user_id', $userId)
             ->where('status', 'processed')
             ->whereBetween('violation_date', [$startDate, $endDate])
             ->get();
 
-        $totalPenalties = $violations->sum('penalty_amount');
+        $totalPenalties = 0;
 
-        // Tambahkan penalty dari persentase violations biasa
         foreach ($violations as $violation) {
-            if ($violation->penalty_percentage) {
-                $penaltyAmount = ($totalCommission * $violation->penalty_percentage) / 100;
-                $totalPenalties += $penaltyAmount;
+            if ($salarySetting->compensation_type == 'fixed') {
+                // Untuk Gaji Tetap, semua jenis denda dihitung menjadi nominal
+                if ($violation->penalty_amount > 0) {
+                    $totalPenalties += $violation->penalty_amount;
+                } elseif ($violation->penalty_percentage > 0) {
+                    // Dihitung dari gaji pokok saat pelanggaran terjadi (lebih akurat)
+                    $totalPenalties += ($salarySetting->basic_salary * $violation->penalty_percentage) / 100;
+                }
+            } elseif ($salarySetting->compensation_type == 'percentage') {
+                // Untuk Persentase, HANYA denda nominal yang dihitung sebagai pengurang komisi
+                if ($violation->penalty_amount > 0) {
+                    $totalPenalties += $violation->penalty_amount;
+                }
+                // Jika denda berupa persentase, kita TIDAK melakukan apa-apa di sini.
+                // Pengurangan sudah terjadi pada `percentage_value` di salary_settings.
             }
         }
 
-        // === HITUNG PELANGGARAN IZIN KELUAR KANTOR dengan database rules ===
+        // Logika untuk denda izin keluar kantor (jika Anda menggunakannya)
         $outsideOfficeViolations = OutsideOfficeLog::where('user_id', $userId)
             ->where('status', 'violated')
             ->whereYear('log_date', $year)
@@ -1179,19 +1199,15 @@ public function reversePenalty(Request $request)
 
         foreach ($outsideOfficeViolations as $violation) {
             if ($violation->late_return_minutes > 15) {
-                // UPDATED: Gunakan penalty rules dari database
                 $penaltyInfo = \App\Http\Controllers\Admin\PenaltyRulesController::getApplicablePenalty(
                     'outside_office_late',
                     'both',
                     $violation->late_return_minutes
                 );
-
                 if ($penaltyInfo['success'] && $penaltyInfo['should_create_violation']) {
                     $penaltyPercentage = $penaltyInfo['penalty_percentage'];
                     $penaltyAmount = ($totalCommission * $penaltyPercentage) / 100;
                     $outsideOfficePenalties += $penaltyAmount;
-
-                    // Simpan detail untuk summary
                     $outsideOfficeSummary[] = [
                         'date' => $violation->log_date->format('d/m/Y'),
                         'late_minutes' => $violation->late_return_minutes,
@@ -1203,8 +1219,7 @@ public function reversePenalty(Request $request)
                 }
             }
         }
-
-        // Tambahkan ke total penalties
+        // Tambahkan denda izin keluar ke total denda
         $totalPenalties += $outsideOfficePenalties;
 
         // === HITUNG GAJI FINAL ===
@@ -1224,6 +1239,9 @@ public function reversePenalty(Request $request)
                 'total_service_amount' => $totalServiceAmount,
                 'total_part_cost' => $totalPartCost,
                 'total_commission' => $totalCommission,
+                'total_shop_profit' => $totalShopProfit,
+                'total_claims_handled' => $totalClaimsHandled,
+                'claims_from_own_work' => $claimsFromOwnWork,
                 'total_bonus' => $totalBonus,
                 'total_penalties' => $totalPenalties,
                 'final_salary' => $finalSalary,
@@ -1237,14 +1255,15 @@ public function reversePenalty(Request $request)
                 'status' => 'draft',
                 'processed_by' => auth()->id(),
                 'percentage_used' => $salarySetting->compensation_type == 'percentage'
-                                    ? $salarySetting->percentage_value
-                                    : $salarySetting->service_percentage,
+                                        ? $salarySetting->percentage_value
+                                        : ($salarySetting->service_percentage ?? 0),
                 'metadata' => json_encode([
                     'penalty_rules_version' => 'database_driven',
                     'calculated_at' => now()->toISOString(),
                     'rules_used' => $outsideOfficeSummary
                 ])
-            ]);
+            ]
+        );
     }
 
     /**

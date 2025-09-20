@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\CommissionController;
 use App\Http\Controllers\Api\FinancialReportApiController;
 use App\Http\Controllers\Api\PengeluaranApiController;
 use App\Http\Controllers\Api\WebhookController;
+use App\Http\Controllers\Api\TokoSettingController;
 use App\Http\Controllers\Admin\EmployeeManagementController;
 use Illuminate\Support\Facades\Broadcast;
 
@@ -73,6 +74,10 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     // Route::get('/user', function (Request $request) {
     //     return $request->user();
     // });
+
+    Route::get('/toko-settings', [TokoSettingController::class, 'getSettings']);
+    Route::post('/toko-settings', [TokoSettingController::class, 'updateSettings']);
+
     Route::get('/user-profile/{kode_user}', [UserDataController::class, 'getUserProfile']);
     Route::post('/penarikan', [UserDataController::class, 'store_penarikan']);
     Route::get('/karyawan', [UserDataController::class, 'getKaryawan']);
