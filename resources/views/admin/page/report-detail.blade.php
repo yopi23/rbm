@@ -6,7 +6,6 @@
 
 
 <div class="row">
-    <!-- Summary Card -->
     <div class="col-md-12">
         <div class="card card-outline card-primary">
             <div class="card-header">
@@ -19,58 +18,71 @@
                     </a>
                 </div>
             </div>
-            <!-- Add this near the top of the card-body -->
-            <div class="row mb-3">
-                <div class="col-md-12">
-                    <div class="alert alert-info">
-                        <strong>Tipe Kompensasi:</strong>
-                        {{ $report->compensation_type == 'fixed' ? 'Gaji Tetap' : 'Persentase Profit' }}
-                        @if ($report->compensation_type == 'percentage')
-                            ({{ $report->percentage_used }}% dari profit)
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="alert alert-info">
+                            <strong>Tipe Kompensasi:</strong>
+                            {{ $report->compensation_type == 'fixed' ? 'Gaji Tetap' : 'Persentase Profit' }}
+                            @if ($report->compensation_type == 'percentage' || $report->compensation_type == 'fixed')
+                                ({{ $report->percentage_used }}% dari profit service)
+                            @endif
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        @if ($report->user->salarySetting && $report->user->salarySetting->monthly_target > 0)
+                            <div class="alert {{ $report->total_bonus > 0 ? 'alert-success' : 'alert-warning' }}">
+                                <strong>Target Bonus:</strong>
+                                {{ $report->user->salarySetting->monthly_target }} unit & Rp
+                                {{ number_format($report->user->salarySetting->target_shop_profit, 0, ',', '.') }}
+                                profit toko.
+                                <br>
+                                <strong>Pencapaian:</strong> {{ $report->total_service_units }} unit & Rp
+                                {{ number_format($report->real_shop_profit, 0, ',', '.') }} profit.
+                                <strong>({{ $report->total_bonus > 0 ? 'BONUS DIDAPAT' : 'TARGET TIDAK TERCAPAI' }})</strong>
+                            </div>
                         @endif
                     </div>
                 </div>
-            </div>
-            <div class="card-body">
+
                 <div class="row">
-                    <div class="col-md-3">
-                        <div class="info-box">
-                            <span class="info-box-icon bg-info"><i class="fas fa-calendar-check"></i></span>
-                            <div class="info-box-content">
-                                <span class="info-box-text">Kehadiran</span>
-                                <span
-                                    class="info-box-number">{{ $report->total_present_days }}/{{ $report->total_working_days }}
-                                    hari</span>
+                    <div class="col-lg-3 col-6">
+                        <div class="small-box bg-info">
+                            <div class="inner">
+                                <h3>{{ $report->total_present_days }}/<small>{{ $report->total_working_days }}
+                                        Hari</small>
+                                </h3>
+                                <p>Kehadiran</p>
                             </div>
+                            <div class="icon"><i class="fas fa-calendar-check"></i></div>
                         </div>
                     </div>
-                    <div class="col-md-3">
-                        <div class="info-box">
-                            <span class="info-box-icon bg-success"><i class="fas fa-tools"></i></span>
-                            <div class="info-box-content">
-                                <span class="info-box-text">Service</span>
-                                <span class="info-box-number">{{ $report->total_service_units }} unit</span>
+                    <div class="col-lg-3 col-6">
+                        <div class="small-box bg-success">
+                            <div class="inner">
+                                <h3>{{ $report->taken_units }} <small>dari {{ $report->total_service_units }}
+                                        Unit</small></h3>
+                                <p>Unit Diambil Pelanggan</p>
                             </div>
+                            <div class="icon"><i class="fas fa-check-double"></i></div>
                         </div>
                     </div>
-                    <div class="col-md-3">
-                        <div class="info-box">
-                            <span class="info-box-icon bg-warning"><i class="fas fa-coins"></i></span>
-                            <div class="info-box-content">
-                                <span class="info-box-text">Komisi</span>
-                                <span class="info-box-number">Rp
-                                    {{ number_format($report->total_commission, 0, ',', '.') }}</span>
+                    <div class="col-lg-3 col-6">
+                        <div class="small-box bg-warning">
+                            <div class="inner">
+                                <h3>Rp {{ number_format($report->real_shop_profit, 0, ',', '.') }}</h3>
+                                <p>Profit Toko (Terealisasi)</p>
                             </div>
+                            <div class="icon"><i class="fas fa-store"></i></div>
                         </div>
                     </div>
-                    <div class="col-md-3">
-                        <div class="info-box">
-                            <span class="info-box-icon bg-primary"><i class="fas fa-money-bill-wave"></i></span>
-                            <div class="info-box-content">
-                                <span class="info-box-text">Gaji Akhir</span>
-                                <span class="info-box-number">Rp
-                                    {{ number_format($report->final_salary, 0, ',', '.') }}</span>
+                    <div class="col-lg-3 col-6">
+                        <div class="small-box bg-primary">
+                            <div class="inner">
+                                <h3>Rp {{ number_format($report->final_salary, 0, ',', '.') }}</h3>
+                                <p>Gaji Akhir (Diterima)</p>
                             </div>
+                            <div class="icon"><i class="fas fa-money-bill-wave"></i></div>
                         </div>
                     </div>
                 </div>
@@ -80,9 +92,13 @@
 
     <!-- Attendance Detail -->
     <div class="col-md-12">
-        <div class="card card-outline card-info">
+        <div class="card card-outline card-info collapsed-card">
             <div class="card-header">
                 <h3 class="card-title">Detail Kehadiran</h3>
+                <div class="card-tools">
+                    <button type="button" class="btn btn-tool" data-card-widget="collapse"><i
+                            class="fas fa-plus"></i></button>
+                </div>
             </div>
             <div class="card-body">
                 <table class="table table-bordered" id="table_Kehadiran">
@@ -142,15 +158,20 @@
 
     <!-- Service Detail -->
     <div class="col-md-12">
-        <div class="card card-outline card-success">
+        <div class="card card-outline card-success collapsed-card">
             <div class="card-header">
-                <h3 class="card-title">Detail Service</h3>
+                <h3 class="card-title">Detail Service (Klik untuk Buka)</h3>
+                <div class="card-tools">
+                    <button type="button" class="btn btn-tool" data-card-widget="collapse"><i
+                            class="fas fa-plus"></i></button>
+                </div>
             </div>
             <div class="card-body">
                 <table class="table table-bordered" id="table_Service">
                     <thead>
                         <tr>
-                            <th>Tanggal</th>
+                            <th>Tanggal Transaksi</th>
+                            <th>Status</th>
                             <th>Kode Service</th>
                             <th>Pelanggan</th>
                             <th>Unit</th>
@@ -161,14 +182,19 @@
                     <tbody>
                         @foreach ($services as $service)
                             <tr>
-                                <td>{{ \Carbon\Carbon::parse($service->updated_at)->format('d M Y') }}</td>
+                                <td>{{ \Carbon\Carbon::parse($service->transaction_date)->format('d M Y') }}</td>
+                                <td>
+                                    @if ($service->status_services == 'Diambil')
+                                        <span class="badge badge-success">Diambil</span>
+                                    @else
+                                        <span class="badge badge-info">Selesai</span>
+                                    @endif
+                                </td>
                                 <td>{{ $service->kode_service }}</td>
                                 <td>{{ $service->nama_pelanggan }}</td>
                                 <td>{{ $service->type_unit }}</td>
                                 <td>Rp {{ number_format($service->total_biaya, 0, ',', '.') }}</td>
-                                <td>Rp
-                                    {{ number_format($service->komisi_teknisi ?? 0, 0, ',', '.') }}
-                                </td>
+                                <td>Rp {{ number_format($service->komisi_teknisi ?? 0, 0, ',', '.') }}</td>
                             </tr>
                         @endforeach
                     </tbody>

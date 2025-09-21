@@ -132,7 +132,7 @@
             <td class="text-right">Rp {{ number_format($report->total_service_amount, 0, ',', '.') }}</td>
         </tr>
         <tr>
-            <td>Komisi Service ({{ $report->user->salarySetting->service_percentage }}%)</td>
+            <td>Komisi Service ({{ $report->user->salarySetting->compensation_type }})</td>
             <td class="text-right">Rp {{ number_format($report->total_commission, 0, ',', '.') }}</td>
         </tr>
         <tr>

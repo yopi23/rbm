@@ -45,10 +45,13 @@
                                 <th>Hadir</th>
                                 <th>Absen</th>
                                 <th>Terlambat</th>
-                                <th class="text-nowrap">Unit Service</th>
+                                <th class="text-nowrap bg-light">Unit Selesai</th>
+                                <th class="text-nowrap bg-light">Unit Diambil</th>
+                                <th class="text-nowrap bg-light">Unit Blm Diambil</th>
                                 <th class="text-nowrap">Total Service</th>
                                 <th>Komisi</th>
-                                <th class="text-nowrap">Profit Toko</th>
+                                <th class="text-nowrap text-success">Profit Toko (Real)</th>
+                                <th class="text-nowrap text-warning">Profit Potensial</th>
                                 <th class="text-nowrap">Garansi Dikerjakan</th>
                                 <th class="text-nowrap">Unit klaim garansi</th>
                                 <th>Bonus</th>
@@ -68,10 +71,15 @@
                                     <td>{{ $report->total_present_days }}</td>
                                     <td>{{ $report->total_absent_days }}</td>
                                     <td>{{ $report->total_late_minutes }} menit</td>
-                                    <td>{{ $report->total_service_units }} unit</td>
+                                    <td class="bg-light">{{ $report->total_service_units }} unit</td>
+                                    <td class="bg-light">{{ $report->taken_units }} unit</td>
+                                    <td class="bg-light">{{ $report->completed_units_not_taken }} unit</td>
                                     <td>Rp {{ number_format($report->total_service_amount, 0, ',', '.') }}</td>
                                     <td>Rp {{ number_format($report->total_commission, 0, ',', '.') }}</td>
-                                    <td>Rp {{ number_format($report->total_shop_profit, 0, ',', '.') }}</td>
+                                    <td class="text-success font-weight-bold">Rp
+                                        {{ number_format($report->real_shop_profit, 0, ',', '.') }}</td>
+                                    <td class="text-warning">Rp
+                                        {{ number_format($report->potential_shop_profit, 0, ',', '.') }}</td>
                                     <td>{{ $report->total_claims_handled }} unit</td>
                                     <td>{{ $report->claims_from_own_work }} unit</td>
                                     <td>Rp {{ number_format($report->total_bonus, 0, ',', '.') }}</td>
@@ -172,7 +180,8 @@
             "ordering": true,
             "info": true,
             "autoWidth": false,
-            "responsive": true,
+            "responsive": false,
+            "scrollX": true,
             // Properti 'dom' ini adalah kunci untuk mengatur layout.
             // 'f' (filter/search) dan 'p' (pagination) ditempatkan di kolom kanan.
             "dom": "<'row'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +

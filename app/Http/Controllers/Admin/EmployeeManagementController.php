@@ -1108,23 +1108,58 @@ public function reversePenalty(Request $request)
         $totalAbsentDays = $totalWorkingDays - $totalPresentDays;
         $totalLateMinutes = $attendances->sum('late_minutes');
 
-        // Hitung data service
-        $services = modelServices::where('id_teknisi', $userId)
-            ->whereIn('status_services', ['Selesai', 'Diambil'])
-            ->whereBetween('updated_at', [$startDate, $endDate])
-            ->get();
-        $totalServiceUnits = $services->count();
-        $totalServiceAmount = $services->sum('total_biaya');
-        $serviceIds = $services->pluck('id');
+        // ========================================================================
+        // === PERUBAHAN LOGIKA QUERY PENGAMBILAN DATA SERVICE (LEBIH AKURAT) ===
+        // ========================================================================
 
-        // Ambil data komisi dan profit dari tabel profit_presentases
-        $totalCommission = \App\Models\ProfitPresentase::whereIn('kode_service', $serviceIds)
+        // 1. Ambil semua service yang relevan untuk bulan ini
+        $allCompletedServices = modelServices::where('id_teknisi', $userId)
+            ->where(function ($query) use ($startDate, $endDate) {
+                // Kondisi 1: Servis yang DI AMBIL pada rentang tanggal ini
+                $query->where(function ($q) use ($startDate, $endDate) {
+                    $q->where('status_services', 'Diambil')
+                    ->whereBetween('updated_at', [$startDate, $endDate]);
+                })
+                // ATAU
+                // Kondisi 2: Servis yang SELESAI pada rentang tanggal ini
+                ->orWhere(function ($q) use ($startDate, $endDate) {
+                    $q->where('status_services', 'Selesai')
+                    ->whereBetween('tgl_service', [$startDate, $endDate]);
+                });
+            })
+            ->get();
+
+        // 2. Pisahkan service berdasarkan statusnya (logika ini tetap sama)
+        $takenServices = $allCompletedServices->where('status_services', 'Diambil');
+        $notTakenServices = $allCompletedServices->where('status_services', 'Selesai');
+
+        // 3. Hitung jumlah unit
+        $totalServiceUnits = $allCompletedServices->count();
+        $takenUnits = $takenServices->count();
+        $completedUnitsNotTaken = $notTakenServices->count();
+
+        // 4. Dapatkan ID dari masing-masing koleksi service
+        $allCompletedServiceIds = $allCompletedServices->pluck('id');
+        $takenServiceIds = $takenServices->pluck('id');
+        $notTakenServiceIds = $notTakenServices->pluck('id');
+
+        // 5. Hitung total nominal service
+        $totalServiceAmount = $allCompletedServices->sum('total_biaya');
+
+        // 6. Hitung komisi dan profit
+        $totalCommission = \App\Models\ProfitPresentase::whereIn('kode_service', $allCompletedServiceIds)
             ->where('kode_user', $userId)->sum('profit');
-        $totalShopProfit = \App\Models\ProfitPresentase::whereIn('kode_service', $serviceIds)
+
+        $realShopProfit = \App\Models\ProfitPresentase::whereIn('kode_service', $takenServiceIds)
             ->where('kode_user', $userId)->sum('profit_toko');
 
-        // Hitung total biaya part secara akurat
-        $totalPartCost = $totalServiceAmount - ($totalCommission + $totalShopProfit);
+        $potentialShopProfit = \App\Models\ProfitPresentase::whereIn('kode_service', $notTakenServiceIds)
+            ->where('kode_user', $userId)->sum('profit_toko');
+
+        $totalShopProfit = $realShopProfit;
+
+        $totalPartCost = $totalServiceAmount - ($totalCommission + $realShopProfit + $potentialShopProfit);
+
 
         // Hitung metrik klaim garansi
         $totalClaimsHandled = \App\Models\Sevices::where('id_teknisi', $userId)
@@ -1153,13 +1188,13 @@ public function reversePenalty(Request $request)
 
         // Logika bonus (berlaku untuk semua)
         if ($salarySetting->monthly_target > 0 && $salarySetting->target_bonus > 0) {
-            if ($totalServiceUnits >= $salarySetting->monthly_target && $totalShopProfit >= $salarySetting->target_shop_profit) {
+            if ($totalServiceUnits >= $salarySetting->monthly_target && $realShopProfit >= $salarySetting->target_shop_profit) {
                 $totalBonus = $salarySetting->target_bonus;
             }
         }
 
         // ========================================================================
-        // === PERBAIKAN LOGIKA PERHITUNGAN DENDA (PENALTIES) ===
+        // === PERHITUNGAN DENDA (PENALTIES) - TIDAK ADA PERUBAHAN ===
         // ========================================================================
         $violations = Violation::where('user_id', $userId)
             ->where('status', 'processed')
@@ -1170,24 +1205,18 @@ public function reversePenalty(Request $request)
 
         foreach ($violations as $violation) {
             if ($salarySetting->compensation_type == 'fixed') {
-                // Untuk Gaji Tetap, semua jenis denda dihitung menjadi nominal
                 if ($violation->penalty_amount > 0) {
                     $totalPenalties += $violation->penalty_amount;
                 } elseif ($violation->penalty_percentage > 0) {
-                    // Dihitung dari gaji pokok saat pelanggaran terjadi (lebih akurat)
                     $totalPenalties += ($salarySetting->basic_salary * $violation->penalty_percentage) / 100;
                 }
             } elseif ($salarySetting->compensation_type == 'percentage') {
-                // Untuk Persentase, HANYA denda nominal yang dihitung sebagai pengurang komisi
                 if ($violation->penalty_amount > 0) {
                     $totalPenalties += $violation->penalty_amount;
                 }
-                // Jika denda berupa persentase, kita TIDAK melakukan apa-apa di sini.
-                // Pengurangan sudah terjadi pada `percentage_value` di salary_settings.
             }
         }
 
-        // Logika untuk denda izin keluar kantor (jika Anda menggunakannya)
         $outsideOfficeViolations = OutsideOfficeLog::where('user_id', $userId)
             ->where('status', 'violated')
             ->whereYear('log_date', $year)
@@ -1219,7 +1248,6 @@ public function reversePenalty(Request $request)
                 }
             }
         }
-        // Tambahkan denda izin keluar ke total denda
         $totalPenalties += $outsideOfficePenalties;
 
         // === HITUNG GAJI FINAL ===
@@ -1236,10 +1264,14 @@ public function reversePenalty(Request $request)
                 'compensation_type' => $salarySetting->compensation_type,
                 'basic_salary' => $basicSalary,
                 'total_service_units' => $totalServiceUnits,
+                'completed_units_not_taken' => $completedUnitsNotTaken,
+                'taken_units' => $takenUnits,
                 'total_service_amount' => $totalServiceAmount,
                 'total_part_cost' => $totalPartCost,
                 'total_commission' => $totalCommission,
                 'total_shop_profit' => $totalShopProfit,
+                'potential_shop_profit' => $potentialShopProfit,
+                'real_shop_profit' => $realShopProfit,
                 'total_claims_handled' => $totalClaimsHandled,
                 'claims_from_own_work' => $claimsFromOwnWork,
                 'total_bonus' => $totalBonus,
@@ -2049,7 +2081,7 @@ public function getThisUser()
     public function reportDetail($id)
     {
         $page = "Detail Laporan Bulanan";
-        $report = EmployeeMonthlyReport::with(['user', 'processedBy'])->findOrFail($id);
+        $report = EmployeeMonthlyReport::with(['user', 'processedBy', 'user.salarySetting'])->findOrFail($id); // Eager load salarySetting
 
         // Get attendance data
         $attendances = Attendance::where('user_id', $report->user_id)
@@ -2058,24 +2090,37 @@ public function getThisUser()
             ->orderBy('attendance_date')
             ->get();
 
-        // Get service data
-        $services = modelServices::query() // Memulai query dari model
-        ->leftJoin('profit_presentases', 'sevices.id', '=', 'profit_presentases.kode_service')
-        // Menggunakan leftJoin agar service tetap tampil meskipun data komisi belum ada
-        ->select(
-            'sevices.updated_at',
-            'sevices.kode_service',
-            'sevices.nama_pelanggan',
-            'sevices.type_unit',
-            'sevices.total_biaya',
-            'profit_presentases.profit as komisi_teknisi' // Mengambil kolom 'komisi' dan menamainya 'komisi_teknisi'
-        )
-        ->where('sevices.id_teknisi', $report->user_id)
-        ->whereIn('sevices.status_services', ['Selesai', 'Diambil'])
-        ->whereYear('sevices.updated_at', $report->year)
-        ->whereMonth('sevices.updated_at', $report->month)
-        ->orderBy('sevices.updated_at')
-        ->get();
+        // === PERBAIKAN QUERY SERVICE UNTUK DETAIL YANG LEBIH AKURAT ===
+        $startDate = Carbon::create($report->year, $report->month, 1)->startOfMonth();
+        $endDate = Carbon::create($report->year, $report->month, 1)->endOfMonth();
+
+        $services = modelServices::query()
+            ->leftJoin('profit_presentases', 'sevices.id', '=', 'profit_presentases.kode_service')
+            ->select(
+                'sevices.kode_service',
+                'sevices.nama_pelanggan',
+                'sevices.type_unit',
+                'sevices.total_biaya',
+                'sevices.status_services', // Tambahkan status
+                'profit_presentases.profit as komisi_teknisi',
+                // Buat kolom tanggal dinamis berdasarkan status
+                DB::raw("CASE WHEN sevices.status_services = 'Diambil' THEN sevices.updated_at ELSE sevices.tgl_service END as transaction_date")
+            )
+            ->where('sevices.id_teknisi', $report->user_id)
+            // Gunakan logika query yang sama dengan generator laporan
+            ->where(function ($query) use ($startDate, $endDate) {
+                $query->where(function ($q) use ($startDate, $endDate) {
+                    $q->where('sevices.status_services', 'Diambil')
+                    ->whereBetween('sevices.updated_at', [$startDate, $endDate]);
+                })
+                ->orWhere(function ($q) use ($startDate, $endDate) {
+                    $q->where('sevices.status_services', 'Selesai')
+                    ->whereBetween('sevices.tgl_service', [$startDate, $endDate]);
+                });
+            })
+            ->orderBy('transaction_date', 'asc') // Urutkan berdasarkan tanggal transaksi
+            ->get();
+
 
         // Get violations
         $violations = Violation::where('user_id', $report->user_id)
