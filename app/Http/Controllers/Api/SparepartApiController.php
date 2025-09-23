@@ -1179,53 +1179,61 @@ private function getLaciBalance($kategoriLaciId)
 
     // NEW: Adds an external part to a service.
     public function addPartLuarToCompletedService(Request $request) // Renamed from storeSparepartLuar
-    {
-        $validator = Validator::make($request->all(), [
-            'kode_services' => 'required|exists:sevices,id',
-            'nama_part' => 'required|string',
-            'harga_part' => 'required|numeric|min:0',
-            'qty_part' => 'required|integer|min:1',
+{
+    $validator = Validator::make($request->all(), [
+        'kode_services' => 'required|exists:sevices,id',
+        'nama_part' => 'required|string',
+        'harga_part' => 'required|numeric|min:0',
+        'qty_part' => 'required|integer|min:1',
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Validation error',
+            'errors' => $validator->errors()
+        ], 422);
+    }
+
+    DB::beginTransaction();
+    try {
+        $serviceId = $request->kode_services;
+        // PERUBAHAN: Ambil model service untuk digunakan di trait kas
+        $service = modelServices::findOrFail($serviceId);
+
+        $create = DetailPartLuarService::create([
+            'kode_services' => $serviceId,
+            'nama_part' => $request->nama_part,
+            'harga_part' => $request->harga_part,
+            'qty_part' => $request->qty_part,
+            'user_input' => auth()->user()->id,
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation error',
-                'errors' => $validator->errors()
-            ], 422);
-        }
+        // PERUBAHAN: Hitung total biaya dan catat sebagai kas keluar
+        $totalCost = $request->harga_part * $request->qty_part;
+        $deskripsi = "Biaya Part Luar: {$request->nama_part} (x{$request->qty_part}) untuk Service {$service->kode_service}";
+        $this->catatKas($service, 0, $totalCost, $deskripsi);
 
-        DB::beginTransaction();
-        try {
-            $serviceId = $request->kode_services;
+        // Lanjutkan dengan kalkulasi komisi
+        $this->performCommissionRecalculation($serviceId);
 
-            $create = DetailPartLuarService::create([
-                'kode_services' => $serviceId,
-                'nama_part' => $request->nama_part,
-                'harga_part' => $request->harga_part,
-                'qty_part' => $request->qty_part,
-                'user_input' => auth()->user()->id,
-            ]);
+        DB::commit();
 
-            $this->performCommissionRecalculation($serviceId);
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Sparepart luar berhasil ditambahkan dan komisi dihitung ulang.',
-                'data' => $create
-            ], 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error("Add Part Luar to Completed Service Error: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menambahkan sparepart luar.',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+        return response()->json([
+            'success' => true,
+            'message' => 'Sparepart luar berhasil ditambahkan dan komisi dihitung ulang.',
+            'data' => $create
+        ], 201);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error("Add Part Luar to Completed Service Error: " . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal menambahkan sparepart luar.',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
 
     // NEW: Updates an existing external part for a service.
     public function updatePartLuarForCompletedService(Request $request, $detailPartLuarId) // Renamed from updateSparepartLuar
@@ -1248,6 +1256,10 @@ private function getLaciBalance($kategoriLaciId)
         try {
             $update = DetailPartLuarService::findOrFail($detailPartLuarId);
             $serviceId = $update->kode_services;
+            $service = modelServices::findOrFail($serviceId);
+
+            // PERUBAHAN: Hitung biaya lama sebelum update
+            $oldCost = $update->harga_part * $update->qty_part;
 
             $update->update([
                 'nama_part' => $request->nama_part,
@@ -1255,6 +1267,17 @@ private function getLaciBalance($kategoriLaciId)
                 'qty_part' => $request->qty_part,
                 'user_input' => auth()->user()->id,
             ]);
+
+            // PERUBAHAN: Hitung selisih biaya dan catat ke kas
+            $newCost = $request->harga_part * $request->qty_part;
+            $costDifference = $newCost - $oldCost;
+            $deskripsi = "Update Biaya Part Luar: {$request->nama_part} untuk Service {$service->kode_service}";
+
+            if ($costDifference > 0) {
+                $this->catatKas($service, 0, $costDifference, $deskripsi);
+            } elseif ($costDifference < 0) {
+                $this->catatKas($service, abs($costDifference), 0, $deskripsi);
+            }
 
             $this->performCommissionRecalculation($serviceId);
 
@@ -1284,38 +1307,49 @@ private function getLaciBalance($kategoriLaciId)
 
     // NEW: Deletes an external part from a service.
     public function deletePartLuarFromCompletedService($detailPartLuarId) // Renamed from deleteSparepartLuar
-    {
-        DB::beginTransaction();
-        try {
-            $data = DetailPartLuarService::findOrFail($detailPartLuarId);
-            $serviceId = $data->kode_services;
+{
+    DB::beginTransaction();
+    try {
+        $data = DetailPartLuarService::findOrFail($detailPartLuarId);
+        $serviceId = $data->kode_services;
+        // PERUBAHAN: Ambil model service untuk digunakan di trait kas
+        $service = modelServices::findOrFail($serviceId);
 
-            $data->delete();
+        // PERUBAHAN: Hitung total biaya yang dikembalikan dan buat deskripsi
+        $totalCostReversed = $data->harga_part * $data->qty_part;
+        $deskripsi = "Koreksi/Hapus Part Luar: {$data->nama_part} (x{$data->qty_part}) untuk Service {$service->kode_service}";
 
-            $this->performCommissionRecalculation($serviceId);
+        // Hapus data part luar
+        $data->delete();
 
-            DB::commit();
+        // PERUBAHAN: Catat pengembalian sebagai kas masuk
+        $this->catatKas($service, $totalCostReversed, 0, $deskripsi);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Sparepart luar berhasil dihapus dan komisi dihitung ulang.'
-            ], 200);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            DB::rollBack();
-            return response()->json([
-                'success' => false,
-                'message' => 'Detail sparepart luar tidak ditemukan.',
-            ], 404);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error("Delete Part Luar from Completed Service Error: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menghapus sparepart luar.',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+        // Lanjutkan dengan kalkulasi komisi
+        $this->performCommissionRecalculation($serviceId);
+
+        DB::commit();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Sparepart luar berhasil dihapus dan komisi dihitung ulang.'
+        ], 200);
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        DB::rollBack();
+        return response()->json([
+            'success' => false,
+            'message' => 'Detail sparepart luar tidak ditemukan.',
+        ], 404);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error("Delete Part Luar from Completed Service Error: " . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal menghapus sparepart luar.',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
 
 
     /**
@@ -1544,21 +1578,33 @@ private function getLaciBalance($kategoriLaciId)
     {
         // Validasi input
         $request->validate([
-            'kode_services' => 'required|string',
+            'kode_services' => 'required|string|exists:sevices,id', // Diubah ke exists:sevices,id
             'nama_part' => 'required|string',
             'harga_part' => 'required|numeric|min:0',
             'qty_part' => 'required|integer|min:1',
         ]);
 
+        DB::beginTransaction(); // PERUBAHAN: Menggunakan transaksi database untuk keamanan
         try {
+            $serviceId = $request->kode_services;
+            // PERUBAHAN: Ambil model service untuk digunakan di trait kas
+            $service = modelServices::findOrFail($serviceId);
+
             // Membuat record sparepart luar
             $create = DetailPartLuarService::create([
-                'kode_services' => $request->kode_services,
+                'kode_services' => $serviceId,
                 'nama_part' => $request->nama_part,
                 'harga_part' => $request->harga_part,
                 'qty_part' => $request->qty_part,
                 'user_input' => auth()->user()->id,
             ]);
+
+            // PERUBAHAN: Hitung total biaya dan catat sebagai kas keluar
+            $totalCost = $request->harga_part * $request->qty_part;
+            $deskripsi = "Biaya Part Luar: {$request->nama_part} (x{$request->qty_part}) untuk Service {$service->kode_service}";
+            $this->catatKas($service, 0, $totalCost, $deskripsi);
+
+            DB::commit(); // PERUBAHAN: Commit transaksi
 
             // Mengembalikan respons sukses dengan data yang disimpan
             return response()->json([
@@ -1566,6 +1612,7 @@ private function getLaciBalance($kategoriLaciId)
                 'data' => $create
             ], 201);
         } catch (\Exception $e) {
+            DB::rollBack(); // PERUBAHAN: Rollback jika terjadi error
             // Menangani error jika terjadi pengecualian
             return response()->json([
                 'message' => 'Failed to add sparepart luar.',
@@ -1583,29 +1630,78 @@ private function getLaciBalance($kategoriLaciId)
             'qty_part' => 'required|integer|min:1',
         ]);
 
-        $update = DetailPartLuarService::findOrFail($id);
+        DB::beginTransaction(); // PERUBAHAN: Menggunakan transaksi database
+        try {
+            $update = DetailPartLuarService::findOrFail($id);
+            $service = modelServices::findOrFail($update->kode_services);
 
-        $update->update([
-            'nama_part' => $request->nama_part,
-            'harga_part' => $request->harga_part,
-            'qty_part' => $request->qty_part,
-            'user_input' => auth()->user()->id,
-        ]);
+            // PERUBAHAN: Hitung biaya lama sebelum diupdate
+            $oldCost = $update->harga_part * $update->qty_part;
 
-        return response()->json(['message' => 'Sparepart luar updated successfully.'], 200);
+            // Update data part luar
+            $update->update([
+                'nama_part' => $request->nama_part,
+                'harga_part' => $request->harga_part,
+                'qty_part' => $request->qty_part,
+                'user_input' => auth()->user()->id,
+            ]);
+
+            // PERUBAHAN: Hitung biaya baru dan selisihnya
+            $newCost = $request->harga_part * $request->qty_part;
+            $costDifference = $newCost - $oldCost;
+            $deskripsi = "Update Biaya Part Luar: {$request->nama_part} untuk Service {$service->kode_service}";
+
+            if ($costDifference > 0) {
+                // Jika biaya baru lebih besar, catat selisihnya sebagai kas KELUAR
+                $this->catatKas($service, 0, $costDifference, $deskripsi);
+            } elseif ($costDifference < 0) {
+                // Jika biaya baru lebih kecil, catat selisihnya sebagai kas MASUK
+                $this->catatKas($service, abs($costDifference), 0, $deskripsi);
+            }
+            // Jika tidak ada selisih, tidak perlu dicatat
+
+            DB::commit(); // PERUBAHAN: Commit transaksi
+
+            return response()->json(['message' => 'Sparepart luar updated successfully.'], 200);
+
+        } catch (\Exception $e) {
+            DB::rollBack(); // PERUBAHAN: Rollback jika error
+            return response()->json([
+                'message' => 'Failed to update sparepart luar.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     // Delete Sparepart Luar (GENERIC)
     public function deleteSparepartLuar($id)
     {
-        $data = DetailPartLuarService::findOrFail($id);
+        DB::beginTransaction(); // PERUBAHAN: Menggunakan transaksi database
+        try {
+            $data = DetailPartLuarService::findOrFail($id);
+            $service = modelServices::findOrFail($data->kode_services);
 
-        if ($data) {
+            // PERUBAHAN: Hitung total biaya yang dikembalikan
+            $totalCostReversed = $data->harga_part * $data->qty_part;
+            $deskripsi = "Koreksi/Hapus Part Luar: {$data->nama_part} (x{$data->qty_part}) untuk Service {$service->kode_service}";
+
+            // PERUBAHAN: Catat sebagai kas MASUK
+            $this->catatKas($service, $totalCostReversed, 0, $deskripsi);
+
+            // Hapus data
             $data->delete();
-            return response()->json(['message' => 'Sparepart luar deleted successfully.'], 200);
-        }
 
-        return response()->json(['message' => 'Sparepart not found.'], 404);
+            DB::commit(); // PERUBAHAN: Commit transaksi
+
+            return response()->json(['message' => 'Sparepart luar deleted successfully.'], 200);
+
+        } catch (\Exception $e) {
+            DB::rollBack(); // PERUBAHAN: Rollback jika error
+            return response()->json([
+                'message' => 'Failed to delete sparepart luar.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
 

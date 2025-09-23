@@ -2666,56 +2666,65 @@ public function getThisUser()
      * Get attendance history for mobile app
      */
     public function getAttendanceHistory(Request $request, $userId = null)
-{
-    $month = $request->month ?? date('m');
-    $year = $request->year ?? date('Y');
-    $employeeId = $request->employee_id ?? $userId;
+    {
+        try {
+            $month = $request->month ?? date('m');
+            $year = $request->year ?? date('Y');
+            // Jika userId dari route tidak ada, coba ambil dari request body/query
+            $employeeId = $userId ?? $request->employee_id;
 
-    // For admin viewing all or specific employee
-    if ($userId === null) {
-        $query = Attendance::with(['user', 'user.userDetail']);
+            if (!$employeeId) {
+                 return response()->json(['success' => false, 'message' => 'User ID tidak ditemukan'], 400);
+            }
 
-        if ($employeeId) {
-            $query->where('user_id', $employeeId);
-        } else {
-            // Filter by owner if needed
-            $employees = $this->getCurrentOwnerEmployees();
-            $employeeIds = $employees->pluck('id_user');
-            $query->whereIn('user_id', $employeeIds);
+            $startDate = Carbon::create($year, $month, 1)->startOfMonth();
+            $endDate = Carbon::create($year, $month, 1)->endOfMonth();
+
+            // 1. Ambil data riwayat absensi (logika ini sama seperti yang sudah ada)
+            $historyQuery = Attendance::where('user_id', $employeeId)
+                ->whereBetween('attendance_date', [$startDate, $endDate])
+                ->orderBy('attendance_date', 'desc');
+
+            $history = $historyQuery->get()->map(function($item) {
+                // Formatting data agar konsisten
+                return [
+                    'id' => $item->id,
+                    'user_id' => $item->user_id,
+                    'attendance_date' => Carbon::parse($item->attendance_date)->toIso8601String(),
+                    'check_in' => $item->check_in ? Carbon::parse($item->check_in)->toIso8601String() : null,
+                    'check_out' => $item->check_out ? Carbon::parse($item->check_out)->toIso8601String() : null,
+                    'status' => $item->status,
+                    'late_minutes' => $item->late_minutes,
+                    'location' => $item->location,
+                    'note' => $item->note,
+                ];
+            });
+
+            // 2. >>> TAMBAHAN: Hitung rekapitulasi/summary <<<
+            $summaryQuery = Attendance::where('user_id', $employeeId)
+                ->whereBetween('attendance_date', [$startDate, $endDate]);
+
+            $summary = [
+                'hadir' => (clone $summaryQuery)->where('status', 'hadir')->count(),
+                'sakit' => (clone $summaryQuery)->where('status', 'sakit')->count(),
+                'izin' => (clone $summaryQuery)->where('status', 'izin')->count(),
+                'alpha' => (clone $summaryQuery)->where('status', 'alpha')->count(),
+            ];
+
+            // 3. Kembalikan response dalam format yang dibutuhkan frontend
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'history' => $history,
+                    'summary' => $summary,
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error getting attendance history: ' . $e->getMessage(), ['user_id' => $userId]);
+            return response()->json(['success' => false, 'message' => 'Gagal memuat riwayat'], 500);
         }
-
-        $query->whereYear('attendance_date', $year)
-              ->whereMonth('attendance_date', $month)
-              ->orderBy('attendance_date', 'desc');
     }
-    // For employee viewing their own history
-    else {
-        $query = Attendance::where('user_id', $employeeId)
-            ->whereYear('attendance_date', $year)
-            ->whereMonth('attendance_date', $month)
-            ->orderBy('attendance_date', 'desc');
-    }
-
-    $history = $query->get()->map(function($item) {
-        return [
-            'id' => $item->id,
-            'user_id' => $item->user_id,
-            'user_name' => $item->user->name ?? 'Unknown',
-            'attendance_date' => $item->attendance_date,
-            'check_in' => $item->check_in,
-            'check_out' => $item->check_out,
-            'status' => $item->status,
-            'late_minutes' => $item->late_minutes,
-            'location' => $item->location,
-            'note' => $item->note,
-        ];
-    });
-
-    return response()->json([
-        'success' => true,
-        'data' => $history
-    ]);
-}
 
     /**
      * Get user schedule for mobile app

@@ -51,11 +51,11 @@ class AttendanceCronController extends Controller
                     continue;
                 }
 
-                $attendance = Attendance::where('user_id', $employee->id_user)
+                $attendanceExists = Attendance::where('user_id', $employee->id_user)
                     ->whereDate('attendance_date', $today)
                     ->first();
 
-                if (!$attendance || !$attendance->check_in) {
+                if (!$attendanceExists) {
                     Attendance::updateOrCreate(
                         ['user_id' => $employee->id_user, 'attendance_date' => $today],
                         ['status' => 'alpha', 'note' => 'Auto marked as alpha by system at ' . $currentTime->format('H:i')]

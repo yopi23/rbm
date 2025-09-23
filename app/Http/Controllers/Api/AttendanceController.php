@@ -38,16 +38,28 @@ class AttendanceController extends Controller
 
         // Untuk check-in
         if ($type == 'check_in') {
-            // Check if already checked in today
+            // Cari apakah sudah ada record absensi untuk user ini di hari ini
             $existingAttendance = Attendance::where('user_id', $userId)
                 ->whereDate('attendance_date', $today)
                 ->first();
 
-            if ($existingAttendance && $existingAttendance->check_in) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Anda sudah melakukan check-in hari ini'
-                ], 400);
+            // Jika record sudah ada, lakukan pengecekan lebih lanjut
+            if ($existingAttendance) {
+                // 1. Cek jika karyawan sudah pernah check-in (kolom check_in tidak kosong)
+                if ($existingAttendance->check_in) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Anda sudah melakukan check-in hari ini'
+                    ], 400);
+                }
+
+                // 2. Cek jika statusnya adalah izin, sakit, atau cuti. Jika ya, gagalkan check-in.
+                if (in_array($existingAttendance->status, ['izin', 'sakit', 'cuti'])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Gagal check-in. Status Anda hari ini adalah ' . $existingAttendance->status . '.'
+                    ], 400);
+                }
             }
 
             // Get work schedule
