@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\SparePartController;
 use App\Http\Controllers\Admin\SupplierController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\UsersController;
+use App\Http\Controllers\Admin\FinancialController;
 use App\Http\Controllers\Administrator\LaporanOwnerController;
 use App\Http\Controllers\Administrator\OwnerController;
 use App\Http\Controllers\Ajax\AjaxRequestController;
@@ -658,6 +659,8 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     Route::put('/financial/categories/{id}', [App\Http\Controllers\Admin\FinancialController::class, 'updateCategoryStatus'])->name('financial.categories.update');
 
     // Laporan Keuangan
+    Route::get('financial/development-report', [FinancialController::class, 'developmentReport'])->name('financial.developmentReport');
+    Route::get('financial/development-report/print', [FinancialController::class, 'printDevelopmentReport'])->name('financial.development.print');
     Route::get('/financial/reports', [App\Http\Controllers\Admin\FinancialController::class, 'reports'])->name('financial.reports');
     Route::post('/financial/reports/pdf', [App\Http\Controllers\Admin\FinancialController::class, 'exportPdf'])->name('financial.export.pdf');
     Route::post('/financial/reports/excel', [App\Http\Controllers\Admin\FinancialController::class, 'exportExcel'])->name('financial.export.excel');

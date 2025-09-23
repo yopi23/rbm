@@ -286,12 +286,120 @@ class FinancialController extends Controller
         return redirect()->route('financial.transactions')->with('success', 'Deskripsi transaksi berhasil diperbarui.');
     }
 
-    /**
-     * REF-NOTE: Fungsi Hapus (destroy) sangat tidak disarankan untuk data keuangan.
-     * Sebaiknya implementasikan Jurnal Balik (Reversal) jika diperlukan.
-     * Jika tetap ingin ada, pastikan ada proses rekalkulasi saldo yang kompleks.
-     */
+    public function developmentReport(Request $request)
+    {
+        $page = "Laporan Perkembangan Bisnis";
+        $ownerId = $this->getOwnerId();
 
-    // REF-NOTE: Fungsi reports, categories, export PDF/Excel perlu disesuaikan dengan
-    // query ke `KasPerusahaan` dan menggunakan `applyOperationalDateFilter` jika laporannya harian.
+        // Ambil tahun dari request, default ke tahun ini
+        $year = $request->input('year', date('Y'));
+
+        // Ambil daftar tahun unik untuk dropdown filter
+        $availableYears = KasPerusahaan::select(DB::raw('YEAR(tanggal) as year'))
+                            ->where('kode_owner', $ownerId)
+                            ->distinct()
+                            ->orderBy('year', 'desc')
+                            ->pluck('year');
+
+        // Ambil data perkembangan bulanan
+        $developmentData = $this->getMonthlyDevelopmentData($year, $ownerId);
+
+        $content = view('admin.page.financial.development_report', compact(
+            'page', 'developmentData', 'year', 'availableYears'
+        ));
+
+        return view('admin.layout.blank_page', compact('page', 'content'));
+    }
+
+    /**
+     * Mengambil data snapshot kekayaan untuk setiap bulan dalam setahun.
+     */
+   private function getMonthlyDevelopmentData(int $year, int $ownerId): array
+    {
+        $report = [];
+        $months = range(1, 12);
+
+        foreach ($months as $month) {
+            if ($year > date('Y') || ($year == date('Y') && $month > date('m'))) {
+                continue;
+            }
+
+            $endDate = Carbon::create($year, $month)->endOfMonth()->format('Y-m-d H:i:s');
+
+            // 1. Snapshot Kekayaan (Tidak ada perubahan)
+            $saldoKas = KasPerusahaan::where('kode_owner', $ownerId)->where('tanggal', '<=', $endDate)
+                            ->orderBy('tanggal', 'desc')->orderBy('id', 'desc')->first()->saldo ?? 0;
+            $nilaiSparepart = Sparepart::where('kode_owner', $ownerId)->sum(DB::raw('stok_sparepart * harga_beli'));
+            $nilaiHandphone = Handphone::where('kode_owner', $ownerId)->sum(DB::raw('stok_barang * harga_beli_barang'));
+            $totalNilaiBarang = $nilaiSparepart + $nilaiHandphone;
+            $totalNilaiAset = Aset::where('kode_owner', $ownerId)->sum('nilai_perolehan');
+            $totalKekayaan = $saldoKas + $totalNilaiBarang + $totalNilaiAset;
+
+            // 2. Profit Bersih (Tidak ada perubahan)
+            $baseQuery = KasPerusahaan::where('kode_owner', $ownerId)->whereYear('tanggal', $year)
+                            ->whereMonth('tanggal', $month)
+                            ->where(function ($query) {
+                                $query->where('sourceable_type', '!=', 'App\\Models\\TransaksiModal')
+                                    ->orWhereNull('sourceable_type');
+                            });
+            $monthlyIncome = (clone $baseQuery)->sum('debit');
+            $monthlyExpense = (clone $baseQuery)->sum('kredit');
+            $netProfit = $monthlyIncome - $monthlyExpense;
+
+            // 3. --- LOGIKA BARU: Menghitung Alur Konversi Aset ---
+            // Uang menjadi Barang (total belanja/pembelian stok di bulan ini)
+            $cashToGoods = KasPerusahaan::where('kode_owner', $ownerId)
+                ->whereYear('tanggal', $year)->whereMonth('tanggal', $month)
+                ->where('sourceable_type', 'App\\Models\\Pembelian')
+                ->sum('kredit');
+
+            // Barang menjadi Uang (total pemasukan dari penjualan & service di bulan ini)
+            // Berdasarkan kode Anda, sumbernya adalah Penjualan, Sevices, dan Pengambilan
+            $goodsToCash = KasPerusahaan::where('kode_owner', $ownerId)
+                ->whereYear('tanggal', $year)->whereMonth('tanggal', $month)
+                ->whereIn('sourceable_type', ['App\\Models\\Penjualan', 'App\\Models\\Sevices', 'App\\Models\\Pengambilan'])
+                ->sum('debit');
+
+            $report[$month] = [
+                'monthName' => Carbon::create()->month($month)->format('F'),
+                'saldoKas' => $saldoKas,
+                'totalNilaiBarang' => $totalNilaiBarang,
+                'totalNilaiAset' => $totalNilaiAset,
+                'totalKekayaan' => $totalKekayaan,
+                'cashToGoods' => $cashToGoods, // Data baru
+                'goodsToCash' => $goodsToCash, // Data baru
+                'netProfit' => $netProfit
+            ];
+        }
+
+        $chartData = [
+            'labels' => [], 'saldoKas' => [], 'nilaiBarang' => [], 'nilaiAset' => [], 'totalKekayaan' => [],
+        ];
+        foreach ($report as $data) {
+            $chartData['labels'][] = $data['monthName'];
+            $chartData['saldoKas'][] = $data['saldoKas'];
+            $chartData['nilaiBarang'][] = $data['totalNilaiBarang'];
+            $chartData['nilaiAset'][] = $data['totalNilaiAset'];
+            $chartData['totalKekayaan'][] = $data['totalKekayaan'];
+        }
+
+        return ['table' => $report, 'chart' => $chartData];
+    }
+
+    public function printDevelopmentReport(Request $request)
+    {
+        $page = "Cetak Laporan Perkembangan Bisnis";
+        $ownerId = $this->getOwnerId();
+        $year = $request->input('year', date('Y'));
+
+        // Kita gunakan lagi method yang sudah ada untuk mengambil data
+        $developmentData = $this->getMonthlyDevelopmentData($year, $ownerId);
+
+        // Mengarahkan ke view baru yang khusus untuk dicetak
+        return view('admin.page.financial.development_report_print', compact(
+            'page',
+            'developmentData',
+            'year'
+        ));
+    }
 }

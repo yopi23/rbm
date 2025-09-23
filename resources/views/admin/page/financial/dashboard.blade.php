@@ -110,6 +110,8 @@
                 Distribusi Laba</a>
             <a href="{{ route('financial.transactions') }}" class="btn btn-primary"><i class="fas fa-book mr-1"></i>
                 Lihat Buku Besar</a>
+            <a href="{{ route('financial.developmentReport') }}" class="btn btn-success"><i class="fas fa-chart-bar mr-1"></i>
+            Laporan Perkembangan</a>
         </div>
     </div>
 
@@ -192,6 +194,7 @@
                 </div>
                  <div class="card-footer text-center">
                 <a href="{{ route('financial.transactions') }}" class="uppercase">Lihat Semua Transaksi</a>
+
             </div>
             </div>
         </div>
