@@ -61,7 +61,9 @@ class LaciController extends Controller
                     'history_laci.masuk',
                     'history_laci.keluar',
                     'history_laci.keterangan',
-
+                    'history_laci.reference_type',
+                    '.history_laci.reference_id',
+                    'history_laci.reference_code',
                     'history_laci.created_at',
                     'history_laci.updated_at',
                     'kategori_lacis.name_laci'
