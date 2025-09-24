@@ -228,7 +228,8 @@ class FinancialReportApiController extends Controller
 
             $totalGrossProfit = $totalServiceProfit + $totalPenjualanProfit ;
             $totalOperatingExpenses = $totalCashOutStore + $totalCashOutOperational;
-            $netBusinessProfit = $totalGrossProfit - $totalOperatingExpenses;
+
+            $netBusinessProfit = $totalGrossProfit ;
 
             // Hitung statistik part toko
             $totalPartTokoSales = DetailPartServices::join('sevices', 'detail_part_services.kode_services', '=', 'sevices.id')
