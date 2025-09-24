@@ -2627,9 +2627,11 @@ class FinancialReportApiController extends Controller
     // C. Hitung Laba Kotor (Sudah Benar)
     $labaKotor = $totalPendapatan - $totalHpp;
 
+
     // D.1 & D.2: Biaya Variabel (Sudah Benar)
-    $biayaOperasionalInsidental = PengeluaranOperasionalModel::where('kode_owner', $kode_owner)
-        ->whereBetween('tgl_pengeluaran', [$startRange, $endRange])->sum('jml_pengeluaran');
+    $biayaOperasionalInsidental = PengeluaranToko::where('kode_owner', $kode_owner)
+        ->whereBetween('tanggal_pengeluaran', [$startRange, $endRange])
+        ->sum('jumlah_pengeluaran');
     $serviceIdsSelesai = Sevices::where('kode_owner', $kode_owner)->whereIn('status_services', ['Selesai', 'Diambil'])
         ->whereBetween('tgl_service', [$startRange, $endRange])->pluck('id');
     $biayaKomisi = ProfitPresentase::whereIn('kode_service', $serviceIdsSelesai)->sum('profit');

@@ -209,7 +209,9 @@ class DistribusiLabaController extends Controller
         $labaKotor = $totalPendapatan - $totalHpp;
 
         // D. Biaya Variabel (Sudah Benar)
-        $biayaOperasionalInsidental = \App\Models\PengeluaranOperasional::where('kode_owner', $ownerId)->whereBetween('tgl_pengeluaran', [$startRange, $endRange])->sum('jml_pengeluaran');
+        $biayaOperasionalInsidental = \App\Models\PengeluaranToko::where('kode_owner', $ownerId)
+            ->whereBetween('tanggal_pengeluaran', [$startRange, $endRange])
+            ->sum('jumlah_pengeluaran');
         $serviceIdsSelesai = \App\Models\Sevices::where('kode_owner', $ownerId)->whereIn('status_services', ['Selesai','Diambil'])->whereBetween('updated_at', [$startRange, $endRange])->pluck('id');
         $biayaKomisi = \App\Models\ProfitPresentase::whereIn('kode_service', $serviceIdsSelesai)->sum('profit');
 
