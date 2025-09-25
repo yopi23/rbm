@@ -11,6 +11,7 @@ use App\Models\OutsideOfficeLog;
 use App\Models\WorkSchedule;
 use App\Models\User;
 use App\Models\UserDetail;
+use App\Models\ProfitPresentase;
 use App\Models\QrCodeAttendance;
 use App\Models\Sevices as modelServices;
 use Illuminate\Http\Request;
@@ -579,100 +580,93 @@ class EmployeeManagementController extends Controller
     }
 
     public function salarySettingsStore(Request $request)
-    {
-        // Debug: Log semua data yang diterima
-        \Log::info('Salary Settings Store - Request Data:', $request->all());
+{
+    // Bagian validasi sudah benar dan tidak perlu diubah
+    $baseRules = [
+        'user_id' => 'required|exists:users,id',
+        'compensation_type' => 'required|in:fixed,percentage',
+        'target_bonus' => 'required|numeric|min:0',
+    ];
+    $user = \App\Models\User::with('userDetail')->find($request->user_id);
+    if (!$user || !$user->userDetail) {
+        return response()->json(['success' => false, 'message' => 'Detail karyawan tidak ditemukan.'], 404);
+    }
+    $jabatan = $user->userDetail->jabatan;
+    $roleRules = [];
+    if ($jabatan == 3) {
+        $roleRules = ['monthly_target' => 'required|integer|min:0', 'target_shop_profit' => 'required|numeric|min:0'];
+    } elseif ($jabatan == 2) {
+        $roleRules = ['target_transaction_count' => 'required|integer|min:0', 'target_sales_revenue' => 'required|numeric|min:0'];
+    }
+    $compensationRules = [];
+    if ($request->compensation_type === 'fixed') {
+        $compensationRules['basic_salary'] = 'required|numeric|min:0';
+    } elseif ($request->compensation_type === 'percentage') {
+        $compensationRules['percentage_value'] = 'required|numeric|min:0|max:100';
+    }
+    $rules = array_merge($baseRules, $roleRules, $compensationRules);
+    $request->validate($rules);
 
-        // Validasi berdasarkan compensation_type
-        $rules = [
-            'user_id' => 'required|exists:users,id',
-            'compensation_type' => 'required|in:fixed,percentage',
-            'monthly_target' => 'required|integer|min:0',
-            'target_shop_profit' => 'required|numeric|min:0', // <-- Validasi baru
-            'target_bonus' => 'required|numeric|min:0',
+    // Logika penyimpanan dimulai di sini
+    try {
+        DB::beginTransaction();
+
+        $data = [
+            'user_id' => $request->user_id,
+            'compensation_type' => $request->compensation_type,
+            'target_bonus' => (float) $request->target_bonus,
+            'created_by' => auth()->id(),
+            'updated_at' => now(),
         ];
 
-        // Tambahkan validasi kondisional berdasarkan tipe kompensasi
-        if ($request->compensation_type === 'fixed') {
-            $rules['basic_salary'] = 'required|numeric|min:0';
-        } elseif ($request->compensation_type === 'percentage') {
-            $rules['percentage_value'] = 'required|numeric|min:0|max:100';
+        if ($jabatan == 3) { // Teknisi
+            $data['monthly_target'] = (int) $request->monthly_target;
+            $data['target_shop_profit'] = (float) $request->target_shop_profit;
+            $data['target_transaction_count'] = 0;
+            $data['target_sales_revenue'] = 0;
+        } elseif ($jabatan == 2) { // Kasir
+            $data['target_transaction_count'] = (int) $request->target_transaction_count;
+            $data['target_sales_revenue'] = (float) $request->target_sales_revenue;
+            $data['monthly_target'] = 0;
+            $data['target_shop_profit'] = 0;
         }
 
-        $request->validate($rules);
-
-        try {
-            DB::beginTransaction();
-
-            $data = [
-                'user_id' => $request->user_id,
-                'compensation_type' => $request->compensation_type,
-                'monthly_target' => (int) $request->monthly_target,
-                'target_shop_profit' => (float) $request->target_shop_profit, // <-- Simpan data baru
-                'target_bonus' => (float) $request->target_bonus,
-                'created_by' => auth()->id(),
-                'updated_at' => now(),
-            ];
-
-            if ($request->compensation_type == 'fixed') {
-                $data['basic_salary'] = (float) $request->basic_salary;
-                $data['max_salary'] = ((float) $request->basic_salary )??0;
-                $data['service_percentage'] = (int) $request->service_percentage;
-                $data['max_percentage'] =0;
-                $data['percentage_value'] = 0;
-            } else {
-                // Untuk tipe percentage, set field fixed salary ke 0
-                $data['max_salary'] = 0;
-                $data['percentage_value'] = (float) $request->percentage_value;
-                $data['max_percentage'] = (float) $request->percentage_value;
-                $data['basic_salary'] = 0;
-                $data['service_percentage'] = 0;
-            }
-
-            // Debug: Log data yang akan disimpan
-            \Log::info('Salary Settings Store - Data to be saved:', $data);
-
-            $salarySetting = SalarySetting::updateOrCreate(
-                ['user_id' => $request->user_id],
-                $data
-            );
-
-            // Debug: Log hasil penyimpanan
-            \Log::info('Salary Settings Store - Saved Record:', $salarySetting->toArray());
-
-            DB::commit();
-
-            // Return JSON response untuk AJAX
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Pengaturan kompensasi berhasil disimpan',
-                    'data' => $salarySetting
-                ]);
-            }
-
-            return redirect()->back()->with('success', 'Pengaturan kompensasi berhasil disimpan');
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            // Debug: Log error
-            \Log::error('Salary Settings Store Error:', [
-                'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'request_data' => $request->all()
-            ]);
-
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Gagal menyimpan pengaturan: ' . $e->getMessage()
-                ], 500);
-            }
-
-            return redirect()->back()->with('error', 'Gagal menyimpan pengaturan: '.$e->getMessage());
+        // --- PERBAIKAN UTAMA ADA DI SINI ---
+        if ($request->compensation_type == 'fixed') {
+            $data['basic_salary'] = (float) $request->basic_salary;
+            $data['max_salary'] = (float) $request->basic_salary;
+            $data['percentage_value'] = 0;
+            $data['max_percentage'] = 0; // PENAMBAHAN
+        } else { // percentage
+            $data['basic_salary'] = 0;
+            $data['max_salary'] = 0;
+            $data['percentage_value'] = (float) $request->percentage_value;
+            $data['max_percentage'] = (float) $request->percentage_value; // PENAMBAHAN
         }
+
+        $salarySetting = SalarySetting::updateOrCreate(
+            ['user_id' => $request->user_id],
+            $data
+        );
+
+        DB::commit();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pengaturan kompensasi berhasil disimpan',
+            'data' => $salarySetting
+        ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        \Log::error('Salary Settings Store Error: ' . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal menyimpan pengaturan: ' . $e->getMessage()
+        ], 500);
     }
+}
+
 
     // ===================================================================
     // VIOLATIONS MANAGEMENT
@@ -1085,6 +1079,9 @@ public function reversePenalty(Request $request)
             return; // Hentikan fungsi jika tidak ada pengaturan gaji
         }
 
+        $userDetail = \App\Models\UserDetail::where('kode_user', $userId)->first();
+        $jabatan = $userDetail->jabatan;
+
         // Hitung hari kerja berdasarkan schedule
         $daysInMonth = $endDate->day;
         $totalWorkingDays = 0;
@@ -1174,21 +1171,61 @@ public function reversePenalty(Request $request)
             ->whereBetween('claims.created_at', [$startDate, $endDate])
             ->count();
 
-        // Hitung kompensasi berdasarkan tipe
-        $totalBonus = 0;
-        $basicSalary = 0;
+         $basicSalary = 0; // Inisialisasi Gaji Pokok
+        // Hitung gaji pokok atau sesuaikan komisi berdasarkan kehadiran
         if ($salarySetting->compensation_type == 'fixed') {
-            $basicSalary = $salarySetting->basic_salary;
             $attendanceRate = $totalWorkingDays > 0 ? ($totalPresentDays / $totalWorkingDays) : 1;
-            $basicSalary = $basicSalary * $attendanceRate;
+            $basicSalary = $salarySetting->basic_salary * $attendanceRate;
         } else { // percentage
             $attendanceRate = $totalWorkingDays > 0 ? ($totalPresentDays / $totalWorkingDays) : 1;
             $totalCommission = $totalCommission * $attendanceRate;
         }
 
-        // Logika bonus (berlaku untuk semua)
-        if ($salarySetting->monthly_target > 0 && $salarySetting->target_bonus > 0) {
-            if ($totalServiceUnits >= $salarySetting->monthly_target && $realShopProfit >= $salarySetting->target_shop_profit) {
+        // Hitung kompensasi berdasarkan tipe
+        $totalBonus = 0;
+        $target1_achieved = false;
+        $target2_achieved = false;
+
+        // Pastikan ada pengaturan bonus sebelum melakukan pengecekan
+        if ($salarySetting && $salarySetting->target_bonus > 0) {
+
+            if ($jabatan == 3) { // Logika Bonus untuk Teknisi (Tetap sama)
+                if ($salarySetting->monthly_target > 0 && $totalServiceUnits >= $salarySetting->monthly_target) {
+                    $target1_achieved = true;
+                }
+                if ($salarySetting->target_shop_profit > 0 && $realShopProfit >= $salarySetting->target_shop_profit) {
+                    $target2_achieved = true;
+                }
+
+            } elseif ($jabatan == 2) { // Logika Bonus untuk Kasir (INI YANG DIPERBAIKI)
+
+                // 1. Hitung Jumlah Transaksi Aktual
+                // Menghitung jumlah penjualan yang diselesaikan oleh kasir pada bulan laporan
+                $actualTransactionCount = \App\Models\Penjualan::where('user_input', $userId)
+                    ->where('status_penjualan', '1') // Hanya yang sudah lunas
+                    ->whereBetween('updated_at', [$startDate, $endDate]) // Berdasarkan tanggal lunas
+                    ->count();
+
+                // 2. Hitung Omzet Penjualan Aktual
+                // Menjumlahkan total penjualan yang diselesaikan oleh kasir pada bulan laporan
+                $actualSalesRevenue = \App\Models\Penjualan::where('user_input', $userId)
+                    ->where('status_penjualan', '1') // Hanya yang sudah lunas
+                    ->whereBetween('updated_at', [$startDate, $endDate]) // Berdasarkan tanggal lunas
+                    ->sum('total_penjualan');
+
+                // Cek pencapaian Target 1 (Jumlah Transaksi)
+                if ($salarySetting->target_transaction_count > 0 && $actualTransactionCount >= $salarySetting->target_transaction_count) {
+                    $target1_achieved = true;
+                }
+
+                // Cek pencapaian Target 2 (Omzet Penjualan)
+                if ($salarySetting->target_sales_revenue > 0 && $actualSalesRevenue >= $salarySetting->target_sales_revenue) {
+                    $target2_achieved = true;
+                }
+            }
+
+            // Berikan bonus jika kedua target untuk peran tersebut tercapai
+            if ($target1_achieved && $target2_achieved) {
                 $totalBonus = $salarySetting->target_bonus;
             }
         }
@@ -2804,31 +2841,66 @@ public function getThisUser()
      */
     public function getCurrentAttendanceStatus($userId)
     {
-        $today = Carbon::today()->locale('id'); // Opsional: set locale ke Indonesia
-
-        // Gunakan format 'l' untuk nama hari dalam bahasa Inggris (Sunday, Monday, dst.)
-        // atau sesuaikan dengan data di database Anda
+        $today = Carbon::today()->locale('id');
         $dayName = $today->format('l');
 
-        $attendance = Attendance::where('user_id', $userId)
-            ->whereDate('attendance_date', $today)
-            ->first();
+        $attendance = Attendance::where('user_id', $userId)->whereDate('attendance_date', $today)->first();
+        $schedule = WorkSchedule::where('user_id', $userId)->where('day_of_week', $dayName)->where('is_working_day', 1)->first();
 
-        $schedule = WorkSchedule::where('user_id', $userId)
-            ->where('day_of_week', $dayName)
-            ->where('is_working_day', 1) // Tambahan: pastikan hari ini adalah hari kerja
-            ->first();
+        $salaryInfo = null;
+        $salarySetting = SalarySetting::where('user_id', $userId)->first();
+        $userDetail = UserDetail::where('kode_user', $userId)->first(); // Ambil detail user
 
-        // Buat respons dengan struktur yang benar
+        if ($salarySetting && $userDetail) { // Pastikan user detail ada
+            $startOfMonth = Carbon::now()->startOfMonth();
+            $endOfMonth = Carbon::now()->endOfMonth();
+            $jabatan = $userDetail->jabatan;
+
+            $salaryInfo = [
+                'compensation_type' => $salarySetting->compensation_type,
+                'percentage_value' => (float) $salarySetting->percentage_value,
+            ];
+
+            if ($jabatan == 3) { // --- TEKNISI ---
+                $salaryInfo['monthly_target'] = (int) $salarySetting->monthly_target;
+                $salaryInfo['target_shop_profit'] = (float) $salarySetting->target_shop_profit;
+
+                $salaryInfo['current_monthly_progress'] = modelServices::where('id_teknisi', $userId)
+                    ->whereIn('status_services', ['Selesai', 'Diambil'])
+                    ->whereBetween('updated_at', [$startOfMonth, $endOfMonth])->count();
+
+                $takenServiceIds = modelServices::where('id_teknisi', $userId)->where('status_services', 'Diambil')
+                    ->whereBetween('updated_at', [$startOfMonth, $endOfMonth])->pluck('id');
+
+                $salaryInfo['current_shop_profit_progress'] = (float) ProfitPresentase::whereIn('kode_service', $takenServiceIds)->where('kode_user', $userId)->sum('profit_toko');
+
+            } elseif ($jabatan == 2) { // --- KASIR (INI BAGIAN TAMBAHANNYA) ---
+                $salaryInfo['target_transaction_count'] = (int) $salarySetting->target_transaction_count;
+                $salaryInfo['target_sales_revenue'] = (float) $salarySetting->target_sales_revenue;
+
+                // Hitung progres transaksi aktual dari tabel penjualan
+                $salaryInfo['current_transaction_progress'] = (int) \App\Models\Penjualan::where('user_input', $userId)
+                    ->where('status_penjualan', '1')
+                    ->whereBetween('updated_at', [$startOfMonth, $endOfMonth])
+                    ->count();
+
+                // Hitung progres omzet penjualan aktual dari tabel penjualan
+                $salaryInfo['current_sales_revenue_progress'] = (float) \App\Models\Penjualan::where('user_input', $userId)
+                    ->where('status_penjualan', '1')
+                    ->whereBetween('updated_at', [$startOfMonth, $endOfMonth])
+                    ->sum('total_penjualan');
+            }
+        }
+
         return response()->json([
             'success' => true,
-            'data' => [ // <--- BUNGKUS DENGAN KEY 'data'
+            'data' => [
                 'attendance' => $attendance,
-                'has_schedule' => !is_null($schedule) // <--- KIRIM KEY 'has_schedule'
+                'has_schedule' => !is_null($schedule),
+                'salary_info' => $salaryInfo
             ]
         ]);
     }
-
     /**
      * Attendance History Index - Riwayat Absensi Karyawan
      */
