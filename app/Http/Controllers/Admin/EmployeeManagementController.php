@@ -2804,22 +2804,28 @@ public function getThisUser()
      */
     public function getCurrentAttendanceStatus($userId)
     {
-        $today = Carbon::today();
+        $today = Carbon::today()->locale('id'); // Opsional: set locale ke Indonesia
+
+        // Gunakan format 'l' untuk nama hari dalam bahasa Inggris (Sunday, Monday, dst.)
+        // atau sesuaikan dengan data di database Anda
+        $dayName = $today->format('l');
 
         $attendance = Attendance::where('user_id', $userId)
             ->whereDate('attendance_date', $today)
             ->first();
 
         $schedule = WorkSchedule::where('user_id', $userId)
-            ->where('day_of_week', $today->format('l'))
+            ->where('day_of_week', $dayName)
+            ->where('is_working_day', 1) // Tambahan: pastikan hari ini adalah hari kerja
             ->first();
 
+        // Buat respons dengan struktur yang benar
         return response()->json([
             'success' => true,
-            'attendance' => $attendance,
-            'schedule' => $schedule,
-            'can_check_in' => !$attendance || !$attendance->check_in,
-            'can_check_out' => $attendance && $attendance->check_in && !$attendance->check_out
+            'data' => [ // <--- BUNGKUS DENGAN KEY 'data'
+                'attendance' => $attendance,
+                'has_schedule' => !is_null($schedule) // <--- KIRIM KEY 'has_schedule'
+            ]
         ]);
     }
 
