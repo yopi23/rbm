@@ -423,7 +423,7 @@
         $('#cashierTargetFields').hide();
 
         $('input[name="compensation_type"]').change(toggleCompensationType);
-        toggleCompensationType();
+        toggleCompensationType(); // Panggil saat halaman dimuat
 
         $('#salaryForm').on('submit', function(e) {
             e.preventDefault();
@@ -431,7 +431,7 @@
             const submitBtn = form.find('button[type="submit"]');
             const originalText = submitBtn.html();
             submitBtn.html('<i class="fas fa-spinner fa-spin"></i> Menyimpan...').prop('disabled',
-            true);
+                true);
 
             $.ajax({
                 url: form.attr('action'),
@@ -439,20 +439,52 @@
                 data: form.serialize(),
                 success: function(response) {
                     if (response.success) {
-                        alert('Pengaturan kompensasi berhasil disimpan!');
                         $('#modalSalarySettings').modal('hide');
-                        location.reload();
+
+                        // DIGANTI DARI: alert('Pengaturan kompensasi berhasil disimpan!');
+                        // MENJADI: Swal.fire(...)
+                        Swal.fire({
+                            title: 'Berhasil!',
+                            text: 'Pengaturan kompensasi berhasil disimpan.',
+                            icon: 'success',
+                            confirmButtonText: 'OK'
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                location
+                                    .reload(); // Reload halaman setelah user menekan OK
+                            }
+                        });
+
                     } else {
-                        alert(response.message || 'Gagal menyimpan data.');
+                        // DIGANTI DARI: alert(response.message || 'Gagal menyimpan data.');
+                        // MENJADI: Swal.fire(...)
+                        Swal.fire({
+                            title: 'Gagal!',
+                            text: response.message || 'Gagal menyimpan data.',
+                            icon: 'error',
+                            confirmButtonText: 'Tutup'
+                        });
                     }
                 },
                 error: function(xhr) {
                     let errorMessage =
                         'Terjadi kesalahan. Silakan periksa kembali data Anda.';
-                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                    // Cek jika ada pesan error spesifik dari validasi Laravel
+                    if (xhr.responseJSON && xhr.responseJSON.errors) {
+                        // Ambil pesan error pertama dari daftar
+                        errorMessage = Object.values(xhr.responseJSON.errors)[0][0];
+                    } else if (xhr.responseJSON && xhr.responseJSON.message) {
                         errorMessage = xhr.responseJSON.message;
                     }
-                    alert(errorMessage);
+
+                    // DIGANTI DARI: alert(errorMessage);
+                    // MENJADI: Swal.fire(...)
+                    Swal.fire({
+                        title: 'Oops...',
+                        text: errorMessage,
+                        icon: 'error',
+                        confirmButtonText: 'Tutup'
+                    });
                 },
                 complete: function() {
                     submitBtn.html(originalText).prop('disabled', false);

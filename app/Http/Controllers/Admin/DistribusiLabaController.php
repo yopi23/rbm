@@ -221,6 +221,15 @@ class DistribusiLabaController extends Controller
         // ======================================================================
         $jumlahHariPeriode = $startRange->diffInDays($endRange) + 1;
 
+        // 🌟 PENAMBAHAN: PERHITUNGAN BEBAN GAJI TETAP 🌟
+        $userIds = \App\Models\UserDetail::where('id_upline', $ownerId)->pluck('kode_user');
+        $totalGajiTetapBulanan = \App\Models\SalarySetting::whereIn('user_id', $userIds)
+            ->where('compensation_type', 'fixed')
+            ->sum('basic_salary');
+        $bebanGajiHarian = ($startRange->daysInMonth > 0) ? $totalGajiTetapBulanan / $startRange->daysInMonth : 0;
+        $bebanGajiTetapPeriodik = $bebanGajiHarian * $jumlahHariPeriode;
+
+
         // E.1 Beban dari Aset Tetap (Penyusutan)
         $totalPenyusutanBulanan = \App\Models\Aset::where('kode_owner', $ownerId)->sum(DB::raw('(nilai_perolehan - nilai_residu) / masa_manfaat_bulan'));
         $bebanPenyusutanHarian = ($startRange->daysInMonth > 0) ? $totalPenyusutanBulanan / $startRange->daysInMonth : 0;
@@ -257,6 +266,7 @@ class DistribusiLabaController extends Controller
             'beban' => [
                 'Biaya Operasional Insidental' => $biayaOperasionalInsidental,
                 'Biaya Komisi Teknisi' => $biayaKomisi,
+                'Beban Gaji Tetap' => $bebanGajiTetapPeriodik,
                 'Beban Penyusutan Periodik' => $bebanPenyusutanPeriodik,
                 'Beban Tetap Periodik' => $bebanTetapPeriodik,
             ]

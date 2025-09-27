@@ -2597,7 +2597,7 @@ public function getThisUser()
     public function getEmployeeAttendanceStatus($employeeId)
     {
         try {
-            // Validate admin authority
+            // 1. Validasi (tetap sama)
             $adminDetail = UserDetail::where('kode_user', auth()->id())->first();
             if (!$adminDetail || !in_array($adminDetail->jabatan, [1, 0])) {
                 return response()->json([
@@ -2606,7 +2606,6 @@ public function getThisUser()
                 ], 403);
             }
 
-            // Validate employee access
             if (!$this->validateUserOwnerAccess($employeeId)) {
                 return response()->json([
                     'success' => false,
@@ -2616,24 +2615,53 @@ public function getThisUser()
 
             $employee = User::find($employeeId);
             if (!$employee) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Karyawan tidak ditemukan'
-                ], 404);
+                return response()->json(['success' => false, 'message' => 'Karyawan tidak ditemukan'], 404);
             }
 
+            // 2. Ambil data absensi & jadwal (tetap sama)
             $today = Carbon::today();
+            $dayName = $today->format('l');
 
-            // Get today's attendance
             $attendance = Attendance::where('user_id', $employeeId)
                 ->whereDate('attendance_date', $today)
                 ->first();
 
-            // Get work schedule
             $schedule = WorkSchedule::where('user_id', $employeeId)
-                ->where('day_of_week', $today->format('l'))
+                ->where('day_of_week', $dayName)
+                ->where('is_working_day', 1)
                 ->first();
 
+            // 3. --- LOGIKA BARU: Ambil Info Gaji dan Progres Target ---
+            $salaryInfo = null;
+            $salarySetting = SalarySetting::where('user_id', $employeeId)->first();
+            $userDetail = UserDetail::where('kode_user', $employeeId)->first();
+
+            if ($salarySetting && $userDetail) {
+                $startOfMonth = Carbon::now()->startOfMonth();
+                $endOfMonth = Carbon::now()->endOfMonth();
+                $jabatan = $userDetail->jabatan;
+
+                $salaryInfo = [
+                    'compensation_type' => $salarySetting->compensation_type,
+                    'percentage_value' => (float) $salarySetting->percentage_value,
+                ];
+
+                if ($jabatan == 3) { // Logika untuk Teknisi
+                    $salaryInfo['monthly_target'] = (int) $salarySetting->monthly_target;
+                    $salaryInfo['target_shop_profit'] = (float) $salarySetting->target_shop_profit;
+                    $salaryInfo['current_monthly_progress'] = modelServices::where('id_teknisi', $employeeId)->whereIn('status_services', ['Selesai', 'Diambil'])->whereBetween('updated_at', [$startOfMonth, $endOfMonth])->count();
+                    $takenServiceIds = modelServices::where('id_teknisi', $employeeId)->where('status_services', 'Diambil')->whereBetween('updated_at', [$startOfMonth, $endOfMonth])->pluck('id');
+                    $salaryInfo['current_shop_profit_progress'] = (float) ProfitPresentase::whereIn('kode_service', $takenServiceIds)->where('kode_user', $employeeId)->sum('profit_toko');
+
+                } elseif ($jabatan == 2) { // Logika untuk Kasir
+                    $salaryInfo['target_transaction_count'] = (int) $salarySetting->target_transaction_count;
+                    $salaryInfo['target_sales_revenue'] = (float) $salarySetting->target_sales_revenue;
+                    $salaryInfo['current_transaction_progress'] = (int) \App\Models\Penjualan::where('user_input', $employeeId)->where('status_penjualan', '1')->whereBetween('updated_at', [$startOfMonth, $endOfMonth])->count();
+                    $salaryInfo['current_sales_revenue_progress'] = (float) \App\Models\Penjualan::where('user_input', $employeeId)->where('status_penjualan', '1')->whereBetween('updated_at', [$startOfMonth, $endOfMonth])->sum('total_penjualan');
+                }
+            }
+
+            // 4. Susun respons akhir yang lengkap
             $status = [
                 'employee_id' => $employeeId,
                 'employee_name' => $employee->name,
@@ -2644,18 +2672,11 @@ public function getThisUser()
                     'end_time' => $schedule->end_time ? Carbon::parse($schedule->end_time)->format('H:i') : null,
                     'is_working_day' => $schedule->is_working_day
                 ] : null,
-                'attendance' => $attendance ? [
-                    'id' => $attendance->id,
-                    'check_in' => $attendance->check_in ? Carbon::parse($attendance->check_in)->format('H:i') : null,
-                    'check_out' => $attendance->check_out ? Carbon::parse($attendance->check_out)->format('H:i') : null,
-                    'status' => $attendance->status,
-                    'late_minutes' => $attendance->late_minutes ?? 0,
-                    'location' => $attendance->location,
-                    'note' => $attendance->note
-                ] : null,
+                'attendance' => $attendance, // Kirim object attendance utuh agar konsisten
                 'can_check_in' => !$attendance || !$attendance->check_in,
                 'can_check_out' => $attendance && $attendance->check_in && !$attendance->check_out,
-                'is_completed' => $attendance && $attendance->check_in && $attendance->check_out
+                'is_completed' => $attendance && $attendance->check_in && $attendance->check_out,
+                'salary_info' => $salaryInfo // Sertakan info gaji dan target
             ];
 
             return response()->json([

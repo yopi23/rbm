@@ -2639,9 +2639,17 @@ class FinancialReportApiController extends Controller
 
 
     // ======================================================================
-    //          👇 BLOK PERHITUNGAN BEBAN TETAP YANG DIPERBARUI 👇
+    //          燥 BLOK PERHITUNGAN BEBAN TETAP YANG DIPERBARUI 燥
     // ======================================================================
     $jumlahHariPeriode = $startRange->diffInDays($endRange) + 1;
+
+    // 🌟 PENAMBAHAN: PERHITUNGAN BEBAN GAJI TETAP 🌟
+    $userIds = \App\Models\UserDetail::where('id_upline', $kode_owner)->pluck('kode_user');
+    $totalGajiTetapBulanan = \App\Models\SalarySetting::whereIn('user_id', $userIds)
+        ->where('compensation_type', 'fixed')
+        ->sum('basic_salary');
+    $bebanGajiHarian = ($startRange->daysInMonth > 0) ? $totalGajiTetapBulanan / $startRange->daysInMonth : 0;
+    $bebanGajiTetapPeriodik = $bebanGajiHarian * $jumlahHariPeriode;
 
     // E.1 Beban dari Aset Tetap (Penyusutan) - Sudah Benar
     $totalPenyusutanBulanan = Aset::where('kode_owner', $kode_owner)->sum(DB::raw('(nilai_perolehan - nilai_residu) / masa_manfaat_bulan'));
@@ -2671,6 +2679,7 @@ class FinancialReportApiController extends Controller
             'HPP (Modal Pokok Penjualan)' => $totalHpp,
             'Biaya Operasional Insidental' => $biayaOperasionalInsidental,
             'Biaya Komisi Teknisi' => $biayaKomisi,
+            'Beban Gaji Tetap' => $bebanGajiTetapPeriodik,
             'Beban Penyusutan Aset' => $bebanPenyusutanPeriodik,
             'Beban Tetap Periodik' => $bebanTetapPeriodik, // Menggunakan nama variabel yang sudah ada
         ]

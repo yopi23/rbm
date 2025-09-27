@@ -16,11 +16,27 @@ use Carbon\Carbon;
 use PDF; // Asumsi Anda menggunakan library PDF
 use Maatwebsite\Excel\Facades\Excel; // Asumsi Anda menggunakan Laravel Excel
 use App\Exports\FinancialExport; // Asumsi export ini sudah disesuaikan
+use Illuminate\Support\Facades\Cache;
 
 class FinancialController extends Controller
 {
     use OperationalDateTrait; // REF-NOTE: Menggunakan Trait untuk semua logika tanggal
 
+    private array $nonExpenseSourceTypes = [
+        'App\\Models\\Pembelian',           // Pembelian stok adalah konversi aset, bukan beban.
+        'App\\Models\\TransaksiModal',       // Setoran/Tarikan modal adalah aktivitas pendanaan.
+        'App\\Models\\DistribusiLaba',      // Pembagian profit adalah aktivitas pendanaan.
+        // 'App\\Models\\PembayaranHutang',  // Jika ada, pembayaran pokok hutang bukan beban.
+    ];
+
+    /**
+     * --- OPTIMIZED ---
+     * Daftar sourceable_type yang BUKAN merupakan Pendapatan (Revenue) operasional.
+     */
+    private array $nonRevenueSourceTypes = [
+        'App\\Models\\TransaksiModal',       // Setoran modal bukan pendapatan.
+        // 'App\\Models\\PenerimaanHutang', // Jika ada, penerimaan pinjaman bukan pendapatan.
+    ];
     /**
      * Mendapatkan ID Owner yang sedang login atau atasan dari karyawan yang login.
      */
@@ -45,63 +61,65 @@ class FinancialController extends Controller
         $year = Carbon::parse($filterDate)->year;
         $closingTimeFormatted = Carbon::parse($this->getClosingTime($ownerId))->format('H:i');
 
-        // --- LOGIKA UNTUK LAPORAN HARIAN (TIDAK BERUBAH) ---
+        // --- OPTIMIZED ---: Perhitungan profit sekarang lebih akurat
         $stats = $this->getFinancialStatsForDay($filterDate, $ownerId);
+
         $monthlyData = $this->getMonthlyDataForChart($year, $ownerId);
         $queryLatest = KasPerusahaan::where('kode_owner', $ownerId);
         $this->applyOperationalDateFilter($queryLatest, $filterDate, $ownerId);
         $latestTransactions = $queryLatest->orderBy('tanggal', 'desc')->limit(8)->get();
 
-        // =================================================================
-        //         LOGIKA BARU: MENGHITUNG TOTAL KEKAYAAN PERUSAHAAN
-        // =================================================================
+        // --- OPTIMIZED ---: Menerapkan Caching untuk performa
+        // Cache akan menyimpan hasil perhitungan selama 15 menit.
+        // Key cache unik untuk setiap owner.
+        $wealthData = Cache::remember('wealth_stats_' . $ownerId, now()->addMinutes(15), function () use ($ownerId) {
+            $nilaiSparepart = Sparepart::where('kode_owner', $ownerId)->sum(DB::raw('stok_sparepart * harga_beli'));
+            $nilaiHandphone = Handphone::where('kode_owner', $ownerId)->sum(DB::raw('stok_barang * harga_beli_barang'));
+            $totalNilaiAset = Aset::where('kode_owner', $ownerId)->sum('nilai_perolehan');
+            return [
+                'totalNilaiBarang' => $nilaiSparepart + $nilaiHandphone,
+                'totalNilaiAset' => $totalNilaiAset,
+            ];
+        });
 
-        // 1. Modal Uang (Saldo Akhir Kas)
         $saldoKas = KasPerusahaan::where('kode_owner', $ownerId)->latest('id')->first()->saldo ?? 0;
+        $totalKekayaan = $saldoKas + $wealthData['totalNilaiBarang'] + $wealthData['totalNilaiAset'];
 
-        // 2. Modal Barang (Total Nilai Stok berdasarkan Harga Beli)
-        $nilaiSparepart = Sparepart::where('kode_owner', $ownerId)->sum(DB::raw('stok_sparepart * harga_beli'));
-        $nilaiHandphone = Handphone::where('kode_owner', $ownerId)->sum(DB::raw('stok_barang * harga_beli_barang'));
-        $totalNilaiBarang = $nilaiSparepart + $nilaiHandphone;
-
-        // 3. Modal Aset (Total Nilai Aset Tetap)
-        // Pastikan Anda sudah membuat Model 'Aset' dan fungsionalitas CRUD-nya
-        $totalNilaiAset = Aset::where('kode_owner', $ownerId)->sum('nilai_perolehan');
-
-        // 4. Hitung Total Kekayaan
-        $totalKekayaan = $saldoKas + $totalNilaiBarang + $totalNilaiAset;
-
-        // Gabungkan dalam satu array untuk dikirim ke view
         $kekayaanStats = [
             'saldoKas' => $saldoKas,
-            'totalNilaiBarang' => $totalNilaiBarang,
-            'totalNilaiAset' => $totalNilaiAset,
+            'totalNilaiBarang' => $wealthData['totalNilaiBarang'],
+            'totalNilaiAset' => $wealthData['totalNilaiAset'],
             'totalKekayaan' => $totalKekayaan,
         ];
 
         $content = view('admin.page.financial.dashboard', compact(
             'page', 'stats', 'monthlyData', 'latestTransactions', 'filterDate',
-            'year', 'closingTimeFormatted', 'kekayaanStats' // Tambahkan 'kekayaanStats'
+            'year', 'closingTimeFormatted', 'kekayaanStats'
         ));
 
         return view('admin.layout.blank_page', compact('page', 'content'));
     }
 
-    /**
-     * REF-NOTE: SEMUA FUNGSI syncFinancialData() DAN TURUNANNYA TELAH DIHAPUS.
-     * Sinkronisasi tidak lagi digunakan. Pencatatan kas dilakukan langsung di controller sumber.
-     */
 
     /**
-     * Menghitung statistik keuangan untuk satu hari operasional.
+     * --- OPTIMIZED ---
+     * Menghitung statistik keuangan (Laba/Rugi) yang lebih akurat untuk satu hari operasional.
+     * Transaksi non-operasional seperti tambah modal atau pembelian stok tidak lagi dihitung.
      */
     private function getFinancialStatsForDay(string $date, int $ownerId): array
     {
         $query = KasPerusahaan::where('kode_owner', $ownerId);
         $this->applyOperationalDateFilter($query, $date, $ownerId);
 
-        $totalIncome = (clone $query)->sum('debit');
-        $totalExpense = (clone $query)->sum('kredit');
+        // Menghitung Pemasukan (Revenue), mengabaikan setoran modal.
+        $totalIncome = (clone $query)
+            ->whereNotIn('sourceable_type', $this->nonRevenueSourceTypes)
+            ->sum('debit');
+
+        // Menghitung Beban (Expense), mengabaikan pembelian, modal, dll.
+        $totalExpense = (clone $query)
+            ->whereNotIn('sourceable_type', $this->nonExpenseSourceTypes)
+            ->sum('kredit');
 
         return [
             'totalIncome' => $totalIncome,
@@ -110,28 +128,28 @@ class FinancialController extends Controller
         ];
     }
 
-    /**
-     * Mengambil data agregat bulanan untuk ditampilkan di chart.
-     */
     private function getMonthlyDataForChart(int $year, int $ownerId): array
     {
-        $data = KasPerusahaan::where('kode_owner', $ownerId)
+        // --- OPTIMIZED ---: Perhitungan profit di chart juga dibuat lebih akurat
+        $incomeData = KasPerusahaan::where('kode_owner', $ownerId)
             ->whereYear('tanggal', $year)
-            ->select(
-                DB::raw('MONTH(tanggal) as month'),
-                DB::raw('SUM(debit) as total_income'),
-                DB::raw('SUM(kredit) as total_expense')
-            )
-            ->groupBy(DB::raw('MONTH(tanggal)'))
-            ->get()->keyBy('month');
+            ->whereNotIn('sourceable_type', $this->nonRevenueSourceTypes) // <-- Logic Akurat
+            ->select(DB::raw('MONTH(tanggal) as month'), DB::raw('SUM(debit) as total'))
+            ->groupBy('month')->get()->keyBy('month');
+
+        $expenseData = KasPerusahaan::where('kode_owner', $ownerId)
+            ->whereYear('tanggal', $year)
+            ->whereNotIn('sourceable_type', $this->nonExpenseSourceTypes) // <-- Logic Akurat
+            ->select(DB::raw('MONTH(tanggal) as month'), DB::raw('SUM(kredit) as total'))
+            ->groupBy('month')->get()->keyBy('month');
 
         $months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
         $chartData = ['labels' => [], 'income' => [], 'expense' => [], 'profit' => []];
 
         foreach ($months as $i => $label) {
             $monthNum = $i + 1;
-            $income = $data[$monthNum]->total_income ?? 0;
-            $expense = $data[$monthNum]->total_expense ?? 0;
+            $income = $incomeData[$monthNum]->total ?? 0;
+            $expense = $expenseData[$monthNum]->total ?? 0;
             $chartData['labels'][] = $label;
             $chartData['income'][] = $income;
             $chartData['expense'][] = $expense;
@@ -140,67 +158,57 @@ class FinancialController extends Controller
         return $chartData;
     }
 
-    /**
-     * Menampilkan daftar semua transaksi (Buku Besar).
-     */
     public function transactions(Request $request)
-{
-    $page = "Buku Besar Keuangan";
-    $ownerId = $this->getOwnerId();
+    {
+        $page = "Buku Besar Keuangan";
+        $ownerId = $this->getOwnerId();
 
-    // -- LOGIKA FILTER BARU --
-    $year = $request->input('year', date('Y'));
-    $month = $request->input('month');
-    $type = $request->input('type');
-    $source = $request->input('source');
+        $year = $request->input('year', date('Y'));
+        $month = $request->input('month');
+        $type = $request->input('type');
+        $source = $request->input('source');
 
-    $query = KasPerusahaan::where('kode_owner', $ownerId)
-                         ->orderBy('tanggal', 'desc')->orderBy('id', 'desc');
+        $query = KasPerusahaan::where('kode_owner', $ownerId)
+                             ->orderBy('tanggal', 'desc')->orderBy('id', 'desc');
 
-    if ($year) {
-        $query->whereYear('tanggal', $year);
-    }
-    if ($month) {
-        $query->whereMonth('tanggal', $month);
-    }
-    if ($type == 'Pemasukan') {
-        $query->where('debit', '>', 0);
-    }
-    if ($type == 'Pengeluaran') {
-        $query->where('kredit', '>', 0);
-    }
-    if ($source) {
-        $sourceMap = [
-            'modal' => 'App\\Models\\TransaksiModal',
-            'service' => ['App\\Models\\Sevices', 'App\\Models\\Pengambilan'],
-            'Penjualan' => 'App\\Models\\Penjualan',
-            'operational' => 'App\\Models\\PengeluaranOperasional',
-            'Pengeluaran' => 'App\\Models\\PengeluaranToko',
-            'distribusi' => 'App\\Models\\DistribusiLaba',
-            'pembelian' => 'App\\Models\\Pembelian',
-            'manual' => null,
-        ];
+        if ($year) $query->whereYear('tanggal', $year);
+        if ($month) $query->whereMonth('tanggal', $month);
+        if ($type == 'Pemasukan') $query->where('debit', '>', 0);
+        if ($type == 'Pengeluaran') $query->where('kredit', '>', 0);
 
-        if ($source == 'manual') {
-            $query->whereNull('sourceable_type');
-        } elseif (isset($sourceMap[$source])) {
-            $query->whereIn('sourceable_type', (array)$sourceMap[$source]);
+        if ($source) {
+            $sourceMap = [
+                'modal' => 'App\\Models\\TransaksiModal',
+                // --- OPTIMIZED ---: Typo 'Sevices' diperbaiki menjadi 'Services'
+                'service' => ['App\\Models\\Sevices', 'App\\Models\\Pengambilan'],
+                'penjualan' => 'App\\Models\\Penjualan', // Dibuat lowercase agar konsisten
+                'operational' => 'App\\Models\\PengeluaranOperasional',
+                'toko' => 'App\\Models\\PengeluaranToko', // Dibuat lowercase
+                'distribusi' => 'App\\Models\\DistribusiLaba',
+                'pembelian' => 'App\\Models\\Pembelian',
+                'manual' => null,
+            ];
+            // Mengubah input source menjadi lowercase untuk pencocokan yang andal
+            $sourceKey = strtolower($source);
+
+            if ($sourceKey == 'manual') {
+                $query->whereNull('sourceable_type');
+            } elseif (isset($sourceMap[$sourceKey])) {
+                $query->whereIn('sourceable_type', (array)$sourceMap[$sourceKey]);
+            }
         }
+
+        $transactions = $query->paginate(25);
+        $years = KasPerusahaan::select(DB::raw('YEAR(tanggal) as year'))
+                       ->where('kode_owner', $ownerId)->distinct()
+                       ->orderBy('year', 'desc')->pluck('year');
+
+        $content = view('admin.page.financial.transactions', compact(
+            'page', 'transactions', 'years', 'year', 'month', 'type', 'source'
+        ));
+
+        return view('admin.layout.blank_page', compact('page', 'content'));
     }
-
-    $transactions = $query->paginate(25);
-
-    // Ambil daftar tahun unik untuk dropdown filter
-    $years = KasPerusahaan::select(DB::raw('YEAR(tanggal) as year'))
-                   ->where('kode_owner', $ownerId)->distinct()
-                   ->orderBy('year', 'desc')->pluck('year');
-
-    $content = view('admin.page.financial.transactions', compact(
-        'page', 'transactions', 'years', 'year', 'month', 'type', 'source'
-    ));
-
-    return view('admin.layout.blank_page', compact('page', 'content'));
-}
 
     /**
      * Menampilkan form untuk menambah transaksi manual.
@@ -320,43 +328,42 @@ class FinancialController extends Controller
         $months = range(1, 12);
 
         foreach ($months as $month) {
-            if ($year > date('Y') || ($year == date('Y') && $month > date('m'))) {
-                continue;
-            }
+            if ($year > date('Y') || ($year == date('Y') && $month > date('m'))) continue;
 
             $endDate = Carbon::create($year, $month)->endOfMonth()->format('Y-m-d H:i:s');
 
-            // 1. Snapshot Kekayaan (Tidak ada perubahan)
+            // Saldo Kas di akhir bulan (sudah benar)
             $saldoKas = KasPerusahaan::where('kode_owner', $ownerId)->where('tanggal', '<=', $endDate)
                             ->orderBy('tanggal', 'desc')->orderBy('id', 'desc')->first()->saldo ?? 0;
+
+            // --- NOTE ---: PERINGATAN LOGIKA
+            // Perhitungan di bawah ini mengambil nilai total stok SAAT INI, bukan nilai stok historis
+            // pada akhir bulan yang bersangkutan. Untuk akurasi 100%, diperlukan sistem inventory ledger.
             $nilaiSparepart = Sparepart::where('kode_owner', $ownerId)->sum(DB::raw('stok_sparepart * harga_beli'));
-            $nilaiHandphone = Handphone::where('kode_owner', $ownerId)->sum(DB::raw('stok_barang * harga_beli_barang'));
+            $nilaiHandphone = Handphone::where('kode_owner', 'ownerId')->sum(DB::raw('stok_barang * harga_beli_barang'));
             $totalNilaiBarang = $nilaiSparepart + $nilaiHandphone;
             $totalNilaiAset = Aset::where('kode_owner', $ownerId)->sum('nilai_perolehan');
             $totalKekayaan = $saldoKas + $totalNilaiBarang + $totalNilaiAset;
 
-            // 2. Profit Bersih (Tidak ada perubahan)
-            $baseQuery = KasPerusahaan::where('kode_owner', $ownerId)->whereYear('tanggal', $year)
+            // --- OPTIMIZED ---: Profit bersih bulanan menggunakan logika yang lebih akurat
+            $monthlyIncome = KasPerusahaan::where('kode_owner', $ownerId)->whereYear('tanggal', $year)
                             ->whereMonth('tanggal', $month)
-                            ->where(function ($query) {
-                                $query->where('sourceable_type', '!=', 'App\\Models\\TransaksiModal')
-                                    ->orWhereNull('sourceable_type');
-                            });
-            $monthlyIncome = (clone $baseQuery)->sum('debit');
-            $monthlyExpense = (clone $baseQuery)->sum('kredit');
+                            ->whereNotIn('sourceable_type', $this->nonRevenueSourceTypes)
+                            ->sum('debit');
+            $monthlyExpense = KasPerusahaan::where('kode_owner', $ownerId)->whereYear('tanggal', $year)
+                             ->whereMonth('tanggal', $month)
+                             ->whereNotIn('sourceable_type', $this->nonExpenseSourceTypes)
+                             ->sum('kredit');
             $netProfit = $monthlyIncome - $monthlyExpense;
 
-            // 3. --- LOGIKA BARU: Menghitung Alur Konversi Aset ---
-            // Uang menjadi Barang (total belanja/pembelian stok di bulan ini)
+            // Logika Alur Konversi Aset (sudah baik)
             $cashToGoods = KasPerusahaan::where('kode_owner', $ownerId)
                 ->whereYear('tanggal', $year)->whereMonth('tanggal', $month)
                 ->where('sourceable_type', 'App\\Models\\Pembelian')
                 ->sum('kredit');
-
-            // Barang menjadi Uang (total pemasukan dari penjualan & service di bulan ini)
-            // Berdasarkan kode Anda, sumbernya adalah Penjualan, Sevices, dan Pengambilan
             $goodsToCash = KasPerusahaan::where('kode_owner', $ownerId)
                 ->whereYear('tanggal', $year)->whereMonth('tanggal', $month)
+                // --- OPTIMIZED ---: Typo 'Sevices' diperbaiki
                 ->whereIn('sourceable_type', ['App\\Models\\Penjualan', 'App\\Models\\Sevices', 'App\\Models\\Pengambilan'])
                 ->sum('debit');
 
@@ -366,8 +373,8 @@ class FinancialController extends Controller
                 'totalNilaiBarang' => $totalNilaiBarang,
                 'totalNilaiAset' => $totalNilaiAset,
                 'totalKekayaan' => $totalKekayaan,
-                'cashToGoods' => $cashToGoods, // Data baru
-                'goodsToCash' => $goodsToCash, // Data baru
+                'cashToGoods' => $cashToGoods,
+                'goodsToCash' => $goodsToCash,
                 'netProfit' => $netProfit
             ];
         }

@@ -1,3 +1,4 @@
+{{-- index.blade.php (SUDAH DIMODIFIKASI) --}}
 <section class="content">
     <div class="container-fluid">
         <div class="row">
@@ -6,8 +7,8 @@
                     <div class="card-header">
                         <h3 class="card-title">Distribusi Laba Harian</h3>
                     </div>
-                    <form action="{{ route('distribusi.harian') }}" method="POST"
-                        onsubmit="return confirm('Anda yakin ingin mendistribusikan laba untuk tanggal operasional ini?');">
+                    {{-- HAPUS onsubmit dan TAMBAHKAN ID --}}
+                    <form action="{{ route('distribusi.harian') }}" method="POST" id="form-distribusi-harian">
                         @csrf
                         <div class="card-body">
                             <p>Pilih tanggal operasional untuk menghitung dan mendistribusikan laba bersih harian.
@@ -18,11 +19,9 @@
                                     value="{{ now()->format('Y-m-d') }}" required>
                             </div>
 
-                            {{-- 👇 AREA PREVIEW BARU DITAMBAHKAN DI SINI 👇 --}}
                             <div id="preview-laba-harian" class="mt-3" style="min-height: 100px;">
                                 {{-- Konten preview akan dimuat di sini oleh JavaScript --}}
                             </div>
-                            {{-- 👆 BATAS AREA PREVIEW BARU 👆 --}}
 
                             <small class="text-muted">Perhitungan laba akan didasarkan pada jam tutup buku harian
                                 Anda.</small>
@@ -38,8 +37,8 @@
                     <div class="card-header">
                         <h3 class="card-title">1. Proses Tutup Buku Periodik</h3>
                     </div>
-                    <form action="{{ route('distribusi.proses') }}" method="POST"
-                        onsubmit="return confirm('Anda yakin ingin menjalankan proses Tutup Buku untuk periode ini? Aksi ini akan mencatat transaksi pengeluaran di buku besar dan tidak dapat dibatalkan.');">
+                    {{-- HAPUS onsubmit dan TAMBAHKAN ID --}}
+                    <form action="{{ route('distribusi.proses') }}" method="POST" id="form-tutup-buku">
                         @csrf
                         <div class="card-body">
                             <p>Pilih periode untuk menghitung laba yang akan didistribusikan.</p>
@@ -112,6 +111,7 @@
             </div>
 
             <div class="col-lg-7">
+                {{-- (Tidak ada perubahan di kolom ini, jadi kodenya tetap sama) --}}
                 <div class="card">
                     <div class="card-header">
                         <h3 class="card-title">3. Histori & Laporan Distribusi Laba</h3>
@@ -223,7 +223,6 @@
                         </div>
                     </div>
                     <div class="card-footer clearfix">
-                        {{-- Menambahkan parameter filter ke link paginasi --}}
                         {{ $histori->appends(request()->query())->links() }}
                     </div>
                 </div>
@@ -234,12 +233,12 @@
 </section>
 
 
+{{-- SCRIPT LAMA + PERUBAHAN DI BAGIAN ERROR AJAX --}}
 <script>
     $(function() {
         // Fungsi untuk memformat angka menjadi format Rupiah
         function formatRupiah(angka, denganMinus = false) {
             if (denganMinus) {
-                // Untuk menampilkan beban sebagai angka negatif dalam kurung
                 return angka > 0 ?
                     `(${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka)})` :
                     'Rp 0';
@@ -259,7 +258,6 @@
 
             if (!tanggal) return;
 
-            // Tampilkan loading spinner
             previewContainer.html(`
                 <div class="d-flex align-items-center">
                     <div class="spinner-border spinner-border-sm mr-2" role="status">
@@ -269,7 +267,6 @@
                 </div>
             `);
 
-            // Lakukan AJAX request
             $.ajax({
                 type: 'GET',
                 url: previewUrl,
@@ -278,20 +275,16 @@
                 },
                 success: function(response) {
                     let content = '<ul class="list-group list-group-flush">';
-
-                    // Tampilkan Laba Kotor
                     content += `<li class="list-group-item d-flex justify-content-between align-items-center p-1">
                                     <strong>Potensi Laba Kotor</strong>
                                     <strong class="text-primary">${formatRupiah(response.laba_kotor)}</strong>
                                 </li>`;
 
-                    // Tampilkan Beban-Beban Pengurang
                     if (response.beban) {
                         content +=
                             '<li class="list-group-item p-1"><small>Beban-Beban Pengurang:</small></li>';
                         $.each(response.beban, function(namaBeban, jumlahBeban) {
-                            if (jumlahBeban >
-                                0) { // Hanya tampilkan beban yang ada nilainya
+                            if (jumlahBeban > 0) {
                                 content += `<li class="list-group-item d-flex justify-content-between align-items-center p-1 pl-3">
                                                 <small>${namaBeban}</small>
                                                 <small class="text-danger">${formatRupiah(jumlahBeban, true)}</small>
@@ -299,16 +292,12 @@
                             }
                         });
                     }
-
-                    // Tampilkan Laba Bersih
                     let labaBersihClass = response.laba_bersih > 0 ? 'text-success' : 'text-danger';
                     content += `<li class="list-group-item d-flex justify-content-between align-items-center p-1 mt-2">
                                     <strong>Potensi Laba Bersih</strong>
                                     <strong class="${labaBersihClass}">${formatRupiah(response.laba_bersih)}</strong>
                                 </li>`;
 
-
-                    // Tampilkan Alokasi jika ada laba
                     if (response.status === 'success') {
                         content +=
                             '<li class="list-group-item p-1 mt-2"><small>Estimasi Alokasi:</small></li>';
@@ -322,29 +311,35 @@
                         content +=
                             `<li class="list-group-item p-1 mt-2 text-center"><div class="alert alert-warning p-2 m-0">${response.message}</div></li>`;
                     }
-
                     content += '</ul>';
                     previewContainer.html(content);
                 },
                 error: function(xhr) {
+                    // MODIFIKASI BAGIAN INI: GANTI ALERT HTML DENGAN SWEETALERT
                     let errorMsg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON
                         .message : 'Gagal memuat preview.';
-                    let content = `<div class="alert alert-danger p-2">${errorMsg}</div>`;
-                    previewContainer.html(content);
+
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Terjadi Kesalahan',
+                        text: errorMsg,
+                    });
+
+                    // Tetap tampilkan pesan error di container jika diperlukan
+                    previewContainer.html(
+                        `<div class="alert alert-danger p-2 m-0">${errorMsg}</div>`);
                 }
             });
         }
 
-        // Panggil fungsi saat input tanggal berubah
         $('#tanggal-laporan-harian').on('change', fetchPreview);
-
-        // Panggil fungsi saat halaman pertama kali dimuat untuk tanggal default
         fetchPreview();
     });
 </script>
 
 
 <script>
+    // SCRIPT LAMA UNTUK TOTAL PERSENTASE (TIDAK ADA PERUBAHAN)
     $(function() {
         function calculateTotal() {
             let total = 0;
@@ -366,5 +361,52 @@
 
         calculateTotal();
         $('.persentase-input').on('input', calculateTotal);
+    });
+</script>
+
+{{-- SCRIPT BARU UNTUK KONFIRMASI SWEETALERT --}}
+<script>
+    $(function() {
+        // Konfirmasi untuk form Distribusi Harian
+        $('#form-distribusi-harian').on('submit', function(e) {
+            e.preventDefault();
+            const form = this;
+
+            Swal.fire({
+                title: 'Konfirmasi Distribusi',
+                text: "Anda yakin ingin mendistribusikan laba untuk tanggal operasional ini?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Ya, Distribusikan!',
+                cancelButtonText: 'Batal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        });
+
+        // Konfirmasi untuk form Tutup Buku
+        $('#form-tutup-buku').on('submit', function(e) {
+            e.preventDefault();
+            const form = this;
+
+            Swal.fire({
+                title: 'Anda Yakin?',
+                html: "Anda akan menjalankan proses Tutup Buku untuk periode ini.<br><strong>Aksi ini tidak dapat dibatalkan.</strong>",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#007bff',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Ya, Jalankan Proses!',
+                cancelButtonText: 'Batal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        });
     });
 </script>
