@@ -510,6 +510,8 @@ class SparePartController extends Controller
     {
         $data = Sparepart::findOrFail($id);
         $data->stockHistory()->delete();
+         $data->stockNotifications()->delete();
+
         if ($data->foto_sparepart != '-') {
             File::delete(public_path('uploads/' . $data->foto_sparepart));
         }
