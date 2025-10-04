@@ -66,12 +66,14 @@
         </div>
     </div>
 
+    {{-- RINGKASAN OPERASIONAL HARIAN --}}
+    <h4 class="mt-4 mb-2">Ringkasan Operasional Hari Ini</h4>
     <div class="row">
         <div class="col-12 col-sm-6 col-md-4">
             <div class="info-box bg-success">
                 <span class="info-box-icon"><i class="fas fa-arrow-down"></i></span>
                 <div class="info-box-content">
-                    <span class="info-box-text">Pemasukan Hari Ini</span>
+                    <span class="info-box-text">Pemasukan Operasional</span>
                     <span class="info-box-number">Rp
                         {{ number_format($stats['totalIncome'], 0, ',', '.') }}</span>
                 </div>
@@ -81,7 +83,7 @@
             <div class="info-box bg-danger">
                 <span class="info-box-icon"><i class="fas fa-arrow-up"></i></span>
                 <div class="info-box-content">
-                    <span class="info-box-text">Pengeluaran Hari Ini</span>
+                    <span class="info-box-text">Pengeluaran Variabel</span>
                     <span class="info-box-number">Rp
                         {{ number_format($stats['totalExpense'], 0, ',', '.') }}</span>
                 </div>
@@ -91,7 +93,7 @@
             <div class="info-box {{ $stats['netProfit'] >= 0 ? 'bg-info' : 'bg-warning' }}">
                 <span class="info-box-icon"><i class="fas fa-chart-line"></i></span>
                 <div class="info-box-content">
-                    <span class="info-box-text">Profit Hari Ini</span>
+                    <span class="info-box-text">Laba Kotor Operasional</span>
                     <span class="info-box-number">Rp
                         {{ number_format($stats['netProfit'], 0, ',', '.') }}</span>
                 </div>
@@ -99,19 +101,72 @@
         </div>
     </div>
 
-    <div class="row mb-3">
+    <h4 class="mt-4 mb-2">Rincian Arus Kas Keluar Non-Operasional Hari Ini</h4>
+    <div class="row">
+        <div class="col-12 col-sm-6 col-md-3">
+            <div class="info-box bg-warning">
+                <span class="info-box-icon"><i class="fas fa-file-invoice-dollar"></i></span>
+                <div class="info-box-content">
+                    <span class="info-box-text">Pembayaran Beban Tetap</span>
+                    <span class="info-box-number">Rp
+                        {{ number_format($stats['totalFixedExpense'], 0, ',', '.') }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-md-3">
+            <div class="info-box bg-teal">
+                <span class="info-box-icon"><i class="fas fa-users"></i></span>
+                <div class="info-box-content">
+                    <span class="info-box-text">Penarikan Saldo Karyawan</span>
+                    <span class="info-box-number">Rp
+                        {{ number_format($stats['totalEmployeeWithdrawals'], 0, ',', '.') }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-md-3">
+            <div class="info-box bg-lightblue">
+                <span class="info-box-icon"><i class="fas fa-shopping-cart"></i></span>
+                <div class="info-box-content">
+                    <span class="info-box-text">Pembelian Stok</span>
+                    <span class="info-box-number">Rp
+                        {{ number_format($stats['totalStockPurchase'], 0, ',', '.') }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-md-3">
+            <div class="info-box bg-maroon">
+                <span class="info-box-icon"><i class="fas fa-user-tie"></i></span>
+                <div class="info-box-content">
+                    <span class="info-box-text">Prive Owner</span>
+                    <span class="info-box-number">Rp
+                        {{ number_format($stats['totalOwnerWithdrawals'], 0, ',', '.') }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row mb-3 mt-4">
         <div class="col-12">
-            <a href="{{ route('modal.index') }}" class="btn btn-dark"><i class="fas fa-landmark mr-1"></i>
+            <a href="{{ route('modal.index') }}" class="btn btn-dark my-2"><i class="fas fa-landmark mr-1"></i>
                 Manajemen Modal</a>
-            <a href="{{ route('hutang.index') }}" class="btn btn-danger"><i
+            <a href="{{ route('hutang.index') }}" class="btn btn-danger my-2"><i
                     class="fas fa-file-invoice-dollar mr-1"></i>
                 Manajemen Hutang</a>
-            <a href="{{ route('distribusi.index') }}" class="btn btn-info"><i class="fas fa-chart-pie mr-1"></i>
+            <a href="{{ route('distribusi.index') }}" class="btn btn-info my-2"><i
+                    class="fas fa-chart-pie mr-1"></i>
                 Distribusi Laba</a>
-            <a href="{{ route('financial.transactions') }}" class="btn btn-primary"><i class="fas fa-book mr-1"></i>
+            <a href="{{ route('financial.transactions') }}" class="btn btn-primary my-2"><i
+                    class="fas fa-book mr-1"></i>
                 Lihat Buku Besar</a>
-            <a href="{{ route('financial.developmentReport') }}" class="btn btn-success"><i class="fas fa-chart-bar mr-1"></i>
-            Laporan Perkembangan</a>
+            <a href="{{ route('financial.developmentReport') }}" class="btn btn-success my-2"><i
+                    class="fas fa-chart-bar mr-1"></i>
+                Laporan Perkembangan</a>
+
+            <a href="{{ route('financial.cashFlowReport') }}" class="btn btn-info my-2"><i
+                    class="fas fa-exchange-alt mr-1"></i>
+                Laporan Arus Kas</a>
+            <a href="{{ route('financial.balanceSheetReport') }}" class="btn btn-dark my-2"><i
+                    class="fas fa-balance-scale mr-1"></i>
+                Laporan Neraca</a>
         </div>
     </div>
 
@@ -192,18 +247,14 @@
                         </tbody>
                     </table>
                 </div>
-                 <div class="card-footer text-center">
-                <a href="{{ route('financial.transactions') }}" class="uppercase">Lihat Semua Transaksi</a>
-
-            </div>
+                <div class="card-footer text-center">
+                    <a href="{{ route('financial.transactions') }}" class="uppercase">Lihat Semua Transaksi</a>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-
-
-{{-- @section('scripts') --}}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     $(function() {
@@ -243,4 +294,3 @@
         });
     });
 </script>
-{{-- @endsection --}}

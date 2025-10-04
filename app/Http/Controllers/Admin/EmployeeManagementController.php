@@ -1177,8 +1177,8 @@ public function reversePenalty(Request $request)
             $attendanceRate = $totalWorkingDays > 0 ? ($totalPresentDays / $totalWorkingDays) : 1;
             $basicSalary = $salarySetting->basic_salary * $attendanceRate;
         } else { // percentage
-            $attendanceRate = $totalWorkingDays > 0 ? ($totalPresentDays / $totalWorkingDays) : 1;
-            $totalCommission = $totalCommission * $attendanceRate;
+            // $attendanceRate = $totalWorkingDays > 0 ? ($totalPresentDays / $totalWorkingDays) : 1;
+            // $totalCommission = $totalCommission * $attendanceRate;
         }
 
         // Hitung kompensasi berdasarkan tipe
@@ -2748,9 +2748,9 @@ public function getThisUser()
                 return [
                     'id' => $item->id,
                     'user_id' => $item->user_id,
-                    'attendance_date' => Carbon::parse($item->attendance_date)->toIso8601String(),
-                    'check_in' => $item->check_in ? Carbon::parse($item->check_in)->toIso8601String() : null,
-                    'check_out' => $item->check_out ? Carbon::parse($item->check_out)->toIso8601String() : null,
+                    'attendance_date' => Carbon::parse($item->attendance_date)->toRfc3339String(),
+                    'check_in' => $item->check_in ? Carbon::parse($item->check_in)->toRfc3339String() : null,
+                    'check_out' => $item->check_out ? Carbon::parse($item->check_out)->toRfc3339String() : null,
                     'status' => $item->status,
                     'late_minutes' => $item->late_minutes,
                     'location' => $item->location,

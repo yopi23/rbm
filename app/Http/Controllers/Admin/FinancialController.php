@@ -9,6 +9,7 @@ use App\Models\Sparepart;
 use App\Models\Handphone;
 use App\Models\Aset;
 use App\Traits\OperationalDateTrait; // WAJIB: Impor Trait tanggal operasional
+use App\Traits\ProfitCalculationTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -20,13 +21,17 @@ use Illuminate\Support\Facades\Cache;
 
 class FinancialController extends Controller
 {
-    use OperationalDateTrait; // REF-NOTE: Menggunakan Trait untuk semua logika tanggal
+    use OperationalDateTrait, ProfitCalculationTrait; // REF-NOTE: Menggunakan Trait untuk semua logika tanggal
 
     private array $nonExpenseSourceTypes = [
         'App\\Models\\Pembelian',           // Pembelian stok adalah konversi aset, bukan beban.
         'App\\Models\\TransaksiModal',       // Setoran/Tarikan modal adalah aktivitas pendanaan.
         'App\\Models\\DistribusiLaba',      // Pembagian profit adalah aktivitas pendanaan.
-        // 'App\\Models\\PembayaranHutang',  // Jika ada, pembayaran pokok hutang bukan beban.
+        'App\\Models\\PembayaranHutang',  // Jika ada, pembayaran pokok hutang bukan beban.
+        'App\\Models\\PengeluaranOperasional',  // Beban tetap (gaji, sewa, listrik) yang ingin Anda pisahkan.
+        'App\\Models\\AlokasiLaba',             // Digunakan saat pencairan, sama seperti DistribusiLaba.
+        'App\\Models\\Penarikan',
+        'App\\Models\\PengeluaranToko',
     ];
 
     /**
@@ -72,7 +77,7 @@ class FinancialController extends Controller
         // --- OPTIMIZED ---: Menerapkan Caching untuk performa
         // Cache akan menyimpan hasil perhitungan selama 15 menit.
         // Key cache unik untuk setiap owner.
-        $wealthData = Cache::remember('wealth_stats_' . $ownerId, now()->addMinutes(15), function () use ($ownerId) {
+        $wealthData = Cache::remember('wealth_stats_' . $ownerId, now()->addMinutes(5), function () use ($ownerId) {
             $nilaiSparepart = Sparepart::where('kode_owner', $ownerId)->sum(DB::raw('stok_sparepart * harga_beli'));
             $nilaiHandphone = Handphone::where('kode_owner', $ownerId)->sum(DB::raw('stok_barang * harga_beli_barang'));
             $totalNilaiAset = Aset::where('kode_owner', $ownerId)->sum('nilai_perolehan');
@@ -106,25 +111,91 @@ class FinancialController extends Controller
      * Menghitung statistik keuangan (Laba/Rugi) yang lebih akurat untuk satu hari operasional.
      * Transaksi non-operasional seperti tambah modal atau pembelian stok tidak lagi dihitung.
      */
+    // private function getFinancialStatsForDay(string $date, int $ownerId): array
+    // {
+    //     $query = KasPerusahaan::where('kode_owner', $ownerId);
+    //     $this->applyOperationalDateFilter($query, $date, $ownerId);
+
+    //     // Menghitung Pemasukan (Revenue), mengabaikan setoran modal.
+    //     $totalIncome = (clone $query)
+    //         ->whereNotIn('sourceable_type', $this->nonRevenueSourceTypes)
+    //         ->sum('debit');
+
+    //     // Menghitung Beban (Expense), mengabaikan pembelian, modal, dll.
+    //     $totalExpense = (clone $query)
+    //         ->whereNotIn('sourceable_type', $this->nonExpenseSourceTypes)
+    //         ->sum('kredit');
+
+    //     $totalFixedExpense = (clone $query)
+    //         ->where('sourceable_type', 'App\\Models\\PengeluaranOperasional')
+    //         ->sum('kredit');
+
+    //     return [
+    //         'totalIncome' => $totalIncome,
+    //         'totalExpense' => $totalExpense,
+    //         'totalFixedExpense' => $totalFixedExpense,
+    //         'netProfit' => $totalIncome - $totalExpense,
+    //     ];
+    // }
+
     private function getFinancialStatsForDay(string $date, int $ownerId): array
     {
         $query = KasPerusahaan::where('kode_owner', $ownerId);
         $this->applyOperationalDateFilter($query, $date, $ownerId);
 
-        // Menghitung Pemasukan (Revenue), mengabaikan setoran modal.
+        // 1. Pemasukan Operasional (Penjualan, Service, dll)
+        // Logika ini sudah benar, menggunakan $nonRevenueSourceTypes.
         $totalIncome = (clone $query)
             ->whereNotIn('sourceable_type', $this->nonRevenueSourceTypes)
             ->sum('debit');
 
-        // Menghitung Beban (Expense), mengabaikan pembelian, modal, dll.
-        $totalExpense = (clone $query)
-            ->whereNotIn('sourceable_type', $this->nonExpenseSourceTypes)
+        // 2. Pengeluaran Variabel (HANYA Pengeluaran Toko/Insidental)
+        // Ini akan mengisi kartu "Pengeluaran Hari Ini" di dashboard.
+        $variableExpense = (clone $query)
+            ->where('sourceable_type', 'App\\Models\\PengeluaranToko')
             ->sum('kredit');
 
+        // 3. Laba Kotor Operasional (Pemasukan - Pengeluaran Variabel)
+        // Ini akan mengisi kartu "Profit Hari Ini" di dashboard.
+        $operationalProfit = $totalIncome - $variableExpense;
+
+        // 4. Hitung semua jenis pengeluaran lain secara terpisah.
+        // Anda bisa gunakan data ini untuk membuat kartu baru di dashboard atau untuk laporan lain.
+
+        // a. Beban Tetap (Gaji, Sewa, Listrik, dll.)
+        $totalFixedExpense = (clone $query)
+            ->where('sourceable_type', 'App\\Models\\PengeluaranOperasional')
+            ->sum('kredit');
+
+        // b. Penarikan Saldo oleh Karyawan
+        $totalEmployeeWithdrawals = (clone $query)
+            ->where('sourceable_type', 'App\\Models\\Penarikan')
+            ->sum('kredit');
+
+        // c. Pembelian Stok (Aset)
+        $totalStockPurchase = (clone $query)
+            ->where('sourceable_type', 'App\\Models\\Pembelian')
+            ->sum('kredit');
+
+        // d. Penarikan oleh Owner (Prive)
+        $totalOwnerWithdrawals = (clone $query)
+            ->whereIn('sourceable_type', ['App\\Models\\DistribusiLaba', 'App\\Models\\AlokasiLaba'])
+            ->sum('kredit');
+
+
+        // Mengembalikan data ke view. Kita tetap menggunakan nama variabel yang sama
+        // agar Anda tidak perlu mengubah file blade.
         return [
-            'totalIncome' => $totalIncome,
-            'totalExpense' => $totalExpense,
-            'netProfit' => $totalIncome - $totalExpense,
+            // Data Utama untuk 3 Kartu Teratas
+            'totalIncome'  => $totalIncome,         // Mengisi "Pemasukan Hari Ini"
+            'totalExpense' => $variableExpense,      // Mengisi "Pengeluaran Hari Ini" (sekarang hanya biaya variabel)
+            'netProfit'    => $operationalProfit,    // Mengisi "Profit Hari Ini" (sekarang Laba Operasional)
+
+            // Data Tambahan (bisa Anda gunakan untuk kartu baru jika mau)
+            'totalFixedExpense'        => $totalFixedExpense,
+            'totalEmployeeWithdrawals' => $totalEmployeeWithdrawals,
+            'totalStockPurchase'       => $totalStockPurchase,
+            'totalOwnerWithdrawals'    => $totalOwnerWithdrawals
         ];
     }
 
@@ -408,5 +479,233 @@ class FinancialController extends Controller
             'developmentData',
             'year'
         ));
+    }
+
+
+    // new
+    private function mapSourceTypeToCategoryName($sourceType)
+    {
+        if ($sourceType === null) {
+            return 'Transaksi Manual';
+        }
+
+        $map = [
+            'App\\Models\\Sevices' => 'Pendapatan Servis',
+            'App\\Models\\Pengambilan' => 'Pengambilan Servis',
+            'App\\Models\\Penjualan' => 'Penjualan Barang',
+            'App\\Models\\TransaksiModal' => 'Transaksi Modal',
+            'App\\Models\\DistribusiLaba' => 'Distribusi Laba / Prive',
+            'App\\Models\\Pembelian' => 'Pembelian Stok Barang',
+            'App\\Models\\PengeluaranOperasional' => 'Biaya Operasional',
+            'App\\Models\\PengeluaranToko' => 'Biaya Toko',
+            // Tambahkan model lain jika ada
+        ];
+
+        // Cek jika ada kategori manual dari deskripsi
+        if ($sourceType === 'manual_income') {
+            return 'Pendapatan Manual';
+        }
+        if ($sourceType === 'manual_expense') {
+            return 'Pengeluaran Manual';
+        }
+
+        return $map[$sourceType] ?? 'Lain-lain';
+    }
+
+    /**
+     * Menampilkan Laporan Ringkasan Arus Kas (Cash Flow Summary).
+     */
+    public function cashFlowReport(Request $request)
+    {
+        $page = "Laporan Arus Kas";
+        $ownerId = $this->getOwnerId();
+
+        // Mengambil rentang tanggal dari request, default ke bulan ini
+        $startDate = $request->input('start_date', now()->startOfMonth()->format('Y-m-d'));
+        $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
+
+        // --- 1. Saldo Awal ---
+        // Ambil saldo terakhir SEBELUM tanggal mulai
+        $saldoAwal = KasPerusahaan::where('kode_owner', $ownerId)
+            ->where('tanggal', '<', $startDate)
+            ->orderBy('tanggal', 'desc')
+            ->orderBy('id', 'desc')
+            ->first()->saldo ?? 0;
+
+        // --- 2. Arus Kas Masuk (Kelompok per Kategori) ---
+        $kasMasukQuery = KasPerusahaan::where('kode_owner', $ownerId)
+            ->whereBetween('tanggal', [$startDate, $endDate])
+            ->where('debit', '>', 0);
+
+        $totalKasMasuk = (clone $kasMasukQuery)->sum('debit');
+        $detailKasMasuk = (clone $kasMasukQuery)
+            ->select('sourceable_type', DB::raw("SUBSTRING_INDEX(deskripsi, ' - ', 1) as kategori_manual"), DB::raw('SUM(debit) as total'))
+            ->groupBy('sourceable_type', 'kategori_manual')
+            ->get()
+            ->map(function ($item) {
+                // Jika manual, gunakan kategori dari deskripsi
+                if ($item->sourceable_type === null) {
+                    $item->kategori = $item->kategori_manual;
+                } else {
+                    $item->kategori = $this->mapSourceTypeToCategoryName($item->sourceable_type);
+                }
+                return $item;
+            })->groupBy('kategori')->map(function($group) {
+                return $group->sum('total'); // Gabungkan kategori yang sama
+            });
+
+
+        // --- 3. Arus Kas Keluar (Kelompok per Kategori) ---
+        $kasKeluarQuery = KasPerusahaan::where('kode_owner', $ownerId)
+            ->whereBetween('tanggal', [$startDate, $endDate])
+            ->where('kredit', '>', 0);
+
+        $totalKasKeluar = (clone $kasKeluarQuery)->sum('kredit');
+        $detailKasKeluar = (clone $kasKeluarQuery)
+            ->select('sourceable_type', DB::raw("SUBSTRING_INDEX(deskripsi, ' - ', 1) as kategori_manual"), DB::raw('SUM(kredit) as total'))
+            ->groupBy('sourceable_type', 'kategori_manual')
+            ->get()
+            ->map(function ($item) {
+                if ($item->sourceable_type === null) {
+                    $item->kategori = $item->kategori_manual;
+                } else {
+                    $item->kategori = $this->mapSourceTypeToCategoryName($item->sourceable_type);
+                }
+                return $item;
+            })->groupBy('kategori')->map(function($group) {
+                return $group->sum('total');
+            });
+
+        // --- 4. Saldo Akhir ---
+        // Saldo akhir adalah Saldo Awal + Total Masuk - Total Keluar
+        $saldoAkhir = $saldoAwal + $totalKasMasuk - $totalKasKeluar;
+
+        // (Verifikasi saldo akhir dengan data terakhir di database untuk periode tsb)
+        $lastTransaction = KasPerusahaan::where('kode_owner', $ownerId)
+            ->whereBetween('tanggal', [$startDate, $endDate])
+            ->orderBy('tanggal', 'desc')
+            ->orderBy('id', 'desc')
+            ->first();
+
+        // Jika ada transaksi di periode tsb, gunakan saldo terakhirnya.
+        // Jika tidak, saldo akhir = saldo awal.
+        $saldoAkhirDatabase = $lastTransaction ? $lastTransaction->saldo : $saldoAwal;
+
+        // Kita gunakan saldo akhir dari perhitungan A + B - C agar lebih konsisten
+        // $saldoAkhir = $saldoAkhirDatabase; // Anda bisa pilih salah satu
+
+        $reportData = [
+            'startDate' => $startDate,
+            'endDate' => $endDate,
+            'saldoAwal' => $saldoAwal,
+            'totalKasMasuk' => $totalKasMasuk,
+            'detailKasMasuk' => $detailKasMasuk,
+            'totalKasKeluar' => $totalKasKeluar,
+            'detailKasKeluar' => $detailKasKeluar,
+            'saldoAkhir' => $saldoAkhir,
+        ];
+
+        $content = view('admin.page.financial.cash_flow_report', compact('page', 'reportData'));
+        return view('admin.layout.blank_page', compact('page', 'content'));
+    }
+    public function balanceSheetReport(Request $request)
+    {
+        $page = "Laporan Neraca Keuangan";
+        $ownerId = $this->getOwnerId();
+        $asOfDate = $request->input('as_of_date', now()->format('Y-m-d'));
+        $endDate = Carbon::parse($asOfDate)->endOfDay();
+
+        // ===================================================================
+        // BAGIAN 1: MENGHITUNG ASET (ASSETS)
+        // ===================================================================
+        $kas = KasPerusahaan::where('kode_owner', $ownerId)->where('tanggal', '<=', $endDate)
+            ->orderBy('tanggal', 'desc')->orderBy('id', 'desc')->first()->saldo ?? 0;
+
+        $nilaiSparepart = Sparepart::where('kode_owner', $ownerId)->sum(DB::raw('stok_sparepart * harga_beli'));
+        $nilaiHandphone = Handphone::where('kode_owner', $ownerId)->sum(DB::raw('stok_barang * harga_beli_barang'));
+        $nilaiStok = $nilaiSparepart + $nilaiHandphone;
+
+        $asetTetap = Aset::where('kode_owner', $ownerId)->sum('nilai_perolehan');
+
+        $totalAset = $kas + $nilaiStok + $asetTetap;
+
+        // ===================================================================
+        // BAGIAN 2: MENGHITUNG KEWAJIBAN (LIABILITIES)
+        // ===================================================================
+        // 2.1 Kewajiban: Utang Komisi Teknisi (saldo yang belum dibayar)
+        $utangKomisi = \App\Models\UserDetail::where('id_upline', $ownerId)->where('jabatan', 3)->sum('saldo');
+
+        // 2.2 Kewajiban: Utang Distribusi Laba (saldo alokasi yang belum diambil)
+        $utangDistribusi = \App\Models\DistribusiLaba::where('kode_owner', $ownerId)
+            ->sum(DB::raw('alokasi_owner + alokasi_investor + alokasi_karyawan + alokasi_kas_aset'));
+
+        // 2.3 Kewajiban: Utang Lainnya (jika ada)
+        $utangLainnya = 0; // Tambahkan logika jika ada modul utang usaha
+
+        $totalKewajiban = $utangKomisi + $utangDistribusi + $utangLainnya;
+
+        // ===================================================================
+        // BAGIAN 3: MENGHITUNG MODAL (EQUITY)
+        // ===================================================================
+        // 3.1 Modal Disetor (Paid-in Capital)
+        $modalDisetor = KasPerusahaan::where('kode_owner', $ownerId)
+            ->where('tanggal', '<=', $endDate)
+            ->where('sourceable_type', 'App\\Models\\TransaksiModal')
+            ->where('debit', '>', 0)->sum('debit');
+
+        // 3.2 Laba Ditahan (Retained Earnings)
+        // Laba Ditahan = (Total Laba Bersih Kumulatif) - (Total Laba yg Pernah Dialokasikan di tabel distribusi)
+
+        // Hitung Laba Bersih Kumulatif dari semua operasional
+        $totalPendapatanKumulatif = KasPerusahaan::where('kode_owner', $ownerId)->where('tanggal', '<=', $endDate)
+            ->whereIn('sourceable_type', ['App\\Models\\Sevices', 'App\\Models\\Penjualan', 'App\\Models\\Pengambilan'])->sum('debit');
+
+        $totalHppKumulatif = \App\Models\DetailPartServices::join('sevices', 'sevices.id', '=', 'detail_part_services.kode_services')
+                ->where('sevices.kode_owner', $ownerId)->where('sevices.updated_at', '<=', $endDate)
+                ->sum(DB::raw('detail_part_services.detail_modal_part_service * detail_part_services.qty_part'))
+            + \App\Models\DetailPartLuarService::join('sevices', 'sevices.id', '=', 'detail_part_luar_services.kode_services')
+                ->where('sevices.kode_owner', $ownerId)->where('sevices.updated_at', '<=', $endDate)
+                ->sum(DB::raw('detail_part_luar_services.harga_part * detail_part_luar_services.qty_part'));
+
+        $totalBebanKumulatif = KasPerusahaan::where('kode_owner', $ownerId)
+            ->where('tanggal', '<=', $endDate)
+            ->whereNotIn('sourceable_type', $this->nonExpenseSourceTypes)
+            ->where('kredit', '>', 0)->sum('kredit');
+
+        $labaBersihKumulatif = $totalPendapatanKumulatif - $totalHppKumulatif - $totalBebanKumulatif;
+
+        // Hitung Total Laba yang pernah diputuskan untuk didistribusi
+        $totalLabaPernahDialokasikan = \App\Models\DistribusiLaba::where('kode_owner', $ownerId)
+            ->where('tanggal', '<=', $endDate)
+            ->sum('laba_bersih');
+
+        // Laba Ditahan adalah sisa laba yang belum pernah masuk ke proses distribusi
+        $labaDitahan = $labaBersihKumulatif - $totalLabaPernahDialokasikan;
+
+        $totalModal = $modalDisetor + $labaDitahan;
+
+        // ===================================================================
+        // BAGIAN 4: VERIFIKASI NERACA
+        // ===================================================================
+        $totalKewajibanDanModal = $totalKewajiban + $totalModal;
+        $selisih = $totalAset - $totalKewajibanDanModal;
+
+        // Menyiapkan data untuk dikirim ke view
+        $reportData = [
+            'asOfDate' => $asOfDate,
+            'aset' => [ 'kas' => $kas, 'nilaiStok' => $nilaiStok, 'asetTetap' => $asetTetap, 'total' => $totalAset ],
+            'kewajiban' => [
+                'utangKomisi' => $utangKomisi,
+                'utangDistribusi' => $utangDistribusi, // Menambahkan item baru
+                'utangLainnya' => $utangLainnya,
+                'total' => $totalKewajiban,
+            ],
+            'modal' => [ 'modalDisetor' => $modalDisetor, 'labaDitahan' => $labaDitahan, 'total' => $totalModal ],
+            'totalKewajibanDanModal' => $totalKewajibanDanModal,
+            'selisih' => $selisih,
+        ];
+
+        $content = view('admin.page.financial.balance_sheet_report', compact('page', 'reportData'));
+        return view('admin.layout.blank_page', compact('page', 'content'));
     }
 }

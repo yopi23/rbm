@@ -659,6 +659,9 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     Route::put('/financial/categories/{id}', [App\Http\Controllers\Admin\FinancialController::class, 'updateCategoryStatus'])->name('financial.categories.update');
 
     // Laporan Keuangan
+    Route::get('/financial/cash-flow', [FinancialController::class, 'cashFlowReport'])->name('financial.cashFlowReport');
+    Route::get('/financial/balance-sheet', [FinancialController::class, 'balanceSheetReport'])->name('financial.balanceSheetReport');
+
     Route::get('financial/development-report', [FinancialController::class, 'developmentReport'])->name('financial.developmentReport');
     Route::get('financial/development-report/print', [FinancialController::class, 'printDevelopmentReport'])->name('financial.development.print');
     Route::get('/financial/reports', [App\Http\Controllers\Admin\FinancialController::class, 'reports'])->name('financial.reports');
