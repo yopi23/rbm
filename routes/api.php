@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\PengeluaranApiController;
 use App\Http\Controllers\Api\WebhookController;
 use App\Http\Controllers\Api\TokoSettingController;
 use App\Http\Controllers\Admin\EmployeeManagementController;
+use App\Http\Controllers\Api\HutangApiController;
 use Illuminate\Support\Facades\Broadcast;
 
 /*
@@ -282,6 +283,9 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::get('/services/dailyReport', [ServiceApiController::class, 'getDailyReportServices']);
     // Get daily report grouped by date
     Route::get('/services/dailyReportGrouped', [ServiceApiController::class, 'getDailyReportGrouped']);
+
+    Route::get('/hutang', [HutangApiController::class, 'index'])->name('hutang.index');
+    Route::post('/hutang/bayar/{id}', [HutangApiController::class, 'bayar'])->name('hutang.bayar');
 
     // Customer Management
     Route::prefix('customer')->group(function () {
