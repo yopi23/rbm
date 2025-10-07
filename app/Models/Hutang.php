@@ -28,4 +28,10 @@ class Hutang extends Model
         // 3. 'id' -> Nama kolom primary key di tabel 'suppliers' yang dituju.
         return $this->belongsTo(Supplier::class, 'kode_supplier', 'id');
     }
+    public function pembelian()
+    {
+        // Asumsi kolom penghubungnya adalah:
+        // Hutang.kode_nota -> Pembelian.kode_pembelian
+        return $this->belongsTo(\App\Models\Pembelian::class, 'kode_nota', 'kode_pembelian');
+    }
 }
