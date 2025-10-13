@@ -44,7 +44,10 @@ use App\Http\Controllers\Admin\SubscriptionController;
 use App\Http\Controllers\Administrator\TokenController;
 use App\Http\Controllers\Administrator\PlanController;
 use App\Http\Controllers\Administrator\SubscriptionLogController;
-
+use App\Http\Controllers\Admin\PriceSettingController;
+use App\Http\Controllers\Admin\AttributeController;
+use App\Http\Controllers\Admin\AttributeValueController;
+use App\Http\Controllers\Admin\ReviewController;
 
 
 /*
@@ -90,6 +93,7 @@ Route::get('search_kode_invite', [AjaxRequestController::class, 'search_kode_inv
 // Route untuk form pengisian laci
 // Route::get('/laci/form', [LaciController::class, 'form'])->name('laci.form');
 // Route::post('/laci/store', [LaciController::class, 'store'])->name('laci.store');
+// Route::get('pembelian/search-variants-ajax', [\App\Http\Controllers\Admin\PembelianController::class, 'searchVariantsAjax'])->name('pembelian.search-variants-ajax');
 
 Route::get('/laci/form', [LaciController::class, 'form'])->name('laci.form');
 Route::post('/laci/store', [LaciController::class, 'store'])->name('laci.store');
@@ -183,6 +187,9 @@ Route::group(['middleware' => ['auth']], function () {
     Route::put('penarikan/{id}/update', [UserController::class, 'update_penarikan'])->name('update_penarikan');
 
     Route::group(['middleware' => ['authCheck:1']], function () {
+        //harga
+        // Route::get('pengaturan-harga', [PriceSettingController::class, 'index'])->name('price-settings.index');
+        // Route::post('pengaturan-harga', [PriceSettingController::class, 'storeOrUpdate'])->name('price-settings.store');
         //Produk
         Route::get('/produk', [HandphoneController::class, 'view_produk'])->name('produk');
         Route::get('/produk/create', [HandphoneController::class, 'create_produk'])->name('create_produk');
@@ -192,6 +199,9 @@ Route::group(['middleware' => ['auth']], function () {
         Route::delete('produk/{id}/delete', [HandphoneController::class, 'delete_produk'])->name('delete_produk');
 
         //Kategori Produk
+        Route::get('/admin/api/kategori/{kategori}/attributes', function(App\Models\KategoriSparepart $kategori) {
+            return response()->json($kategori->attributes()->with('values')->get());
+        });
         Route::get('/kategori_produk', [HandphoneController::class, 'view_kategori'])->name('kategori_produk');
         Route::get('/kategori_produk/create', [HandphoneController::class, 'create_kategori_produk'])->name('create_kategori_produk');
         Route::get('kategori_produk/{id}/edit', [HandphoneController::class, 'edit_kategori_produk'])->name('EditKategoriProduk');
@@ -390,6 +400,50 @@ Route::group(['middleware' => ['auth']], function () {
     Route::get('/spareparts/search', [App\Http\Controllers\Api\SalesApiController::class, 'search'])->name('search');
     Route::post('/pembelian/search-spareparts-ajax', [App\Http\Controllers\Admin\PembelianController::class, 'searchSparepartsAjax'])
         ->name('pembelian.search-spareparts-ajax');
+    // Route::get('pembelian/search-variants-ajax', [\App\Http\Controllers\Admin\PembelianController::class, 'searchVariantsAjax'])->name('pembelian.search-variants-ajax');
+
+    Route::get('/admin/review-migrasi', [App\Http\Controllers\Admin\ReviewController::class, 'index'])->name('review.index');
+    Route::get('/admin/review-migrasi/data/{sparepart}', [App\Http\Controllers\Admin\ReviewController::class, 'getMigrationData'])->name('review.get-data');
+    // Route::post('/admin/review-migrasi/{sparepart}', [App\Http\Controllers\Admin\ReviewController::class, 'migrateSingle'])->name('review.migrate');
+
+    Route::prefix('admin/review')->name('review.')->group(function () {
+
+        // Halaman utama review & migrasi
+        Route::get('/', [ReviewController::class, 'index'])->name('index');
+
+        // ✅ MIGRASI SINGLE ITEM
+        Route::post('/migrate/{sparepart}', [ReviewController::class, 'migrateSingle'])
+             ->name('migrate.single');
+
+        // 🚀 MIGRASI BATCH (Selected Items)
+        Route::post('/migrate-bulk', [ReviewController::class, 'migrateBulk'])
+             ->name('migrate.bulk');
+
+        // 🌐 MIGRASI ALL (Background Job)
+        Route::post('/migrate-all', [ReviewController::class, 'migrateAll'])
+             ->name('migrate.all');
+
+        // 🚀 MIGRASI BATCH DENGAN ATRIBUT (ENDPOINT BARU)
+        Route::post('/migrate-bulk-attributes', [ReviewController::class, 'migrateBulkWithAttributes'])
+            ->name('migrate.bulk_attributes');
+
+        // 📊 CEK STATUS MIGRASI
+        Route::get('/check-status', [ReviewController::class, 'checkMigrationStatus'])
+             ->name('check.status');
+
+        // 👁️ PREVIEW SEBELUM MIGRASI
+        Route::get('/preview/{sparepart}', [ReviewController::class, 'previewMigration'])
+             ->name('preview');
+
+        // 🔙 ROLLBACK MIGRASI
+        Route::post('/rollback/{sparepart}', [ReviewController::class, 'rollbackMigration'])
+             ->name('rollback');
+
+        // 📋 GET DATA UNTUK MODAL (jika butuh atribut)
+        Route::get('/data/{sparepart}', [ReviewController::class, 'getMigrationData'])
+             ->name('get.data');
+    });
+
 }); //admin
 
 // Route::get('/laci/form', [LaciController::class, 'form'])->name('laci.form');
@@ -446,6 +500,14 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
         Route::delete('/pembelian/item/{id}', [PembelianController::class, 'removeItem'])->name('pembelian.remove-item');
         Route::post('/pembelian/{id}/finalize', [PembelianController::class, 'finalize'])->name('pembelian.finalize');
         Route::patch('/pembelian/{id}', [PembelianController::class, 'update'])->name('pembelian.update');
+
+        Route::get('pengaturan-harga', [PriceSettingController::class, 'index'])->name('price-settings.index');
+        Route::post('pengaturan-harga', [PriceSettingController::class, 'storeOrUpdate'])->name('price-settings.store');
+        Route::get('pengaturan-harga/form', [PriceSettingController::class, 'form'])->name('price-settings.form');
+
+        Route::resource('attributes', AttributeController::class);
+        Route::post('attributes/{attribute}/values', [AttributeValueController::class, 'store'])->name('attribute-values.store');
+        Route::delete('attribute-values/{attributeValue}', [AttributeValueController::class, 'destroy'])->name('attribute-values.destroy');
     });
 
     // Routes untuk Pesanan

@@ -22,4 +22,14 @@ class KategoriSparepart extends Model
     {
         return $this->hasMany(SubKategoriSparepart::class, 'kategori_id');
     }
+
+    public function priceSetting()
+    {
+        return $this->hasOne(PriceSetting::class);
+    }
+
+    public function attributes()
+    {
+        return $this->hasMany(Attribute::class);
+    }
 }

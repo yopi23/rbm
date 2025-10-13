@@ -23,6 +23,8 @@ class DetailPembelian extends Model
        'item_sub_kategori',
        'harga_khusus_toko',
        'harga_khusus_satuan',
+       'product_variant_id',
+       'attributes',
     ];
 
     public function pembelian()
@@ -43,4 +45,8 @@ class DetailPembelian extends Model
    {
        return $this->belongsTo(SubKategoriSparepart::class, 'item_sub_kategori');
    }
+   public function productVariant()
+    {
+        return $this->belongsTo(ProductVariant::class);
+    }
 }

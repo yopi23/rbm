@@ -262,6 +262,13 @@
                                          <p>Stock Opname</p>
                                      </a>
                                  </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('review.index') }}"
+                                         class="nav-link {{ request()->route()->getName() == 'review.index' ? 'active' : '' }}">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Review</p>
+                                     </a>
+                                 </li>
                              </ul>
                          </li>
                          <li class="nav-item">
@@ -479,11 +486,21 @@
                                      <i class="fas fa-angle-left right"></i>
                                  </p>
                              </a>
+
                              <ul class="nav nav-treeview">
                                  <li class="nav-item">
-                                     <a href="{{ route('presentase') }}" class="nav-link @yield('persentase')">
+                                     <a href="{{ route('price-settings.index') }}"
+                                         class="nav-link @yield('price-settings.index')">
                                          <i class="far fa-circle nav-icon"></i>
-                                         <p>Persentase</p>
+                                         <p>pengaturan harga</p>
+                                     </a>
+                                 </li>
+                             </ul>
+                             <ul class="nav nav-treeview">
+                                 <li class="nav-item">
+                                     <a href="{{ route('attributes.index') }}" class="nav-link @yield('attributes')">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>pengaturan Atribut</p>
                                      </a>
                                  </li>
                              </ul>

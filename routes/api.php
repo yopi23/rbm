@@ -20,8 +20,10 @@ use App\Http\Controllers\Api\FinancialReportApiController;
 use App\Http\Controllers\Api\PengeluaranApiController;
 use App\Http\Controllers\Api\WebhookController;
 use App\Http\Controllers\Api\TokoSettingController;
+use App\Http\Controllers\Api\ProductSearchApiController;
 use App\Http\Controllers\Admin\EmployeeManagementController;
 use App\Http\Controllers\Api\HutangApiController;
+use App\Http\Controllers\Api\PembelianApiController;
 use Illuminate\Support\Facades\Broadcast;
 
 /*
@@ -75,6 +77,29 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     // Route::get('/user', function (Request $request) {
     //     return $request->user();
     // });
+
+    //pembeliaan
+    // Helper routes
+    Route::get('/pembelian/search-variants', [PembelianApiController::class, 'searchVariants']);
+    Route::get('/suppliers', [PembelianApiController::class, 'getSuppliers']);
+    Route::get('/categories', [PembelianApiController::class, 'getCategories']);
+    Route::get('/kategori/{kategori}/attributes', [PembelianApiController::class, 'getAttributesByCategory']);
+    // Pembelian routes
+    Route::get('/pembelian', [PembelianApiController::class, 'index']);
+    Route::post('/pembelian', [PembelianApiController::class, 'store']);
+    Route::get('/pembelian/{id}', [PembelianApiController::class, 'show']);
+    Route::put('/pembelian/{id}', [PembelianApiController::class, 'update']);
+    Route::post('/pembelian/{id}/finalize', [PembelianApiController::class, 'finalize']);
+
+    // Items routes
+    Route::post('/pembelian/{id}/items', [PembelianApiController::class, 'addItem']);
+    Route::put('/pembelian/items/{detailId}', [PembelianApiController::class, 'updateItem']);
+    Route::delete('/pembelian/items/{id}', [PembelianApiController::class, 'removeItem']);
+    //end pembeliaan
+
+    // pusat pencarian spareprt
+    Route::get('/products/search', [ProductSearchApiController::class, 'search']);
+    // sampai sini
 
     Route::get('/toko-settings', [TokoSettingController::class, 'getSettings']);
     Route::post('/toko-settings', [TokoSettingController::class, 'updateSettings']);

@@ -140,58 +140,53 @@ class FinancialController extends Controller
 
     private function getFinancialStatsForDay(string $date, int $ownerId): array
     {
-        $query = KasPerusahaan::where('kode_owner', $ownerId);
-        $this->applyOperationalDateFilter($query, $date, $ownerId);
+        // =================================================================================
+        // BAGIAN 1: HITUNG LABA BERSIH OPERASIONAL SECARA AKURAT (AKRUAL)
+        // Menggunakan trait yang sudah kita bahas untuk mendapatkan profitabilitas bisnis sesungguhnya.
+        // =================================================================================
+        $labaResult = $this->calculateNetProfit($ownerId, $date, $date);
 
-        // 1. Pemasukan Operasional (Penjualan, Service, dll)
-        // Logika ini sudah benar, menggunakan $nonRevenueSourceTypes.
-        $totalIncome = (clone $query)
-            ->whereNotIn('sourceable_type', $this->nonRevenueSourceTypes)
-            ->sum('debit');
+        // Ambil data Pemasukan dan Biaya Variabel dari hasil perhitungan laba.
+        $totalIncome = $labaResult['laba_kotor'] + $labaResult['detail_beban']['HPP (Modal Pokok Penjualan)'];
+        $variableExpense = $labaResult['detail_beban']['Biaya Operasional Insidental'] ?? 0;
+        $netProfit = $labaResult['laba_bersih'];
 
-        // 2. Pengeluaran Variabel (HANYA Pengeluaran Toko/Insidental)
-        // Ini akan mengisi kartu "Pengeluaran Hari Ini" di dashboard.
-        $variableExpense = (clone $query)
-            ->where('sourceable_type', 'App\\Models\\PengeluaranToko')
-            ->sum('kredit');
 
-        // 3. Laba Kotor Operasional (Pemasukan - Pengeluaran Variabel)
-        // Ini akan mengisi kartu "Profit Hari Ini" di dashboard.
-        $operationalProfit = $totalIncome - $variableExpense;
-
-        // 4. Hitung semua jenis pengeluaran lain secara terpisah.
-        // Anda bisa gunakan data ini untuk membuat kartu baru di dashboard atau untuk laporan lain.
+        // =================================================================================
+        // BAGIAN 2: HITUNG SEMUA ARUS KAS KELUAR NON-OPERASIONAL (CASH BASIS)
+        // Query ini sekarang hanya bertujuan untuk melihat uang keluar untuk hal di luar operasional.
+        // =================================================================================
+        $queryKas = KasPerusahaan::where('kode_owner', $ownerId);
+        $this->applyOperationalDateFilter($queryKas, $date, $ownerId); // Filter sesuai hari operasional
 
         // a. Beban Tetap (Gaji, Sewa, Listrik, dll.)
-        $totalFixedExpense = (clone $query)
+        $totalFixedExpense = (clone $queryKas)
             ->where('sourceable_type', 'App\\Models\\PengeluaranOperasional')
             ->sum('kredit');
 
         // b. Penarikan Saldo oleh Karyawan
-        $totalEmployeeWithdrawals = (clone $query)
+        $totalEmployeeWithdrawals = (clone $queryKas)
             ->where('sourceable_type', 'App\\Models\\Penarikan')
             ->sum('kredit');
 
         // c. Pembelian Stok (Aset)
-        $totalStockPurchase = (clone $query)
+        $totalStockPurchase = (clone $queryKas)
             ->where('sourceable_type', 'App\\Models\\Pembelian')
             ->sum('kredit');
 
         // d. Penarikan oleh Owner (Prive)
-        $totalOwnerWithdrawals = (clone $query)
+        $totalOwnerWithdrawals = (clone $queryKas)
             ->whereIn('sourceable_type', ['App\\Models\\DistribusiLaba', 'App\\Models\\AlokasiLaba'])
             ->sum('kredit');
 
-
-        // Mengembalikan data ke view. Kita tetap menggunakan nama variabel yang sama
-        // agar Anda tidak perlu mengubah file blade.
+        // Mengembalikan array data yang sudah rapi dan sesuai logika baru ke view.
         return [
-            // Data Utama untuk 3 Kartu Teratas
-            'totalIncome'  => $totalIncome,         // Mengisi "Pemasukan Hari Ini"
-            'totalExpense' => $variableExpense,      // Mengisi "Pengeluaran Hari Ini" (sekarang hanya biaya variabel)
-            'netProfit'    => $operationalProfit,    // Mengisi "Profit Hari Ini" (sekarang Laba Operasional)
+            // Data Utama untuk 3 Kartu Teratas (Scope Laba Rugi Operasional)
+            'totalIncome'  => $totalIncome,         // Mengisi "Pemasukan Operasional"
+            'totalExpense' => $variableExpense,      // Mengisi "Pengeluaran Variabel" (hanya biaya toko/insidental)
+            'netProfit'    => $netProfit,            // Mengisi "Laba BERSIH Operasional"
 
-            // Data Tambahan (bisa Anda gunakan untuk kartu baru jika mau)
+            // Data Tambahan untuk Rincian Arus Kas Keluar Non-Operasional
             'totalFixedExpense'        => $totalFixedExpense,
             'totalEmployeeWithdrawals' => $totalEmployeeWithdrawals,
             'totalStockPurchase'       => $totalStockPurchase,
@@ -608,104 +603,82 @@ class FinancialController extends Controller
         $content = view('admin.page.financial.cash_flow_report', compact('page', 'reportData'));
         return view('admin.layout.blank_page', compact('page', 'content'));
     }
+    /**
+     * Menampilkan Laporan Neraca Keuangan Komparatif.
+     */
     public function balanceSheetReport(Request $request)
     {
-        $page = "Laporan Neraca Keuangan";
+        $page = "Laporan Neraca Keuangan Komparatif";
         $ownerId = $this->getOwnerId();
-        $asOfDate = $request->input('as_of_date', now()->format('Y-m-d'));
+
+        // Ambil tanggal dari request, default ke awal dan akhir bulan ini
+        $startDate = $request->input('start_date', now()->startOfMonth()->format('Y-m-d'));
+        $endDate = $request->input('end_date', now()->endOfMonth()->format('Y-m-d'));
+
+        // Hitung data neraca untuk tanggal akhir periode
+        $endPeriodData = $this->calculateBalanceSheetForDate($ownerId, $endDate);
+
+        // Hitung data neraca untuk tanggal awal periode
+        $startPeriodData = $this->calculateBalanceSheetForDate($ownerId, $startDate);
+
+        $content = view('admin.page.financial.balance_sheet_report', compact('page', 'startPeriodData', 'endPeriodData', 'startDate', 'endDate'));
+        return view('admin.layout.blank_page', compact('page', 'content'));
+    }
+
+    /**
+     * Helper function untuk menghitung semua komponen neraca pada tanggal tertentu.
+     * Ini akan dipanggil dua kali: untuk tanggal awal dan tanggal akhir.
+     */
+    private function calculateBalanceSheetForDate(int $ownerId, string $asOfDate): array
+    {
         $endDate = Carbon::parse($asOfDate)->endOfDay();
 
-        // ===================================================================
-        // BAGIAN 1: MENGHITUNG ASET (ASSETS)
-        // ===================================================================
+        // ASET
         $kas = KasPerusahaan::where('kode_owner', $ownerId)->where('tanggal', '<=', $endDate)
             ->orderBy('tanggal', 'desc')->orderBy('id', 'desc')->first()->saldo ?? 0;
-
         $nilaiSparepart = Sparepart::where('kode_owner', $ownerId)->sum(DB::raw('stok_sparepart * harga_beli'));
         $nilaiHandphone = Handphone::where('kode_owner', $ownerId)->sum(DB::raw('stok_barang * harga_beli_barang'));
         $nilaiStok = $nilaiSparepart + $nilaiHandphone;
-
         $asetTetap = Aset::where('kode_owner', $ownerId)->sum('nilai_perolehan');
-
         $totalAset = $kas + $nilaiStok + $asetTetap;
 
-        // ===================================================================
-        // BAGIAN 2: MENGHITUNG KEWAJIBAN (LIABILITIES)
-        // ===================================================================
-        // 2.1 Kewajiban: Utang Komisi Teknisi (saldo yang belum dibayar)
+        // KEWAJIBAN
         $utangKomisi = \App\Models\UserDetail::where('id_upline', $ownerId)->where('jabatan', 3)->sum('saldo');
+        $utangDistribusi = \App\Models\AlokasiLaba::where('kode_owner', $ownerId)
+                            ->where('status', 'dialokasikan')
+                            ->where('created_at', '<=', $endDate)
+                            ->sum('jumlah');
+        $utangUsaha = \App\Models\Hutang::where('kode_owner', $ownerId)
+                        ->where('status', '!=', 'Lunas')
+                        ->where('created_at', '<=', $endDate)
+                        ->sum('total_hutang');
+        $totalKewajiban = $utangKomisi + $utangDistribusi + $utangUsaha;
 
-        // 2.2 Kewajiban: Utang Distribusi Laba (saldo alokasi yang belum diambil)
-        $utangDistribusi = \App\Models\DistribusiLaba::where('kode_owner', $ownerId)
-            ->sum(DB::raw('alokasi_owner + alokasi_investor + alokasi_karyawan + alokasi_kas_aset'));
-
-        // 2.3 Kewajiban: Utang Lainnya (jika ada)
-        $utangLainnya = 0; // Tambahkan logika jika ada modul utang usaha
-
-        $totalKewajiban = $utangKomisi + $utangDistribusi + $utangLainnya;
-
-        // ===================================================================
-        // BAGIAN 3: MENGHITUNG MODAL (EQUITY)
-        // ===================================================================
-        // 3.1 Modal Disetor (Paid-in Capital)
+        // MODAL
         $modalDisetor = KasPerusahaan::where('kode_owner', $ownerId)
             ->where('tanggal', '<=', $endDate)
             ->where('sourceable_type', 'App\\Models\\TransaksiModal')
             ->where('debit', '>', 0)->sum('debit');
 
-        // 3.2 Laba Ditahan (Retained Earnings)
-        // Laba Ditahan = (Total Laba Bersih Kumulatif) - (Total Laba yg Pernah Dialokasikan di tabel distribusi)
-
-        // Hitung Laba Bersih Kumulatif dari semua operasional
-        $totalPendapatanKumulatif = KasPerusahaan::where('kode_owner', $ownerId)->where('tanggal', '<=', $endDate)
-            ->whereIn('sourceable_type', ['App\\Models\\Sevices', 'App\\Models\\Penjualan', 'App\\Models\\Pengambilan'])->sum('debit');
-
-        $totalHppKumulatif = \App\Models\DetailPartServices::join('sevices', 'sevices.id', '=', 'detail_part_services.kode_services')
-                ->where('sevices.kode_owner', $ownerId)->where('sevices.updated_at', '<=', $endDate)
-                ->sum(DB::raw('detail_part_services.detail_modal_part_service * detail_part_services.qty_part'))
-            + \App\Models\DetailPartLuarService::join('sevices', 'sevices.id', '=', 'detail_part_luar_services.kode_services')
-                ->where('sevices.kode_owner', $ownerId)->where('sevices.updated_at', '<=', $endDate)
-                ->sum(DB::raw('detail_part_luar_services.harga_part * detail_part_luar_services.qty_part'));
-
-        $totalBebanKumulatif = KasPerusahaan::where('kode_owner', $ownerId)
-            ->where('tanggal', '<=', $endDate)
-            ->whereNotIn('sourceable_type', $this->nonExpenseSourceTypes)
-            ->where('kredit', '>', 0)->sum('kredit');
-
-        $labaBersihKumulatif = $totalPendapatanKumulatif - $totalHppKumulatif - $totalBebanKumulatif;
-
-        // Hitung Total Laba yang pernah diputuskan untuk didistribusi
+        $labaResult = $this->calculateNetProfit($ownerId, '2020-01-01', $asOfDate);
+        $labaBersihKumulatif = $labaResult['laba_bersih'];
         $totalLabaPernahDialokasikan = \App\Models\DistribusiLaba::where('kode_owner', $ownerId)
             ->where('tanggal', '<=', $endDate)
             ->sum('laba_bersih');
-
-        // Laba Ditahan adalah sisa laba yang belum pernah masuk ke proses distribusi
         $labaDitahan = $labaBersihKumulatif - $totalLabaPernahDialokasikan;
-
         $totalModal = $modalDisetor + $labaDitahan;
 
-        // ===================================================================
-        // BAGIAN 4: VERIFIKASI NERACA
-        // ===================================================================
-        $totalKewajibanDanModal = $totalKewajiban + $totalModal;
-        $selisih = $totalAset - $totalKewajibanDanModal;
-
-        // Menyiapkan data untuk dikirim ke view
-        $reportData = [
-            'asOfDate' => $asOfDate,
+        // Kembalikan dalam bentuk array
+        return [
             'aset' => [ 'kas' => $kas, 'nilaiStok' => $nilaiStok, 'asetTetap' => $asetTetap, 'total' => $totalAset ],
             'kewajiban' => [
+                'utangUsaha' => $utangUsaha,
                 'utangKomisi' => $utangKomisi,
-                'utangDistribusi' => $utangDistribusi, // Menambahkan item baru
-                'utangLainnya' => $utangLainnya,
+                'utangDistribusi' => $utangDistribusi,
                 'total' => $totalKewajiban,
             ],
             'modal' => [ 'modalDisetor' => $modalDisetor, 'labaDitahan' => $labaDitahan, 'total' => $totalModal ],
-            'totalKewajibanDanModal' => $totalKewajibanDanModal,
-            'selisih' => $selisih,
+            'totalKewajibanDanModal' => $totalKewajiban + $totalModal,
         ];
-
-        $content = view('admin.page.financial.balance_sheet_report', compact('page', 'reportData'));
-        return view('admin.layout.blank_page', compact('page', 'content'));
     }
 }

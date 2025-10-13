@@ -18,7 +18,10 @@ use App\Models\StockHistory;
 use App\Models\StockNotification;
 use App\Models\HargaKhusus;
 use App\Models\Hutang;
+use App\Models\ProductVariant;
 use App\Traits\ManajemenKasTrait;
+use Illuminate\Support\Facades\Validator;
+use App\Services\PriceCalculationService;
 
 class PembelianController extends Controller
 {
@@ -107,7 +110,10 @@ class PembelianController extends Controller
                 ->with('error', 'Pembelian sudah selesai dan tidak dapat diedit lagi.');
         }
 
-        $details = DetailPembelian::where('pembelian_id', $id)->get();
+        $details = DetailPembelian::with([
+            'productVariant.sparepart',
+            'productVariant.attributeValues'
+        ])->where('pembelian_id', $id)->get();
 
         // Proses pencarian hanya jika ada parameter search
         $search_results = [];
@@ -137,6 +143,106 @@ class PembelianController extends Controller
             'message' => 'Parameter pencarian diperlukan'
         ]);
     }
+
+    // public function searchVariantsAjax(Request $request)
+    // {
+    //     // 1. Validasi input, pastikan ada parameter 'search'
+    //     $searchTerm = $request->input('search');
+    //     if (empty($searchTerm)) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Parameter pencarian diperlukan'
+    //         ], 400);
+    //     }
+
+    //     // 2. Buat query ke model ProductVariant
+    //     $variants = ProductVariant::query()
+    //         // Eager load relasi untuk efisiensi dan agar datanya tersedia di frontend
+    //         ->with(['sparepart', 'attributeValues.attribute'])
+
+    //         // Lakukan pencarian di beberapa kolom relasi sekaligus
+    //         ->where(function ($query) use ($searchTerm) {
+    //             // Cari berdasarkan nama produk dasar (di tabel spareparts)
+    //             $query->whereHas('sparepart', function ($q) use ($searchTerm) {
+    //                 $q->where('nama_sparepart', 'LIKE', '%' . $searchTerm . '%');
+    //             })
+    //             // ATAU cari berdasarkan nilai atribut (di tabel attribute_values)
+    //             ->orWhereHas('attributeValues', function ($q) use ($searchTerm) {
+    //                 $q->where('value', 'LIKE', '%' . $searchTerm . '%');
+    //             })
+    //             // ATAU cari berdasarkan SKU varian itu sendiri
+    //             ->orWhere('sku', 'LIKE', '%' . $searchTerm . '%');
+    //         })
+    //         // Ambil hanya 10 hasil teratas untuk performa
+    //         ->take(10)
+    //         ->get();
+
+    //     // 3. Kembalikan hasil dalam format JSON yang diharapkan oleh frontend
+    //     return response()->json([
+    //         'success' => true,
+    //         'results' => $variants
+    //     ]);
+    // }
+
+    public function searchVariantsAjax(Request $request)
+{
+    try {
+        $searchTerm = $request->input('search');
+        if (empty($searchTerm)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Parameter pencarian diperlukan'
+            ], 400);
+        }
+
+        // FIX: Menggunakan ID owner yang dinamis dari user yang login
+
+        $ownerId = $this->getThisUser()->id_upline;
+
+
+        // Query untuk mencari varian
+        $variants = \App\Models\ProductVariant::query()
+            // Hanya cari varian milik owner yang aktif
+            ->whereHas('sparepart', function ($q) use ($ownerId) {
+                $q->where('kode_owner', $ownerId);
+            })
+            // FIX: Memuat relasi yang benar. Kita butuh relasi 'attribute' DARI 'attributeValues'
+            ->with(['sparepart', 'attributeValues.attribute'])
+            // Logika pencarian berdasarkan nama atau nilai atribut
+            ->where(function ($query) use ($searchTerm) {
+                $query->whereHas('sparepart', function ($q) use ($searchTerm) {
+                    $q->where('nama_sparepart', 'LIKE', '%' . $searchTerm . '%');
+                })
+                ->orWhereHas('attributeValues', function ($q) use ($searchTerm) {
+                    $q->where('value', 'LIKE', '%' . $searchTerm . '%');
+                });
+            })
+            ->take(10)
+            ->get();
+
+        // Log untuk debugging (opsional)
+        \Log::info('Search Variants:', [
+            'search_term' => $searchTerm,
+            'results_count' => $variants->count(),
+            'owner_id' => $ownerId
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'results' => $variants
+        ]);
+
+    } catch (\Exception $e) {
+        // ... (blok catch tidak berubah)
+        \Log::error('Search Variant AJAX Error: ' . $e->getMessage());
+        \Log::error('Stack trace: ' . $e->getTraceAsString());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Terjadi kesalahan internal pada server. Silakan cek log.'
+        ], 500);
+    }
+}
 
     /**
      * Method helper untuk pencarian sparepart
@@ -257,126 +363,132 @@ class PembelianController extends Controller
      * Tambah item ke pembelian
      */
     public function addItem(Request $request, $id)
+{
+    // 1. VALIDASI LENGKAP - (Tidak ada perubahan di sini)
+    $validated = $request->validate([
+        'nama_item' => 'required|string',
+        'jumlah' => 'required|integer|min:1',
+        'harga_beli' => 'required|numeric|min:0',
+        'is_new_item' => 'required|boolean',
+        'sparepart_id' => 'nullable|exists:spareparts,id',
+        'product_variant_id' => 'nullable|exists:product_variants,id',
+        'attributes' => 'nullable|array',
+        'item_kategori' => 'nullable|exists:kategori_spareparts,id',
+    ]);
+
+    DB::beginTransaction();
+
+    try {
+        $pembelian = Pembelian::findOrFail($id);
+
+        if ($pembelian->status === 'selesai') {
+            return back()->withErrors(['error' => 'Pembelian sudah selesai dan tidak dapat diubah.']);
+        }
+
+        // 2. PERSIAPAN DATA - Gunakan data dari $validated, bukan $request
+        $detailData = [
+            'pembelian_id' => $pembelian->id,
+            'nama_item' => $validated['nama_item'],
+            'jumlah' => $validated['jumlah'],
+            'harga_beli' => $validated['harga_beli'],
+            'total' => $validated['jumlah'] * $validated['harga_beli'],
+            'is_new_item' => $validated['is_new_item'],
+        ];
+
+        // 3. LOGIKA PERCABANGAN - Gunakan data dari $validated
+        if ($validated['is_new_item']) {
+            // Jika ini adalah ITEM BARU...
+            $detailData['item_kategori'] = $validated['item_kategori'];
+            // Simpan pilihan atribut sebagai JSON
+            $detailData['attributes'] = json_encode($validated['attributes'] ?? []);
+        } else {
+            // Jika ini adalah ITEM LAMA (restock)...
+            $detailData['product_variant_id'] = $validated['product_variant_id'];
+            $detailData['attributes'] = json_encode($validated['attributes'] ?? []);
+            // Ambil sparepart_id dari varian untuk konsistensi
+            $variant = \App\Models\ProductVariant::find($validated['product_variant_id']);
+            if ($variant) {
+                $detailData['sparepart_id'] = $variant->sparepart_id;
+            }
+        }
+
+        // 4. PENYIMPANAN DATA
+        DetailPembelian::create($detailData);
+
+        // Update total harga pembelian
+        $pembelian->total_harga += $detailData['total'];
+        $pembelian->save();
+
+        DB::commit();
+        return redirect()->route('pembelian.edit', $id)->with('success', 'Item berhasil ditambahkan.');
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return back()->withErrors(['error' => 'Terjadi kesalahan: ' . $e->getMessage()]);
+    }
+}
+
+    public function updateItem(Request $request, $detailId)
     {
+        // Validasi input
         $validated = $request->validate([
-            'nama_item' => 'required|string',
+            'nama_item' => 'required|string|max:255',
             'jumlah' => 'required|integer|min:1',
             'harga_beli' => 'required|numeric|min:0',
-            'harga_jual' => 'nullable|numeric|min:0', // Tetap validasi harga lain
-            'harga_ecer' => 'nullable|numeric|min:0',
-            'harga_pasang' => 'nullable|numeric|min:0',
-            'is_new_item' => 'required|boolean',
-            'sparepart_id' => 'nullable|exists:spareparts,id',
-            'item_kategori' => 'nullable|exists:kategori_spareparts,id', // Tambahkan validasi kategori per item
-            'item_sub_kategori' => 'nullable|exists:sub_kategori_spareparts,id',
-
-            'harga_khusus_toko' => 'nullable|numeric|min:0',
-            'harga_khusus_satuan' => 'nullable|numeric|min:0',
+            'product_variant_id' => 'nullable|exists:product_variants,id',
+            'attributes' => 'nullable|array',
+            'item_kategori' => 'nullable|exists:kategori_spareparts,id',
         ]);
 
         DB::beginTransaction();
-
         try {
-            $pembelian = Pembelian::findOrFail($id);
+            $detail = DetailPembelian::with('pembelian')->findOrFail($detailId);
+            $pembelian = $detail->pembelian;
 
-            // Jika pembelian sudah selesai, jangan izinkan penambahan item
             if ($pembelian->status === 'selesai') {
                 return back()->withErrors(['error' => 'Pembelian sudah selesai dan tidak dapat diubah.']);
             }
 
-            // Tambahkan detail pembelian (hanya dengan harga beli)
-            $detail = DetailPembelian::create([
-                'pembelian_id' => $pembelian->id,
-                'sparepart_id' => $request->is_new_item ? null : $request->sparepart_id,
-                'nama_item' => $request->nama_item,
-                'jumlah' => $request->jumlah,
-                'harga_beli' => $request->harga_beli,
-                'harga_jual' => $request->harga_jual,
-                'harga_ecer' => $request->harga_ecer,
-                'harga_pasang' => $request->harga_pasang,
-                'total' => $request->jumlah * $request->harga_beli,
-                'is_new_item' => $request->is_new_item,
-                'item_kategori' => $request->item_kategori, // Simpan kategori per item
-                'item_sub_kategori' => $request->item_sub_kategori, // Simpan sub kategori per item
+            $oldTotal = $detail->total;
 
-                'harga_khusus_toko' => $request->harga_khusus_toko,
-                'harga_khusus_satuan' => $request->harga_khusus_satuan,
-            ]);
+            // Siapkan data dasar untuk diupdate
+            $updateData = [
+                'nama_item' => $validated['nama_item'],
+                'jumlah' => $validated['jumlah'],
+                'harga_beli' => $validated['harga_beli'],
+                'total' => $validated['jumlah'] * $validated['harga_beli'],
+            ];
 
-            // Tambahkan harga lain jika ada
-            // if ($request->has('harga_jual')) {
-            //     $detailData['harga_jual'] = $request->harga_jual;
-            // }
-            // if ($request->has('harga_ecer')) {
-            //     $detailData['harga_ecer'] = $request->harga_ecer;
-            // }
-            // if ($request->has('harga_pasang')) {
-            //     $detailData['harga_pasang'] = $request->harga_pasang;
-            // }
-            // DetailPembelian::create($detailData);
+            // Selalu update kategori dan atribut jika ada di request
+            // Ini berlaku untuk item baru maupun restock yang diedit
+            $updateData['item_kategori'] = $validated['item_kategori'];
+            $updateData['attributes'] = json_encode($validated['attributes'] ?? []);
+
+            // Jika ini item lama (restock), pastikan variant ID tetap ada
+            if (!$detail->is_new_item) {
+                $updateData['product_variant_id'] = $validated['product_variant_id'];
+                // Opsi: sesuaikan sparepart_id jika varian berubah total
+                $variant = \App\Models\ProductVariant::find($validated['product_variant_id']);
+                if($variant) {
+                    $updateData['sparepart_id'] = $variant->sparepart_id;
+                }
+            }
+
+            // Lakukan update
+            $detail->update($updateData);
 
             // Update total harga pembelian
-            $pembelian->total_harga += $request->jumlah * $request->harga_beli;
+            $pembelian->total_harga = ($pembelian->total_harga - $oldTotal) + $updateData['total'];
             $pembelian->save();
 
             DB::commit();
-            return redirect()->route('pembelian.edit', $id)->with('success', 'Item berhasil ditambahkan.');
+            return redirect()->route('pembelian.edit', $pembelian->id)->with('success', 'Item berhasil diperbarui.');
+
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->withErrors(['error' => 'Terjadi kesalahan: ' . $e->getMessage()]);
+            return back()->withErrors(['error' => 'Terjadi kesalahan saat update item: ' . $e->getMessage()]);
         }
     }
-
-    public function updateItem(Request $request, $detailId)
-{
-    $detail = DetailPembelian::findOrFail($detailId);
-
-    // Validate input
-    $request->validate([
-        'nama_item' => 'required|string|max:255',
-        'jumlah' => 'required|integer|min:1',
-        'harga_beli' => 'required|numeric|min:0',
-        'harga_jual' => 'nullable|numeric|min:0',
-        'harga_ecer' => 'nullable|numeric|min:0',
-        'harga_pasang' => 'nullable|numeric|min:0',
-        'item_kategori' => 'nullable|exists:kategori_spareparts,id', // Validasi kategori
-        'item_sub_kategori' => 'nullable|exists:sub_kategori_spareparts,id', // Validasi sub kategori
-
-        'harga_khusus_toko' => 'nullable|numeric|min:0',
-        'harga_khusus_satuan' => 'nullable|numeric|min:0',
-    ]);
-
-    // Get the pembelian id from the detail
-    $pembelianId = $detail->pembelian_id;
-
-    // Calculate the old total
-    $oldTotal = $detail->total;
-
-    // Update the detail
-    $detail->nama_item = $request->nama_item;
-    $detail->jumlah = $request->jumlah;
-    $detail->harga_beli = $request->harga_beli;
-    $detail->harga_jual = $request->harga_jual;
-    $detail->harga_ecer = $request->harga_ecer;
-    $detail->harga_pasang = $request->harga_pasang;
-    $detail->item_kategori = $request->item_kategori;
-    $detail->item_sub_kategori = $request->item_sub_kategori;
-
-    $detail->harga_khusus_toko = $request->harga_khusus_toko;
-    $detail->harga_khusus_satuan = $request->harga_khusus_satuan;
-
-    // Calculate new total
-    $detail->total = $request->jumlah * $request->harga_beli;
-    $detail->save();
-
-    // Update pembelian total
-    $pembelian = Pembelian::findOrFail($pembelianId);
-    $pembelian->total_harga = $pembelian->total_harga - $oldTotal + $detail->total;
-    $pembelian->save();
-
-    return redirect()->route('pembelian.edit', $pembelianId)
-        ->with('success', 'Item berhasil diperbarui');
-}
 
     /**
      * Remove item dari pembelian
@@ -414,164 +526,235 @@ class PembelianController extends Controller
    /**
  * Selesaikan pembelian dan update stok sparepart
  */
-public function finalize($id)
-{
-    $metodePembayaran = request('metode_pembayaran', 'Lunas');
-    $tglJatuhTempo = request('tgl_jatuh_tempo');
-    DB::beginTransaction();
+    public function finalize($id, PriceCalculationService $priceCalculator)
+    {
+        // Ambil data dari form yang disubmit
+        $metodePembayaran = request('metode_pembayaran', 'Lunas');
+        $tglJatuhTempo = request('tgl_jatuh_tempo');
+        $supplierId = request('supplier');
 
-    try {
-        // Eager load detail pembelian untuk efisiensi
-        $pembelian = Pembelian::with('detailPembelians')->findOrFail($id);
+        // Mulai transaksi database untuk memastikan semua proses berhasil atau tidak sama sekali
+        DB::beginTransaction();
 
-        if ($pembelian->status === 'selesai') {
-            return redirect()->route('pembelian.index')->with('info', 'Pembelian sudah diselesaikan sebelumnya.');
-        }
+        try {
+            // Validasi dasar sebelum memulai proses
+            $pembelian = Pembelian::with('detailPembelians')->findOrFail($id);
 
-        if ($pembelian->detailPembelians->isEmpty()) {
-            return back()->withErrors(['error' => 'Pembelian tidak dapat diselesaikan karena tidak ada item.']);
-        }
-
-        $supplier = Supplier::find(request('supplier'));
-        if (!$supplier) {
-            // Rollback transaksi jika supplier tidak valid
-            DB::rollBack();
-            return back()->withErrors(['error' => 'Supplier tidak valid. Mohon pilih supplier terlebih dahulu.']);
-        }
-
-        $pembelian->supplier = $supplier->nama_supplier;
-        $pembelian->status = 'selesai';
-        $pembelian->metode_pembayaran = $metodePembayaran;
-
-        if ($metodePembayaran == 'Hutang') {
-            $pembelian->status_pembayaran = 'Belum Lunas';
-            $pembelian->tgl_jatuh_tempo = $tglJatuhTempo;
-        } else {
-            $pembelian->status_pembayaran = 'Lunas';
-        }
-        $pembelian->save();
-
-        foreach ($pembelian->detailPembelians as $detail) {
-            $sparepart = null;
-
-            // Validasi kategori untuk setiap item
-            if (empty($detail->item_kategori)) {
-                // Throw exception akan otomatis di-catch dan di-rollback
-                throw new \Exception('Kategori tidak valid untuk item: ' . $detail->nama_item);
+            if ($pembelian->status === 'selesai') {
+                return redirect()->route('pembelian.index')->with('info', 'Pembelian ini sudah diselesaikan sebelumnya.');
             }
 
-            if ($detail->is_new_item) {
-                // === PROSES UNTUK ITEM BARU ===
-                do {
-                    $kode_sparepart = 'SP-' . date('Ymd') . '-' . rand(1000, 9999);
-                } while (Sparepart::where('kode_sparepart', $kode_sparepart)->exists());
+            if ($pembelian->detailPembelians->isEmpty()) {
+                return back()->withErrors(['error' => 'Pembelian tidak dapat diselesaikan karena tidak ada item.']);
+            }
 
-                // 1. Buat Sparepart baru
-                $sparepart = Sparepart::create([
-                    'kode_sparepart' => $kode_sparepart,
-                    'kode_kategori' => $detail->item_kategori,
-                    'kode_sub_kategori' => $detail->item_sub_kategori,
-                    'kode_spl' => $supplier->id,
-                    'nama_sparepart' => $detail->nama_item,
-                    'stok_sparepart' => $detail->jumlah,
-                    'harga_beli' => $detail->harga_beli,
-                    'harga_jual' => $detail->harga_jual ?? ($detail->harga_beli * 1.2),
-                    'harga_ecer' => $detail->harga_ecer ?? ($detail->harga_beli * 1.3),
-                    'harga_pasang' => $detail->harga_pasang ?? ($detail->harga_beli * 1.4),
-                    'kode_owner' => $this->getThisUser()->id_upline,
-                    'foto_sparepart' => '-',
-                ]);
+            $supplier = Supplier::find($supplierId);
+            if (!$supplier) {
+                throw new \Exception('Supplier tidak valid. Mohon pilih supplier terlebih dahulu.');
+            }
 
-                $detail->sparepart_id = $sparepart->id;
-                $detail->save();
+            // Loop melalui setiap item detail dalam pembelian
+            foreach ($pembelian->detailPembelians as $detail) {
+                $sparepart = null;
+                $variant = null;
 
-                $this->logStockChange($sparepart->id, $detail->jumlah, 'purchase', $pembelian->kode_pembelian, 'Stok awal dari pembelian', $this->getThisUser()->id);
+                if ($detail->is_new_item) {
+                    // ===============================================
+                    // PROSES UNTUK ITEM BARU (MEMBUAT VARIAN BARU)
+                    // ===============================================
 
-            } else {
-                // === PROSES UNTUK ITEM RESTOCK ===
-                if ($detail->sparepart_id) {
-                    $sparepart = Sparepart::find($detail->sparepart_id);
-                    if ($sparepart) {
-                        $stockBefore = $sparepart->stok_sparepart;
+                    // 1. Ambil ID nilai atribut dari detail.
+                    //    Asumsi: Anda menyimpan pilihan atribut sebagai JSON di kolom `attributes` pada tabel `detail_pembelians`
+                    $tempAttributeValueIds = json_decode($detail->attributes, true) ?: [];
+                    $attributeValueIds = array_filter($tempAttributeValueIds);
 
-                        // 1. Update data Sparepart yang sudah ada
-                        $sparepart->stok_sparepart += $detail->jumlah;
-                        $sparepart->harga_beli = $detail->harga_beli;
-                        if (isset($detail->harga_jual)) $sparepart->harga_jual = $detail->harga_jual;
-                        if (isset($detail->harga_ecer)) $sparepart->harga_ecer = $detail->harga_ecer;
-                        if (isset($detail->harga_pasang)) $sparepart->harga_pasang = $detail->harga_pasang;
-                        if ($detail->nama_item != $sparepart->nama_sparepart) $sparepart->nama_sparepart = $detail->nama_item;
-                        if ($detail->item_kategori) $sparepart->kode_kategori = $detail->item_kategori;
-                        if ($detail->item_sub_kategori) $sparepart->kode_sub_kategori = $detail->item_sub_kategori;
+                    // 2. Panggil service untuk mendapatkan harga jual berdasarkan aturan terbaik
+                    $calculatedPrices = $priceCalculator->calculate(
+                        $detail->harga_beli,
+                        $detail->item_kategori,
+                        $attributeValueIds
+                    );
 
-                        $sparepart->save();
-
-                        $this->logStockChange($sparepart->id, $detail->jumlah, 'purchase', $pembelian->kode_pembelian, 'Penambahan stok dari pembelian', $this->getThisUser()->id, $stockBefore, $sparepart->stok_sparepart);
-                        $this->updateStockNotification($sparepart->id, $pembelian->kode_pembelian, $this->getThisUser()->id);
+                    // 3. JIKA TIDAK ADA ATURAN HARGA, gagalkan seluruh transaksi!
+                    if (is_null($calculatedPrices)) {
+                        throw new \Exception('Tidak ada aturan harga yang valid (baik umum maupun khusus) ditemukan untuk item: "' . $detail->nama_item . '". Silakan atur harga di menu Pengaturan Harga terlebih dahulu.');
                     }
-                }
-            }
 
-            // === PROSES UNTUK HARGA KHUSUS (BERLAKU UNTUK ITEM BARU & RESTOCK) ===
-            if ($sparepart) {
-                // Cek apakah ada data harga khusus yang diinput dari form (yang sudah disimpan di $detail)
-                $hasHargaKhusus = !empty($detail->harga_khusus_toko) || !empty($detail->harga_khusus_satuan);
+                    // 4. Cari atau buat produk dasar (Sparepart)
+                    $sparepart = Sparepart::firstOrCreate(
+                        [
+                            // Kunci untuk mencari: nama dan kategori harus sama
+                            'nama_sparepart' => $detail->nama_item,
+                            'kode_kategori' => $detail->item_kategori
+                        ],
+                        [
+                            // Data ini hanya akan diisi jika produk dasar BARU dibuat
+                            'kode_sparepart' => 'SP-' . date('YmdHis') . rand(100, 999),
+                            'kode_owner' => $this->getOwnerId(),
+                            'kode_spl' => $supplierId, // Menggunakan ID supplier dari pembelian
+                            'foto_sparepart' => '-',
+                            'desc_sparepart' => null,
 
-                if ($hasHargaKhusus) {
-                    // 2. Gunakan updateOrCreate untuk membuat atau memperbarui HargaKhusus
-                    HargaKhusus::updateOrCreate(
-                        ['id_sp' => $sparepart->id], // Kunci untuk mencari record
-                        [   // Data untuk di-update atau dibuat (diambil dari $detail)
-                            'harga_toko' => $detail->harga_khusus_toko,
-                            'harga_satuan' => $detail->harga_khusus_satuan,
-                            // Karena tidak ada diskon di addItem, kita set null atau default
-                            'diskon_tipe' => null,
-                            'diskon_nilai' => null,
+                            // Harga & stok di-set 0 karena sekarang dikelola di level varian
+                            'stok_sparepart' => $detail->jumlah,
+                            'harga_beli' => $detail->harga_beli,
+                            'harga_jual' => $calculatedPrices['internal_price'],
+                            'harga_ecer' => $calculatedPrices['wholesale_price'],
+                            'harga_pasang' => $calculatedPrices['default_service_fee']??0,
+
+                            // Kolom lama yang mungkin sudah tidak relevan
+                            'kode_sub_kategori' => null,
+                            'stock_asli' => null,
                         ]
                     );
+
+
+                    // 5. Buat Varian Produk baru dengan harga yang sudah dikalkulasi
+                    $variant = $sparepart->variants()->create([
+                        'purchase_price'  => $detail->harga_beli,
+                        'stock'           => $detail->jumlah,
+                        'wholesale_price' => $calculatedPrices['wholesale_price'],
+                        'retail_price'    => $calculatedPrices['retail_price'],
+                        'internal_price'  => $calculatedPrices['internal_price'],
+                    ]);
+
+
+                    // 6. Hubungkan varian dengan nilai atribut yang dipilih
+                    if (!empty($attributeValueIds)) {
+                        $variant->attributeValues()->sync(array_values($attributeValueIds));
+                    }
+
+                    // 7. Update detail pembelian untuk menyimpan ID varian yang baru dibuat
+                    $detail->product_variant_id = $variant->id;
+                    $detail->save();
+                    $sparepart->save();
+                    $this->updateHargaKhusus($sparepart, $calculatedPrices);
+
                 } else {
-                    // Jika tidak ada data harga khusus, hapus record yang mungkin sudah ada
-                    HargaKhusus::where('id_sp', $sparepart->id)->delete();
+                // ===============================================
+                // PROSES UNTUK ITEM RESTOCK (UPDATE VARIAN LAMA)
+                // ===============================================
+                $variant = ProductVariant::find($detail->product_variant_id);
+
+                if ($variant) {
+                    $sparepart = Sparepart::find($detail->sparepart_id);
+
+                    // PERBAIKAN BAGIAN 1: Validasi dan Ambil Kategori dari Sparepart
+                    // Pastikan sparepart ditemukan sebelum melanjutkan
+                    if (!$sparepart) {
+                        throw new \Exception('Data sparepart induk tidak ditemukan untuk item restock: "' . $detail->nama_item . '".');
+                    }
+                    // Ambil ID kategori dari sparepart yang sudah ada
+                    $categoryId = $sparepart->kode_kategori;
+
+                    // (Logika attribute tetap ada untuk konsistensi, meskipun mungkin tidak digunakan pada restock)
+                    $tempAttributeValueIds = json_decode($detail->attributes, true) ?: [];
+                    $attributeValueIds = array_filter($tempAttributeValueIds);
+
+                    // PERBAIKAN BAGIAN 2: Panggil Kalkulator dengan ID Kategori yang Benar
+                    $calculatedPrices = $priceCalculator->calculate(
+                        $detail->harga_beli,
+                        $categoryId, // <-- Gunakan variabel $categoryId yang sudah kita dapatkan
+                        $attributeValueIds
+                    );
+
+                    if (is_null($calculatedPrices)) {
+                        throw new \Exception('Tidak ada aturan harga yang valid untuk item restock: "' . $detail->nama_item . '".');
+                    }
+
+                    // --- KALKULASI WEIGHTED AVERAGE COST (Tidak berubah) ---
+                    $old_stock = $variant->stock;
+                    $current_average_cost = $variant->purchase_price;
+                    $new_stock_quantity = $detail->jumlah;
+                    $new_stock_cost = $detail->harga_beli;
+
+                    $total_old_value = $old_stock * $current_average_cost;
+                    $total_new_value = $new_stock_quantity * $new_stock_cost;
+                    $new_total_stock = $old_stock + $new_stock_quantity;
+
+                    $new_average_cost = ($new_total_stock > 0)
+                        ? ($total_old_value + $total_new_value) / $new_total_stock
+                        : $new_stock_cost;
+
+                    $variant->stock = $new_total_stock;
+                    $variant->purchase_price = $new_average_cost;
+                    $variant->wholesale_price = $calculatedPrices['wholesale_price'];
+                    $variant->retail_price    = $calculatedPrices['retail_price'];
+                    $variant->internal_price  = $calculatedPrices['internal_price'];
+                    $variant->save();
+
+                    if ($sparepart) {
+                        $sparepart->stok_sparepart = $new_total_stock;
+                        $sparepart->harga_beli = $new_stock_cost;
+                        $sparepart->harga_pasang = $calculatedPrices['default_service_fee'] ?? 0;
+                        $sparepart->save();
+                    }
+                } else {
+                    throw new \Exception('Varian produk untuk restock tidak ditemukan untuk item: "' . $detail->nama_item . '".');
+                }
+
+                    $this->updateHargaKhusus($sparepart, $calculatedPrices);
                 }
             }
+
+            // Jika semua item berhasil diproses, update status pembelian
+            $pembelian->supplier = $supplier->nama_supplier;
+            $pembelian->status = 'selesai';
+            $pembelian->metode_pembayaran = $metodePembayaran;
+
+            if ($metodePembayaran == 'Hutang') {
+                $pembelian->status_pembayaran = 'Belum Lunas';
+                $pembelian->tgl_jatuh_tempo = $tglJatuhTempo;
+
+                // Buat catatan hutang baru
+                Hutang::create([
+                    'kode_supplier' => $supplier->id,
+                    'kode_owner' => $this->getOwnerId(),
+                    'kode_nota' => $pembelian->kode_pembelian,
+                    'total_hutang' => $pembelian->total_harga,
+                    'tgl_jatuh_tempo' => $tglJatuhTempo,
+                    'status' => 'Belum Lunas',
+                ]);
+
+            } else { // Lunas
+                $pembelian->status_pembayaran = 'Lunas';
+
+                // Panggil Trait ManajemenKasTrait untuk mencatat pengeluaran
+                $this->catatKas(
+                    $pembelian,
+                    0, // Debet (Pemasukan)
+                    $pembelian->total_harga, // Kredit (Pengeluaran)
+                    'Pembelian Lunas #' . $pembelian->kode_pembelian,
+                    now()
+                );
+            }
+
+            $pembelian->save();
+
+            // Jika semua proses berhasil, simpan perubahan secara permanen
+            DB::commit();
+
+            return redirect()->route('pembelian.index')->with('success', 'Pembelian berhasil diselesaikan! Stok dan harga produk telah diperbarui.');
+
+        } catch (\Exception $e) {
+            // Jika terjadi error di manapun dalam blok try, batalkan semua perubahan
+            DB::rollBack();
+
+            // Tampilkan pesan error yang spesifik untuk debugging
+            return back()->withErrors(['error' => 'GAGAL: ' . $e->getMessage()]);
         }
-
-        // Jika semua proses berhasil, simpan perubahan secara permanen
-        $pembelian->status = 'selesai';
-        $pembelian->save();
-
-        // 3. PANGGIL FUNGSI CATAT KAS SEBAGAI PENGELUARAN
-            if ($metodePembayaran == 'Lunas') {
-            // Jika LUNAS, langsung catat pengeluaran di kas perusahaan
-            $this->catatKas(
-                $pembelian,
-                0,
-                $pembelian->total_harga,
-                'Pembelian Lunas #' . $pembelian->kode_pembelian,
-                now()
-            );
-        } else {
-            // Jika HUTANG, catat di tabel hutang, JANGAN catat di kas
-            Hutang::create([
-                'kode_supplier' => $supplier->id,
-                'kode_owner' => $this->getOwnerId(),
-                'kode_nota' => $pembelian->kode_pembelian,
-                'total_hutang' => $pembelian->total_harga,
-                'tgl_jatuh_tempo' => $tglJatuhTempo,
-                'status' => 'Belum Lunas',
-            ]);
-        }
-
-        DB::commit();
-        return redirect()->route('pembelian.index')->with('success', 'Pembelian berhasil diselesaikan dan stok berhasil diupdate.');
-
-    } catch (\Exception $e) {
-        // Jika terjadi error, batalkan semua perubahan
-        DB::rollBack();
-        // Tampilkan pesan error yang lebih spesifik untuk debugging
-        return back()->withErrors(['error' => 'Terjadi kesalahan: ' . $e->getMessage() . ' di file ' . $e->getFile() . ' baris ' . $e->getLine()]);
     }
+    protected function updateHargaKhusus($sparepart, $calculatedPrices)
+{
+    HargaKhusus::updateOrCreate(
+        ['id_sp' => $sparepart->id],
+        [
+            'harga_toko'   =>  0,
+            'harga_satuan' => $calculatedPrices['retail_price'] ?? 0,
+        ]
+    );
 }
+
 
 
 public function getSubKategori($kategoriId)

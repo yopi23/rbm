@@ -4,7 +4,10 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+
     <title>Admin Panel - @yield('page')</title>
+
 
     <link rel="shortcut icon" href="{{ asset('/img/yoygreen.png') }}" type="image/x-icon">
     <!-- Google Font: Source Sans Pro -->
@@ -94,11 +97,11 @@
         }
     </style>
     <style>
-    /* Mencegah teks di dalam elemen ini turun baris */
-    .text-nowrap {
-        white-space: nowrap;
-    }
-</style>
+        /* Mencegah teks di dalam elemen ini turun baris */
+        .text-nowrap {
+            white-space: nowrap;
+        }
+    </style>
 </head>
 
 <body class="hold-transition sidebar-mini layout-fixed sidebar-collapse">

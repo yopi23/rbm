@@ -113,6 +113,11 @@ class Sparepart extends Model
         return $this->belongsTo(SubKategoriSparepart::class, 'kode_sub_kategori');
     }
 
+    public function variants()
+    {
+        return $this->hasMany(ProductVariant::class);
+    }
+
     public function supplier()
     {
         return $this->belongsTo(Supplier::class, 'kode_spl');
