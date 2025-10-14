@@ -16,14 +16,25 @@ class ReviewController extends Controller
     /**
      * Menampilkan halaman utama untuk review dan migrasi data sparepart lama.
      */
-    public function index()
+    public function index(Request $request) // <-- 2. Tambahkan Request $request
     {
         $page = "Review & Migrasi Sparepart Lama";
 
-        $unmigratedSpareparts = Sparepart::with('kategori')
-            ->doesntHave('variants')
-            ->orderBy('nama_sparepart')
-            ->paginate(50);
+        // 3. Mulai membangun query, jangan langsung eksekusi
+        $query = Sparepart::with('kategori')
+            ->doesntHave('variants');
+
+        // 4. Tambahkan kondisi WHERE jika ada input pencarian
+        if ($request->filled('search')) {
+            $searchTerm = $request->input('search');
+            $query->where('nama_sparepart', 'like', "%{$searchTerm}%");
+        }
+
+        // 5. Lanjutkan query dan eksekusi dengan paginate
+        $unmigratedSpareparts = $query->orderBy('nama_sparepart')->paginate(50);
+
+        // Penting: Tambahkan ini agar nilai pencarian tetap ada di link paginasi
+        $unmigratedSpareparts->appends($request->only('search'));
 
         $stats = [
             'total_unmigrated' => Sparepart::doesntHave('variants')->count(),
@@ -349,4 +360,5 @@ class ReviewController extends Controller
             'harga_pasang' => 0,
         ]);
     }
+
 }

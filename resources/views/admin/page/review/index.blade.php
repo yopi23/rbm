@@ -48,36 +48,18 @@
         </div>
         <div class="card-body">
             <div class="btn-group" role="group">
-                {{-- Tombol baru untuk proses atribut massal --}}
                 <button type="button" class="btn btn-primary" @click="openBulkAttributeModal()"
                     :disabled="selectedIds.length === 0 || isProcessing">
                     <i class="fas fa-tasks"></i>
                     Proses Atribut Terpilih (<span x-text="selectedIds.length">0</span>)
                 </button>
-
-                {{-- Tombol migrasi cepat (tanpa atribut) --}}
-                {{-- <button type="button" class="btn btn-success" @click="migrateSelected()"
-                    :disabled="selectedIds.length === 0 || isProcessing"
-                    title="Migrasi item terpilih sebagai varian default (tanpa atribut)">
-                    <i class="fas fa-check-double"></i>
-                    Migrasi Cepat Terpilih
-                </button> --}}
-
-                {{-- <button type="button" class="btn btn-dark" @click="migrateAll()"
-                    :disabled="isProcessing || stats.unmigrated === 0">
-                    <i class="fas fa-rocket"></i>
-                    Migrasi Semua (Background)
-                </button> --}}
-
                 <button type="button" class="btn btn-info" @click="refreshStatus()">
                     <i class="fas fa-sync"></i> Refresh
                 </button>
-
                 <button type="button" class="btn btn-secondary" @click="selectAllOnCurrentPage()">
                     <i class="fas fa-check-square"></i> Pilih Halaman Ini
                 </button>
             </div>
-
             <div x-show="isProcessingBulk" class="mt-3">
                 <div class="progress">
                     <div class="progress-bar progress-bar-striped progress-bar-animated"
@@ -92,6 +74,22 @@
     <div class="card">
         <div class="card-header">
             <h3 class="card-title">Daftar Sparepart Lama</h3>
+            {{-- ====================================================== --}}
+            {{-- BAGIAN BARU: FORM PENCARIAN SERVER-SIDE --}}
+            {{-- ====================================================== --}}
+            <div class="card-tools">
+                <form action="{{ url()->current() }}" method="GET">
+                    <div class="input-group input-group-sm" style="width: 250px;">
+                        <input type="text" name="search" class="form-control float-right"
+                            placeholder="Cari Nama Sparepart..." value="{{ request('search') }}">
+                        <div class="input-group-append">
+                            <button type="submit" class="btn btn-default">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
         </div>
         <div class="card-body table-responsive">
             <table class="table table-bordered table-hover" id="sparepartsDataTablereview">
@@ -154,17 +152,28 @@
                     @empty
                         <tr>
                             <td colspan="8" class="text-center">
-                                <div class="alert alert-success"><i class="fas fa-check-circle"></i> Semua data sudah
-                                    dimigrasi!</div>
+                                @if (request('search'))
+                                    <div class="alert alert-warning">Data '{{ request('search') }}' tidak ditemukan.
+                                    </div>
+                                @else
+                                    <div class="alert alert-success"><i class="fas fa-check-circle"></i> Semua data
+                                        sudah dimigrasi!</div>
+                                @endif
                             </td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
-            <div class="mt-3">{{ $unmigratedSpareparts->links() }}</div>
+            {{-- Tampilkan link paginasi dari Laravel --}}
+            <div class="mt-3 d-flex justify-content-end">
+                {{ $unmigratedSpareparts->links() }}
+            </div>
         </div>
     </div>
 
+    {{-- ====================================================== --}}
+    {{-- SEMUA MODAL DI BAWAH INI TIDAK ADA PERUBAHAN --}}
+    {{-- ====================================================== --}}
     <div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -344,29 +353,26 @@
 </div>
 
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+{{-- ====================================================== --}}
+{{-- BAGIAN YANG DIUBAH: KONFIGURASI DATATABLES --}}
+{{-- ====================================================== --}}
 <script>
     $(function() {
+        // Inisialisasi DataTables HANYA untuk styling (responsive),
+        // semua fitur paginasi dan pencarian dinonaktifkan.
         $("#sparepartsDataTablereview").DataTable({
             "responsive": true,
-            "lengthChange": true,
             "autoWidth": false,
-            "language": {
-                "search": "Cari:",
-                "lengthMenu": "Tampilkan _MENU_ data per halaman",
-                "zeroRecords": "Tidak ada data yang ditemukan",
-                "info": "Menampilkan halaman _PAGE_ dari _PAGES_",
-                "infoEmpty": "Tidak ada data tersedia",
-                "infoFiltered": "(difilter dari _MAX_ total data)",
-                "paginate": {
-                    "first": "Pertama",
-                    "last": "Terakhir",
-                    "next": "Berikutnya",
-                    "previous": "Sebelumnya"
-                }
-            }
+            "paging": false, // <-- MATIKAN paginasi DataTables
+            "searching": false, // <-- MATIKAN pencarian DataTables
+            "info": false, // <-- MATIKAN info "Showing 1 of X"
+            "lengthChange": false // <-- MATIKAN dropdown jumlah data
         });
     });
 </script>
+
+{{-- SCRIPT ALPINE.JS DI BAWAH INI TIDAK ADA PERUBAHAN --}}
 <script>
     function migrationManager() {
         return {
@@ -420,19 +426,14 @@
                 if (event.target.checked) {
                     this.selectAllOnCurrentPage();
                 } else {
-                    // Jika checkbox header di-uncheck, kosongkan semua pilihan
                     this.selectedIds = [];
                 }
             },
 
             selectAllOnCurrentPage() {
-                // Fungsi ini hanya memilih checkbox yang terlihat di halaman DataTable saat ini
-                const visibleCheckboxes = document.querySelectorAll(
-                    '#sparepartsDataTablereview tbody tr:not([style*="display: none"]) .sparepart-checkbox');
-                let visibleIds = Array.from(visibleCheckboxes).map(cb => parseInt(cb.value));
-
-                // Tambahkan ID yang terlihat ke dalam array yang sudah ada, hindari duplikat
-                this.selectedIds = [...new Set([...this.selectedIds, ...visibleIds])];
+                const allCheckboxes = document.querySelectorAll('.sparepart-checkbox');
+                let allIds = Array.from(allCheckboxes).map(cb => parseInt(cb.value));
+                this.selectedIds = [...new Set([...this.selectedIds, ...allIds])];
             },
 
             // API Helper
