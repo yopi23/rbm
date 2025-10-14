@@ -13,6 +13,7 @@ use PDO;
 use App\Observers\SparepartSaleObserver;  // Perhatikan namespace yang benar
 use App\Observers\PartServiceObserver;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Pagination\Paginator;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -58,6 +59,7 @@ class AppServiceProvider extends ServiceProvider
                 }
             ?>";
         });
+        Paginator::useBootstrapFour();
 
     }
 }
