@@ -94,7 +94,7 @@
             <h3 class="card-title">Daftar Sparepart Lama</h3>
         </div>
         <div class="card-body table-responsive">
-            <table class="table table-bordered table-hover" id="sparepartsDataTable">
+            <table class="table table-bordered table-hover" id="sparepartsDataTablereview">
                 <thead>
                     <tr>
                         <th width="30">
@@ -346,7 +346,7 @@
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <script>
     $(function() {
-        $("#sparepartsDataTable").DataTable({
+        $("#sparepartsDataTablereview").DataTable({
             "responsive": true,
             "lengthChange": true,
             "autoWidth": false,
@@ -428,7 +428,7 @@
             selectAllOnCurrentPage() {
                 // Fungsi ini hanya memilih checkbox yang terlihat di halaman DataTable saat ini
                 const visibleCheckboxes = document.querySelectorAll(
-                    '#sparepartsDataTable tbody tr:not([style*="display: none"]) .sparepart-checkbox');
+                    '#sparepartsDataTablereview tbody tr:not([style*="display: none"]) .sparepart-checkbox');
                 let visibleIds = Array.from(visibleCheckboxes).map(cb => parseInt(cb.value));
 
                 // Tambahkan ID yang terlihat ke dalam array yang sudah ada, hindari duplikat
