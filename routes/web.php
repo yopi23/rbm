@@ -93,7 +93,7 @@ Route::get('search_kode_invite', [AjaxRequestController::class, 'search_kode_inv
 // Route untuk form pengisian laci
 // Route::get('/laci/form', [LaciController::class, 'form'])->name('laci.form');
 // Route::post('/laci/store', [LaciController::class, 'store'])->name('laci.store');
-// Route::get('pembelian/search-variants-ajax', [\App\Http\Controllers\Admin\PembelianController::class, 'searchVariantsAjax'])->name('pembelian.search-variants-ajax');
+Route::get('pembelian/search-variants-ajax', [\App\Http\Controllers\Admin\PembelianController::class, 'searchVariantsAjax'])->name('pembelian.search-variants-ajax');
 
 Route::get('/laci/form', [LaciController::class, 'form'])->name('laci.form');
 Route::post('/laci/store', [LaciController::class, 'store'])->name('laci.store');

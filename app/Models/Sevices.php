@@ -15,6 +15,7 @@ class Sevices extends Model
     use HasFactory;
     protected $fillable = [
         'kode_service',
+        'customer_id',
         'tgl_service',
         'nama_pelanggan',
         'no_telp',
@@ -74,4 +75,13 @@ class Sevices extends Model
     {
         return $this->hasMany(Sevices::class, 'claimed_from_service_id');
     }
+
+    public function variants()
+{
+    // Parameter ke-4 diubah menjadi 'kode_sparepart'
+    return $this->belongsToMany(ProductVariant::class, 'detail_part_services', 'kode_services', 'kode_sparepart')
+                ->withPivot('qty_part', 'jasa', 'harga_garansi', 'user_input')
+                ->withTimestamps();
+}
+
 }

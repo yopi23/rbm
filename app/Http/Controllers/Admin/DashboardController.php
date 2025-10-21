@@ -13,6 +13,8 @@ use App\Models\Penjualan;
 use App\Models\kas_perusahaan;
 use Illuminate\Http\Request;
 use App\Models\Sevices as modelServices;
+use App\Models\ProductVariant;
+use App\Models\customer_table;
 use App\Models\Sparepart;
 use App\Models\DetailBarangPenjualan;
 use App\Models\DetailSparepartPenjualan;
@@ -28,7 +30,8 @@ use App\Traits\ManajemenKasTrait;
 use Symfony\Component\Translation\Dumper\YamlFileDumper;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
-
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class DashboardController extends Controller
 {
@@ -375,107 +378,365 @@ class DashboardController extends Controller
         }
     }
 
+    // public function create_service_api(Request $request)
+    // {
+    //     // --- PERBAIKAN 1: Tambahkan validasi untuk id_kategorilaci ---
+    //     $validate = $request->validate([
+    //         'tgl_service' => ['nullable', 'date'],
+    //         'nama_pelanggan' => ['required', 'string'],
+    //         'no_telp' => ['nullable', 'string'],
+    //         'type_unit' => ['required', 'string'],
+    //         'keterangan' => ['required', 'string'],
+    //         'biaya_servis' => ['required', 'numeric', 'min:0'],
+    //         'dp' => ['nullable', 'numeric', 'min:0'],
+    //         'kode_sparepart' => ['nullable', 'array'],
+    //         'qty_kode_sparepart' => ['nullable', 'array'],
+    //         'id_kategorilaci' => ['required_with:dp|integer'], // Wajib diisi jika ada DP
+    //         'tipe_sandi' => ['nullable', 'string', Rule::in(['pola', 'pin', 'teks'])],
+    //         'isi_sandi' => ['nullable', 'string', 'required_with:tipe_sandi'],
+    //         'data_unit' => ['nullable', 'json'],
+    //     ]);
+
+    //     try {
+    //         // Generate kode_service otomatis
+    //         $kode_service = $this->generateKodeService();
+
+    //         // Simpan data service dengan kode_service yang dihasilkan
+    //         $create = modelServices::create([
+    //             'kode_service' => $kode_service,
+    //             'tgl_service' => $request->tgl_service ?: Carbon::now()->format('Y-m-d'),
+    //             'nama_pelanggan' => $request->nama_pelanggan,
+    //             'no_telp' => $request->no_telp ?? 0,
+    //             'type_unit' => $request->type_unit,
+    //             // 'keterangan' => $request->ket, // Kemungkinan typo, harusnya $request->keterangan
+    //             'keterangan' => $request->keterangan,
+    //             'total_biaya' => $request->biaya_servis,
+    //             'dp' => $request->dp ?? 0, // Pastikan ada nilai default jika dp null
+    //             'status_services' => 'Antri',
+    //             'kode_owner' => $this->getThisUser()->id_upline, // Menggunakan user yang terautentikasi
+    //             'tipe_sandi' => $request->tipe_sandi,
+    //             'isi_sandi' => $request->isi_sandi,
+    //             'data_unit' => $request->data_unit,
+    //         ]);
+
+    //         if ($create) {
+    //             // --- PERBAIKAN 2: Logika pencatatan ke histori laci ---
+    //             $dpAmount = $request->dp ?? 0;
+    //             if ($dpAmount > 0) {
+    //                 $kategoriId = $request->input('id_kategorilaci');
+    //                 $keterangan = "DP Service: " . $kode_service . " - a/n " . $request->nama_pelanggan;
+
+    //                 $this->catatKas(
+    //                     $create, // Model sumbernya adalah service yang baru dibuat
+    //                     $dpAmount, // Debit (uang masuk)
+    //                     0, // Kredit
+    //                     "DP Service #" . $create->kode_service . " - " . $create->nama_pelanggan,
+    //                     now()
+    //                 );
+
+    //                 // Memanggil fungsi dari trait untuk mencatat histori
+    //                 $this->recordLaciHistory(
+    //                     $kategoriId,
+    //                     $dpAmount,
+    //                     null,
+    //                     $keterangan,
+
+    //                 );
+    //             }
+    //             // --- AKHIR PERBAIKAN ---
+
+    //             if ($request->kode_sparepart != null) {
+    //                 // ... (Logika penambahan sparepart Anda tetap sama)
+    //                 $data_service = modelServices::where('kode_service', $kode_service)->first();
+    //                 for ($i = 0; $i < count($request->kode_sparepart); $i++) {
+    //                     if ($request['kode_sparepart'][$i] != null) {
+    //                         $update_sparepart = Sparepart::findOrFail($request['kode_sparepart'][$i]);
+    //                         DetailPartServices::create([
+    //                             'kode_services' => $data_service->id,
+    //                             'kode_sparepart' => $request['kode_sparepart'][$i],
+    //                             'detail_modal_part_service' => $update_sparepart->harga_beli,
+    //                             'detail_harga_part_service' => $update_sparepart->harga_jual,
+    //                             'qty_part' => $request['qty_kode_sparepart'][$i],
+    //                             'user_input' => auth()->user()->id, // Menggunakan user yang terautentikasi
+    //                         ]);
+    //                         $stok_baru = $update_sparepart->stok_sparepart - $request['qty_kode_sparepart'][$i];
+    //                         $update_sparepart->update(['stok_sparepart' => $stok_baru]);
+    //                     }
+    //                 }
+    //             }
+
+    //             return response()->json([
+    //                 'status' => 'success',
+    //                 'message' => 'Tambah Service Berhasil',
+    //                 'data' => $create // Mengembalikan data service yang baru dibuat
+    //             ], 200);
+    //         }
+    //     } catch (\Illuminate\Validation\ValidationException $e) {
+    //             // Menangkap error validasi dan mengembalikannya dengan benar
+    //             return response()->json(['status' => 'error', 'message' => 'Validasi Gagal', 'errors' => $e->errors()], 422);
+    //     } catch (\Exception $e) {
+    //         // Menangkap error teknis lainnya
+    //         return response()->json(['status' => 'error', 'message' => 'Tambah Service Gagal: ' . $e->getMessage()], 500);
+    //     }
+    // }
+
+    /**
+     * Membuat data service baru melalui API.
+     * Fungsi ini menangani pembuatan pelanggan baru secara otomatis
+     * dan penambahan multi spare part beserta nilai garansinya.
+     */
+    // public function create_service_api(Request $request)
+    // {
+    //     // --- 1. Validasi Input ---
+    //     $validate = $request->validate([
+    //         // Data Pelanggan (Wajib jika customer_id tidak ada)
+    //         'customer_id' => ['nullable', 'integer', 'exists:customer_tables,id'],
+    //         'nama_kontak' => ['required_without:customer_id', 'string', 'max:255'],
+    //         'nomor_telepon' => ['required_without:customer_id', 'string', 'max:255'],
+    //         'alamat' => ['nullable', 'string'],
+    //         'tipe_pelanggan' => ['required_without:customer_id', Rule::in(['Retail', 'Grosir'])],
+    //         'nama_toko' => ['nullable', 'string', 'max:255'],
+
+    //         // Data Unit Service (Wajib)
+    //         'type_unit' => ['required', 'string', 'max:255'],
+    //         'keterangan' => ['required', 'string'],
+    //         'total_biaya' => ['required', 'numeric', 'min:0'],
+
+    //         // Data Pembayaran (Opsional)
+    //         'dp' => ['nullable', 'numeric', 'min:0'],
+    //         'id_kategorilaci' => ['required_with:dp', 'integer'],
+
+    //         // Data Spare Part (Opsional, tapi jika ada, validasi di dalamnya)
+    //         'items' => ['nullable', 'array'],
+    //         'items.*.id' => ['required', 'integer', 'exists:spareparts,id'],
+    //         'items.*.qty' => ['required', 'integer', 'min:1'],
+    //         'items.*.harga_garansi' => ['required', 'numeric', 'min:0'],
+
+    //         // Data Tambahan (Opsional)
+    //         'tipe_sandi' => ['nullable', 'string', Rule::in(['pola', 'pin', 'teks'])],
+    //         'isi_sandi' => ['nullable', 'string', 'required_with:tipe_sandi'],
+    //         'data_unit' => ['nullable', 'json'],
+    //     ]);
+
+    //     // --- 2. Mulai Transaksi Database ---
+    //     DB::beginTransaction();
+    //     try {
+    //         $customerId = $request->customer_id;
+    //         $userUpline = $this->getThisUser()->id_upline;
+
+    //         // --- 3. LOGIKA PELANGGAN: Gunakan yang ada atau buat baru ---
+    //         if (!$customerId) {
+    //             // Jika customer_id tidak dikirim, buat pelanggan baru
+    //             $newCustomer = DB::table('customer_tables')->insertGetId([
+    //                 'nama_kontak' => $request->nama_kontak,
+    //                 'nomor_telepon' => $request->nomor_telepon,
+    //                 'tipe_pelanggan' => $request->tipe_pelanggan,
+    //                 'nama_toko' => $request->nama_toko, // Boleh null jika retail
+    //                 'alamat' => $request->alamat,
+    //                 'kode_owner' => $userUpline,
+    //                 'created_at' => now(),
+    //                 'updated_at' => now()
+    //             ]);
+    //             $customerId = $newCustomer; // Gunakan ID pelanggan yang baru saja dibuat
+    //         }
+
+    //         // --- 4. Buat Data Service Utama ---
+    //         $kode_service = $this->generateKodeService();
+    //         $service = modelServices::create([
+    //             'kode_service' => $kode_service,
+    //             'customer_id' => $customerId, // Tautkan ke ID pelanggan yang sudah pasti ada
+    //             'nama_pelanggan' => $request->nama_kontak, // Simpan juga di sini untuk kemudahan
+    //             'no_telp' => $request->nomor_telepon, // Simpan juga di sini untuk kemudahan
+    //             'type_unit' => $request->type_unit,
+    //             'keterangan' => $request->keterangan,
+    //             'total_biaya' => $request->total_biaya,
+    //             'dp' => $request->dp ?? 0,
+    //             'status_services' => 'Antri',
+    //             'kode_owner' => $userUpline,
+    //             'tipe_sandi' => $request->tipe_sandi,
+    //             'isi_sandi' => $request->isi_sandi,
+    //             'data_unit' => $request->data_unit,
+    //         ]);
+
+    //         // --- 5. Proses Spare Part (jika ada) ---
+    //         if ($request->has('items') && is_array($request->items)) {
+    //             foreach ($request->items as $item) {
+    //                 $sparepart = Sparepart::findOrFail($item['id']);
+
+    //                 // Validasi stok sebelum melanjutkan
+    //                 if ($sparepart->stok_sparepart < $item['qty']) {
+    //                     // Jika stok tidak cukup, batalkan semua proses
+    //                     throw new \Exception("Stok tidak cukup untuk: " . $sparepart->nama_sparepart);
+    //                 }
+
+    //                 DetailPartServices::create([
+    //                     'kode_services' => $service->id,
+    //                     'kode_sparepart' => $item['id'],
+    //                     'detail_modal_part_service' => $sparepart->harga_beli,
+    //                     'detail_harga_part_service' => $sparepart->harga_jual,
+    //                     'harga_garansi' => $item['harga_garansi'], // Simpan harga garansi kustom
+    //                     'qty_part' => $item['qty'],
+    //                     'user_input' => auth()->user()->id,
+    //                 ]);
+
+    //                 // Kurangi stok spare part
+    //                 $sparepart->decrement('stok_sparepart', $item['qty']);
+    //             }
+    //         }
+
+    //         // --- 6. Catat DP ke Laci (jika ada) ---
+    //         $dpAmount = $request->dp ?? 0;
+    //         if ($dpAmount > 0) {
+    //             $this->catatKas($service, $dpAmount, 0, "DP Service #" . $service->kode_service, now());
+    //             $this->recordLaciHistory($request->id_kategorilaci, $dpAmount, null, "DP Service: " . $kode_service);
+    //         }
+
+    //         // --- 7. Commit Transaksi ---
+    //         DB::commit();
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'message' => 'Service baru berhasil dibuat',
+    //             'data' => $service
+    //         ], 200);
+
+    //     } catch (\Illuminate\Validation\ValidationException $e) {
+    //         // --- 8. Tangani Error Validasi ---
+    //         DB::rollBack();
+    //         return response()->json(['status' => 'error', 'message' => 'Data tidak valid', 'errors' => $e->errors()], 422);
+    //     } catch (\Exception $e) {
+    //         // --- 9. Tangani Error Lainnya (misal: stok habis) ---
+    //         DB::rollBack();
+    //         return response()->json(['status' => 'error', 'message' => 'Terjadi kesalahan: ' . $e->getMessage()], 500);
+    //     }
+    // }
+
     public function create_service_api(Request $request)
     {
-        // --- PERBAIKAN 1: Tambahkan validasi untuk id_kategorilaci ---
-        $validate = $request->validate([
-            'tgl_service' => ['nullable', 'date'],
-            'nama_pelanggan' => ['required', 'string'],
-            'no_telp' => ['nullable', 'string'],
-            'type_unit' => ['required', 'string'],
+        // --- 1. Validasi Input ---
+        $validator = Validator::make($request->all(), [
+            'customer_id' => ['nullable', 'integer', 'exists:customer_tables,id'],
+            'nama_kontak' => ['required_without:customer_id', 'string', 'max:255'],
+            'nomor_telepon' => ['nullable', 'string', 'max:25'],
+            'alamat' => ['nullable', 'string'],
+            'tipe_pelanggan' => ['required_without:customer_id', Rule::in(['Retail', 'Grosir'])],
+            'type_unit' => ['required', 'string', 'max:255'],
             'keterangan' => ['required', 'string'],
-            'biaya_servis' => ['required', 'numeric', 'min:0'],
+            'total_biaya' => ['required', 'numeric', 'min:0'], // Ini adalah Grand Total dari part
+            'biaya_servis' => ['nullable', 'numeric', 'min:0'], // Ini adalah biaya manual
             'dp' => ['nullable', 'numeric', 'min:0'],
-            'kode_sparepart' => ['nullable', 'array'],
-            'qty_kode_sparepart' => ['nullable', 'array'],
-            'id_kategorilaci' => ['required_with:dp|integer'], // Wajib diisi jika ada DP
+            'id_kategorilaci' => ['required_with:dp', 'nullable', 'integer'],
+            'items' => ['nullable', 'array'],
+            'items.*.product_variant_id' => ['required', 'integer', 'exists:product_variants,id'],
+            'items.*.qty' => ['required', 'integer', 'min:1'],
+            'items.*.jasa' => ['required', 'numeric', 'min:0'],
+            'items.*.harga_garansi' => ['required', 'numeric', 'min:0'],
             'tipe_sandi' => ['nullable', 'string', Rule::in(['pola', 'pin', 'teks'])],
             'isi_sandi' => ['nullable', 'string', 'required_with:tipe_sandi'],
             'data_unit' => ['nullable', 'json'],
         ]);
 
-        try {
-            // Generate kode_service otomatis
-            $kode_service = $this->generateKodeService();
+        if ($validator->fails()) {
+            return response()->json(['success' => false, 'message' => 'Data tidak valid.', 'errors' => $validator->errors()], 422);
+        }
 
-            // Simpan data service dengan kode_service yang dihasilkan
-            $create = modelServices::create([
-                'kode_service' => $kode_service,
-                'tgl_service' => $request->tgl_service ?: Carbon::now()->format('Y-m-d'),
-                'nama_pelanggan' => $request->nama_pelanggan,
-                'no_telp' => $request->no_telp ?? 0,
+        // --- 2. Mulai Transaksi Database ---
+        DB::beginTransaction();
+        try {
+            $customerId = $request->customer_id;
+            $userUpline = $this->getThisUser()->id_upline;
+
+            // --- 3. LOGIKA PELANGGAN: Gunakan yang ada atau buat baru ---
+            if (!$customerId) {
+                $newCustomer = customer_table::create([
+                    'nama_kontak' => $request->nama_kontak,
+                    'nomor_telepon' => $request->nomor_telepon,
+                    'tipe_pelanggan' => $request->tipe_pelanggan,
+                    'nama_toko' => $request->nama_toko ?? $request->nama_kontak, // Default nama toko
+                    'alamat' => $request->alamat,
+                    'kode_owner' => $userUpline,
+                    'kode_toko' => $this->generateKodeToko($userUpline)
+                ]);
+                $customerId = $newCustomer->id;
+            }
+
+            // --- PERBAIKAN LOGIKA BIAYA ---
+            $grandTotalFromParts = $request->input('total_biaya', 0);
+            $manualServiceCost = $request->input('biaya_servis', 0);
+
+            // Jika total dari part lebih dari 0, gunakan itu. Jika tidak, gunakan biaya manual.
+            $finalTotalBiaya = $grandTotalFromParts > 0 ? $grandTotalFromParts : $manualServiceCost;
+
+            // --- 4. Buat Data Service Utama ---
+            $service = modelServices::create([
+                'kode_service' => $this->generateKodeService(),
+                'customer_id' => $customerId,
+                'tgl_service' => Carbon::now()->format('Y-m-d'),
+                // --- PERBAIKAN PENAMAAN KOLOM ---
+                'nama_pelanggan' => $request->nama_kontak,
+                'no_telp' => $request->nomor_telepon,
+                // ---------------------------------
                 'type_unit' => $request->type_unit,
-                // 'keterangan' => $request->ket, // Kemungkinan typo, harusnya $request->keterangan
                 'keterangan' => $request->keterangan,
-                'total_biaya' => $request->biaya_servis,
-                'dp' => $request->dp ?? 0, // Pastikan ada nilai default jika dp null
+                'total_biaya' => $finalTotalBiaya, // Gunakan biaya final yang sudah dihitung
+                'dp' => $request->dp ?? 0,
                 'status_services' => 'Antri',
-                'kode_owner' => $this->getThisUser()->id_upline, // Menggunakan user yang terautentikasi
+                'kode_owner' => $userUpline,
                 'tipe_sandi' => $request->tipe_sandi,
                 'isi_sandi' => $request->isi_sandi,
                 'data_unit' => $request->data_unit,
             ]);
 
-            if ($create) {
-                // --- PERBAIKAN 2: Logika pencatatan ke histori laci ---
-                $dpAmount = $request->dp ?? 0;
-                if ($dpAmount > 0) {
-                    $kategoriId = $request->input('id_kategorilaci');
-                    $keterangan = "DP Service: " . $kode_service . " - a/n " . $request->nama_pelanggan;
+            // --- 5. Proses Spare Part (jika ada) ---
+            if ($request->has('items') && is_array($request->items)) {
+                foreach ($request->items as $item) {
+                    $variant = \App\Models\ProductVariant::findOrFail($item['product_variant_id']);
 
-                    $this->catatKas(
-                        $create, // Model sumbernya adalah service yang baru dibuat
-                        $dpAmount, // Debit (uang masuk)
-                        0, // Kredit
-                        "DP Service #" . $create->kode_service . " - " . $create->nama_pelanggan,
-                        now()
-                    );
+                    if ($variant->stock < $item['qty']) {
+                        throw new \Exception("Stok tidak cukup untuk: " . $variant->display_name);
+                    }
 
-                    // Memanggil fungsi dari trait untuk mencatat histori
-                    $this->recordLaciHistory(
-                        $kategoriId,
-                        $dpAmount,
-                        null,
-                        $keterangan,
+                    $service->variants()->attach($variant->sparepart_id, [
+                        'qty_part' => $item['qty'],
+                        'jasa' => $item['jasa'],
+                        'harga_garansi' => $item['harga_garansi'],
+                        'detail_modal_part_service' => $variant->purchase_price,
+                        'detail_harga_part_service' => $variant->internal_price,
+                        'user_input' => $this->getThisUser()->id_user,
+                    ]);
 
-                    );
-                }
-                // --- AKHIR PERBAIKAN ---
-
-                if ($request->kode_sparepart != null) {
-                    // ... (Logika penambahan sparepart Anda tetap sama)
-                    $data_service = modelServices::where('kode_service', $kode_service)->first();
-                    for ($i = 0; $i < count($request->kode_sparepart); $i++) {
-                        if ($request['kode_sparepart'][$i] != null) {
-                            $update_sparepart = Sparepart::findOrFail($request['kode_sparepart'][$i]);
-                            DetailPartServices::create([
-                                'kode_services' => $data_service->id,
-                                'kode_sparepart' => $request['kode_sparepart'][$i],
-                                'detail_modal_part_service' => $update_sparepart->harga_beli,
-                                'detail_harga_part_service' => $update_sparepart->harga_jual,
-                                'qty_part' => $request['qty_kode_sparepart'][$i],
-                                'user_input' => auth()->user()->id, // Menggunakan user yang terautentikasi
-                            ]);
-                            $stok_baru = $update_sparepart->stok_sparepart - $request['qty_kode_sparepart'][$i];
-                            $update_sparepart->update(['stok_sparepart' => $stok_baru]);
-                        }
+                    $variant->decrement('stock', $item['qty']);
+                    if ($variant->sparepart) {
+                        $variant->sparepart->decrement('stok_sparepart', $item['qty']);
                     }
                 }
-
-                return response()->json([
-                    'status' => 'success',
-                    'message' => 'Tambah Service Berhasil',
-                    'data' => $create // Mengembalikan data service yang baru dibuat
-                ], 200);
             }
+
+            // --- 6. Catat DP ke Laci (jika ada) ---
+            $dpAmount = $request->dp ?? 0;
+            if ($dpAmount > 0 && $request->id_kategorilaci) {
+                $this->catatKas($service, $dpAmount, 0, "DP Service #" . $service->kode_service, now());
+                $this->recordLaciHistory($request->id_kategorilaci, $dpAmount, null, "DP Service: " . $service->kode_service);
+            }
+
+            // --- 7. Commit Transaksi ---
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Service baru berhasil dibuat',
+                'data' => $service
+            ], 200);
+
         } catch (\Illuminate\Validation\ValidationException $e) {
-                // Menangkap error validasi dan mengembalikannya dengan benar
-                return response()->json(['status' => 'error', 'message' => 'Validasi Gagal', 'errors' => $e->errors()], 422);
+            DB::rollBack();
+            return response()->json(['status' => 'error', 'message' => 'Data tidak valid', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            // Menangkap error teknis lainnya
-            return response()->json(['status' => 'error', 'message' => 'Tambah Service Gagal: ' . $e->getMessage()], 500);
+            DB::rollBack();
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
     }
+
 
     private function generateKodeService()
     {
@@ -493,6 +754,30 @@ class DashboardController extends Controller
         // Format kode service
         return 'SV' . $date . $randomNumber;
     }
+
+    private function generateKodeToko($kodeOwner)
+    {
+        return DB::transaction(function () use ($kodeOwner) {
+            $lastCustomer = customer_table::where('kode_owner', $kodeOwner)
+                                ->whereDate('created_at', today())
+                                ->orderBy('id', 'desc')
+                                ->lockForUpdate()
+                                ->first();
+
+            $datePart = date('Ymd');
+            $baseCode = 'CST-' .'0'. $kodeOwner . $datePart . '-';
+
+            if ($lastCustomer && Str::startsWith($lastCustomer->kode_toko, $baseCode)) {
+                $lastNumber = (int) Str::substr($lastCustomer->kode_toko, -4);
+                $newNumber = $lastNumber + 1;
+            } else {
+                $newNumber = 1;
+            }
+
+            return $baseCode . str_pad($newNumber, 4, '0', STR_PAD_LEFT);
+        });
+    }
+
     public function delete_detail_sparepart(Request $request, $id)
     {
         $data = DetailSparepartPenjualan::findOrFail($id);

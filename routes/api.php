@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\WebhookController;
 use App\Http\Controllers\Api\TokoSettingController;
 use App\Http\Controllers\Api\ProductSearchApiController;
 use App\Http\Controllers\Admin\EmployeeManagementController;
+use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Api\HutangApiController;
 use App\Http\Controllers\Api\PembelianApiController;
 use Illuminate\Support\Facades\Broadcast;
@@ -77,6 +78,8 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     // Route::get('/user', function (Request $request) {
     //     return $request->user();
     // });
+    Route::get('/customers/search', [CustomerController::class, 'search']);
+    Route::get('/product/search', [ProductSearchApiController::class, 'search']);
 
     //pembeliaan
     // Helper routes
@@ -100,7 +103,6 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     // pusat pencarian spareprt
     Route::get('/products/search', [ProductSearchApiController::class, 'search']);
     // sampai sini
-
     Route::get('/toko-settings', [TokoSettingController::class, 'getSettings']);
     Route::post('/toko-settings', [TokoSettingController::class, 'updateSettings']);
 

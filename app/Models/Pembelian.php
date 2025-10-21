@@ -18,7 +18,8 @@ class Pembelian extends Model
         'kode_owner',
         'metode_pembayaran',
         'status_pembayaran',
-        'tgl_jatuh_tempo'
+        'tgl_jatuh_tempo',
+        'item_kategori',
     ];
 
     public function detailPembelians()

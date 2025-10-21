@@ -13,6 +13,8 @@ class DetailPartServices extends Model
         'kode_sparepart',
         'detail_modal_part_service',
         'detail_harga_part_service',
+        'harga_garansi',
+        'jasa',
         'qty_part',
         'user_input',
     ];
@@ -32,4 +34,9 @@ public function service()
         // Parameter ketiga adalah nama kolom primary key di tabel 'spareparts'
         return $this->belongsTo(Sparepart::class, 'kode_sparepart', 'id');
     }
+    public function variant()
+{
+    // Parameter kedua adalah nama kolom di tabel ini yang menyimpan ID variant
+    return $this->belongsTo(ProductVariant::class, 'kode_sparepart');
+}
 }

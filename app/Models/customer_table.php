@@ -9,11 +9,11 @@ class customer_table extends Model
 {
     use HasFactory;
     protected $fillable=[
-        'nama_pelanggan',
+        'nama_kontak',
         'nama_toko',
-        'alamat_toko',
-        'status_toko',
-        'nomor_toko',
+        'alamat',
+        'tipe_pelanggan',
+        'nomor_telepon',
         'kode_toko',
         'kode_owner',
 

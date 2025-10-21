@@ -194,101 +194,214 @@ class SalesApiController extends Controller
 
 // SalesApiController.php
 
+// public function searchSuggestions(Request $request)
+// {
+//     try {
+//         $request->validate(['query' => 'required|string|min:2|max:255']);
+//         $originalQuery = trim($request->input('query'));
+//         $categoryId = $request->input('category_id');
+//         $subcategoryId = $request->input('subcategory_id');
+//         $userId = $this->getThisUser()->id_upline;
+
+//         $query = strtolower($originalQuery);
+
+//         $baseQuery = Sparepart::query()
+//             // =================================================================
+//             // PERUBAHAN DI SINI: Tambahkan GROUP_CONCAT untuk mengambil nilai atribut
+//             // =================================================================
+//             ->select([
+//                 'spareparts.id',
+//                 'spareparts.nama_sparepart',
+//                 'spareparts.kode_sparepart',
+//                 'spareparts.stok_sparepart',
+//                 'spareparts.kode_kategori', // Diperlukan untuk mapping nanti
+//                 'spareparts.kode_sub_kategori', // Diperlukan untuk mapping nanti
+//                 'kategori_spareparts.nama_kategori',
+//                 // Ambil semua 'value' yang unik dan gabungkan jadi satu string
+//                 DB::raw('GROUP_CONCAT(DISTINCT attribute_values.value SEPARATOR ", ") as attributes')
+//             ])
+//             ->leftJoin('kategori_spareparts', 'spareparts.kode_kategori', '=', 'kategori_spareparts.id')
+//             ->leftJoin('product_variants', 'spareparts.id', '=', 'product_variants.sparepart_id')
+//             ->leftJoin('attribute_value_product_variant', 'product_variants.id', '=', 'attribute_value_product_variant.product_variant_id')
+//             ->leftJoin('attribute_values', 'attribute_value_product_variant.attribute_value_id', '=', 'attribute_values.id')
+//             ->where('spareparts.kode_owner', $userId)
+//             ->where('spareparts.stok_sparepart', '>', 0);
+
+//         if ($categoryId) {
+//             $baseQuery->where('spareparts.kode_kategori', $categoryId);
+//         }
+//         if ($subcategoryId) {
+//             $baseQuery->where('spareparts.kode_sub_kategori', $subcategoryId);
+//         }
+
+//         $baseQuery->where(function($q) use ($query) {
+//             $q->where(DB::raw('LOWER(spareparts.nama_sparepart)'), 'LIKE', '%' . $query . '%')
+//               ->orWhere(DB::raw('LOWER(spareparts.kode_sparepart)'), 'LIKE', '%' . $query . '%')
+//               ->orWhere(DB::raw('LOWER(attribute_values.value)'), 'LIKE', '%' . $query . '%');
+//         });
+
+//         // =================================================================
+//         // PERUBAHAN DI SINI: Tambahkan GROUP BY
+//         // =================================================================
+//         $baseQuery->groupBy(
+//             'spareparts.id',
+//             'spareparts.nama_sparepart',
+//             'spareparts.kode_sparepart',
+//             'spareparts.stok_sparepart',
+//             'spareparts.kode_kategori',
+//             'spareparts.kode_sub_kategori',
+//             'kategori_spareparts.nama_kategori'
+//         );
+
+//         $suggestions = $baseQuery->orderByRaw("
+//             CASE
+//                 WHEN LOWER(spareparts.nama_sparepart) LIKE ? THEN 1
+//                 WHEN LOWER(spareparts.kode_sparepart) LIKE ? THEN 2
+//                 ELSE 3
+//             END, spareparts.nama_sparepart ASC
+//         ", ["{$query}%", "{$query}%"])
+//         ->limit(15)
+//         ->get();
+
+//         return response()->json([
+//             'status' => 'success',
+//             // =================================================================
+//             // PERUBAHAN DI SINI: Gunakan kolom 'attributes' yang baru
+//             // =================================================================
+//             'data' => $suggestions->map(function($item) {
+//                 $subKategori = SubKategoriSparepart::find($item->kode_sub_kategori);
+
+//                 // Buat display text yang lebih informatif
+//                 $displayText = $item->nama_sparepart;
+//                 if ($item->attributes) {
+//                     // Jika ada atribut yang cocok, tambahkan ke display text
+//                     $displayText .= ' (' . $item->attributes . ')';
+//                 }
+
+//                 return [
+//                     'id' => $item->id,
+//                     'nama_sparepart' => $item->nama_sparepart,
+//                     'kode_sparepart' => $item->kode_sparepart,
+//                     'stok_sparepart' => $item->stok_sparepart,
+//                     'kategori_nama' => $item->nama_kategori,
+//                     'sub_kategori_nama' => optional($subKategori)->nama_sub_kategori,
+//                     'attributes' => $item->attributes, // Kirim juga atributnya jika perlu
+//                     'display_text' => $displayText
+//                 ];
+//             })
+//         ]);
+
+//     } catch (\Exception $e) {
+//         return response()->json([
+//             'status' => 'error',
+//             'message' => 'Failed to get suggestions',
+//             'error' => $e->getMessage()
+//         ], 500);
+//     }
+// }
 public function searchSuggestions(Request $request)
 {
     try {
         $request->validate(['query' => 'required|string|min:2|max:255']);
+
         $originalQuery = trim($request->input('query'));
-        $categoryId = $request->input('category_id');
-        $subcategoryId = $request->input('subcategory_id');
         $userId = $this->getThisUser()->id_upline;
 
-        $query = strtolower($originalQuery);
+        // Normalisasi input dan pecah menjadi kata kunci (keywords)
+        $normalizedInput = str_replace(',', '.', $originalQuery);
+        $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
 
-        $baseQuery = Sparepart::query()
-            // =================================================================
-            // PERUBAHAN DI SINI: Tambahkan GROUP_CONCAT untuk mengambil nilai atribut
-            // =================================================================
-            ->select([
-                'spareparts.id',
-                'spareparts.nama_sparepart',
-                'spareparts.kode_sparepart',
-                'spareparts.stok_sparepart',
-                'spareparts.kode_kategori', // Diperlukan untuk mapping nanti
-                'spareparts.kode_sub_kategori', // Diperlukan untuk mapping nanti
-                'kategori_spareparts.nama_kategori',
-                // Ambil semua 'value' yang unik dan gabungkan jadi satu string
-                DB::raw('GROUP_CONCAT(DISTINCT attribute_values.value SEPARATOR ", ") as attributes')
+        // =================================================================
+        // PENDEKATAN ELOQUENT YANG BERSIH DAN CEPAT
+        // =================================================================
+        $query = Sparepart::query()
+            // Eager load semua relasi yang dibutuhkan untuk performa tinggi.
+            ->with([
+                'kategori',
+                'subKategori',
+                'variants.attributeValues'
             ])
-            ->leftJoin('kategori_spareparts', 'spareparts.kode_kategori', '=', 'kategori_spareparts.id')
-            ->leftJoin('product_variants', 'spareparts.id', '=', 'product_variants.sparepart_id')
-            ->leftJoin('attribute_value_product_variant', 'product_variants.id', '=', 'attribute_value_product_variant.product_variant_id')
-            ->leftJoin('attribute_values', 'attribute_value_product_variant.attribute_value_id', '=', 'attribute_values.id')
-            ->where('spareparts.kode_owner', $userId)
-            ->where('spareparts.stok_sparepart', '>', 0);
+            ->where('kode_owner', $userId)
+            ->where('stok_sparepart', '>', 0);
 
-        if ($categoryId) {
-            $baseQuery->where('spareparts.kode_kategori', $categoryId);
+        // Filter opsional berdasarkan kategori
+        if ($request->filled('category_id')) {
+            $query->where('kode_kategori', $request->input('category_id'));
         }
-        if ($subcategoryId) {
-            $baseQuery->where('spareparts.kode_sub_kategori', $subcategoryId);
+        if ($request->filled('subcategory_id')) {
+            $query->where('kode_sub_kategori', $request->input('subcategory_id'));
         }
 
-        $baseQuery->where(function($q) use ($query) {
-            $q->where(DB::raw('LOWER(spareparts.nama_sparepart)'), 'LIKE', '%' . $query . '%')
-              ->orWhere(DB::raw('LOWER(spareparts.kode_sparepart)'), 'LIKE', '%' . $query . '%')
-              ->orWhere(DB::raw('LOWER(attribute_values.value)'), 'LIKE', '%' . $query . '%');
+        // =================================================================
+        // ✅ LOGIKA PENCARIAN AKURAT DENGAN REGEXP (seperti fungsi search)
+        // =================================================================
+        $query->where(function ($q) use ($keywords) {
+            // Buat ekspresi kolom yang dinormalisasi untuk digunakan kembali
+            $normalizedNameColumn = DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')");
+
+            // KONDISI 1: SEMUA keyword harus ada sebagai KATA UTUH di `nama_sparepart`
+            $q->where(function ($nameQuery) use ($keywords, $normalizedNameColumn) {
+                foreach ($keywords as $keyword) {
+                    // [[:<:]] dan [[:>:]] adalah penanda batas kata (whole word) di MySQL
+                    $pattern = '[[:<:]]' . preg_quote($keyword, '/') . '[[:>:]]';
+                    $nameQuery->where($normalizedNameColumn, 'REGEXP', $pattern);
+                }
+            });
+
+            // KONDISI 2 (ATAU): SEMUA keyword ada di `attribute value`
+            $q->orWhereHas('variants.attributeValues', function ($attrQuery) use ($keywords) {
+                foreach ($keywords as $keyword) {
+                    $pattern = '[[:<:]]' . preg_quote($keyword, '/') . '[[:>:]]';
+                    $attrQuery->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
+                }
+            });
+
+            // KONDISI 3 (ATAU): SEMUA keyword ada di `kode_sparepart`
+            $q->orWhere(function ($codeQuery) use ($keywords) {
+                foreach ($keywords as $keyword) {
+                    $codeQuery->where(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%');
+                }
+            });
         });
-
         // =================================================================
-        // PERUBAHAN DI SINI: Tambahkan GROUP BY
+        // AKHIR PERUBAHAN LOGIKA
         // =================================================================
-        $baseQuery->groupBy(
-            'spareparts.id',
-            'spareparts.nama_sparepart',
-            'spareparts.kode_sparepart',
-            'spareparts.stok_sparepart',
-            'spareparts.kode_kategori',
-            'spareparts.kode_sub_kategori',
-            'kategori_spareparts.nama_kategori'
-        );
 
-        $suggestions = $baseQuery->orderByRaw("
+        // Pengurutan dan pengambilan data
+        $exactMatchForOrder = implode('%', $keywords);
+        $suggestions = $query->orderByRaw("
             CASE
-                WHEN LOWER(spareparts.nama_sparepart) LIKE ? THEN 1
-                WHEN LOWER(spareparts.kode_sparepart) LIKE ? THEN 2
+                WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE ? THEN 1
+                WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE ? THEN 2
                 ELSE 3
-            END, spareparts.nama_sparepart ASC
-        ", ["{$query}%", "{$query}%"])
+            END, nama_sparepart ASC
+        ", [$exactMatchForOrder . "%", "%" . $exactMatchForOrder . "%"])
         ->limit(15)
         ->get();
 
+        // Transformasi data yang cepat karena semua relasi sudah di-load
+        $data = $suggestions->map(function($item) {
+            // ... (logika transformasi tetap sama)
+            $attributes = $item->variants->pluck('attributeValues')->flatten()->pluck('value')->unique()->implode(', ');
+            $displayText = $item->nama_sparepart;
+            if (!empty($attributes)) {
+                $displayText .= ' (' . $attributes . ')';
+            }
+            return [
+                'id' => $item->id,
+                'nama_sparepart' => $item->nama_sparepart,
+                'kode_sparepart' => $item->kode_sparepart,
+                'stok_sparepart' => (int) $item->stok_sparepart,
+                'kategori_nama' => optional($item->kategori)->nama_kategori,
+                'sub_kategori_nama' => optional($item->subKategori)->nama_sub_kategori,
+                'attributes' => $attributes,
+                'display_text' => $displayText
+            ];
+        });
+
         return response()->json([
             'status' => 'success',
-            // =================================================================
-            // PERUBAHAN DI SINI: Gunakan kolom 'attributes' yang baru
-            // =================================================================
-            'data' => $suggestions->map(function($item) {
-                $subKategori = SubKategoriSparepart::find($item->kode_sub_kategori);
-
-                // Buat display text yang lebih informatif
-                $displayText = $item->nama_sparepart;
-                if ($item->attributes) {
-                    // Jika ada atribut yang cocok, tambahkan ke display text
-                    $displayText .= ' (' . $item->attributes . ')';
-                }
-
-                return [
-                    'id' => $item->id,
-                    'nama_sparepart' => $item->nama_sparepart,
-                    'kode_sparepart' => $item->kode_sparepart,
-                    'stok_sparepart' => $item->stok_sparepart,
-                    'kategori_nama' => $item->nama_kategori,
-                    'sub_kategori_nama' => optional($subKategori)->nama_sub_kategori,
-                    'attributes' => $item->attributes, // Kirim juga atributnya jika perlu
-                    'display_text' => $displayText
-                ];
-            })
+            'data' => $data
         ]);
 
     } catch (\Exception $e) {
@@ -483,23 +596,19 @@ public function search(Request $request)
         $limit = $request->input('limit', 20);
         $userId = $this->getThisUser()->id_upline;
 
-        // Membersihkan input dan membuat keywords
-        $cleanInput = preg_replace('/[^\w\s\/-]/', '', $searchInput);
-        $keywords = array_filter(array_map('trim', explode(' ', strtolower($cleanInput))));
-        $exactMatch = strtolower($cleanInput);
+        // Normalisasi input untuk konsistensi (misal: 6,7 -> 6.7)
+        $normalizedInput = str_replace(',', '.', $searchInput);
+        $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
 
-        // =================================================================
-        // PERUBAHAN UTAMA: Beralih ke Eloquent & Eager Load Relasi
-        // =================================================================
+        // Query Utama (Ini sudah benar)
         $query = Sparepart::query()
-            // Eager load relasi: ambil sparepart beserta semua variannya,
-            // dan untuk setiap varian, ambil semua atributnya.
-            // Ini adalah kunci untuk mendapatkan data yang kompleks.
-            ->with(['variants.attributeValues']);
+            ->with([
+                'variants.attributeValues',
+                'hargaKhusus'
+            ]);
 
-        // Filter utama tetap sama
+        // Filter utama (Ini sudah benar)
         $query->where('kode_owner', $userId);
-
         if ($categoryId) {
             $query->where('kode_kategori', $categoryId);
         }
@@ -507,52 +616,77 @@ public function search(Request $request)
             $query->where('kode_sub_kategori', $subcategoryId);
         }
 
-        // Logika pencarian yang lebih kompleks
-        $query->where(function ($q) use ($keywords, $exactMatch) {
-            // Cari berdasarkan nama atau kode sparepart
-            $q->where(function ($subQ) use ($exactMatch) {
-                $subQ->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', "%{$exactMatch}%")
-                     ->orWhere(DB::raw('LOWER(kode_sparepart)'), 'LIKE', "%{$exactMatch}%");
+        // =================================================================
+        // ✅ LOGIKA PENCARIAN BARU DENGAN WHOLE WORD MATCHING
+        // =================================================================
+        $query->where(function ($q) use ($keywords) {
+            // Buat ekspresi kolom yang dinormalisasi untuk digunakan kembali
+            $normalizedNameColumn = DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')");
+
+            // KONDISI 1: SEMUA keyword harus ada sebagai KATA UTUH di `nama_sparepart`
+            $q->where(function ($nameQuery) use ($keywords, $normalizedNameColumn) {
+                foreach ($keywords as $keyword) {
+                    // [[:<:]] dan [[:>:]] adalah penanda batas kata di MySQL REGEXP
+                    $pattern = '[[:<:]]' . $keyword . '[[:>:]]';
+                    $nameQuery->where($normalizedNameColumn, 'REGEXP', $pattern);
+                }
             });
 
-            // ATAU cari berdasarkan nilai atribut di varian (misal: 'meetoo', 'oled')
-            $q->orWhereHas('variants.attributeValues', function ($attrQuery) use ($exactMatch) {
-                $attrQuery->where(DB::raw('LOWER(value)'), 'LIKE', "%{$exactMatch}%");
+            // KONDISI 2 (ATAU): SEMUA keyword harus ada sebagai KATA UTUH di `attribute value`
+            $q->orWhereHas('variants.attributeValues', function ($attrQuery) use ($keywords) {
+                foreach ($keywords as $keyword) {
+                    $pattern = '[[:<:]]' . $keyword . '[[:>:]]';
+                    $attrQuery->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
+                }
             });
 
-            // Jika ada beberapa keyword, pastikan semuanya ada di nama sparepart
-            if (count($keywords) > 1) {
-                $q->orWhere(function ($subQ) use ($keywords) {
-                    foreach ($keywords as $keyword) {
-                        if (strlen($keyword) > 2) {
-                            $subQ->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', "%{$keyword}%");
-                        }
-                    }
-                });
-            }
+            // KONDISI 3 (ATAU): SEMUA keyword ada di `kode_sparepart` (LIKE masih cocok di sini)
+            $q->orWhere(function ($codeQuery) use ($keywords) {
+                foreach ($keywords as $keyword) {
+                    $codeQuery->where(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%');
+                }
+            });
         });
+        // =================================================================
+        // AKHIR PERUBAHAN LOGIKA
+        // =================================================================
 
-        // Menggunakan paginate() untuk handling halaman yang lebih baik
+        // Pengurutan hasil (ini sudah bagus, kita pertahankan)
+        $exactMatchForOrder = implode('%', $keywords);
         $results = $query->orderByRaw("
             CASE
-                WHEN LOWER(nama_sparepart) LIKE '{$exactMatch}%' THEN 1
-                WHEN LOWER(kode_sparepart) LIKE '{$exactMatch}%' THEN 2
-                WHEN LOWER(nama_sparepart) LIKE '%{$exactMatch}%' THEN 3
-                ELSE 4
+                WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE '{$exactMatchForOrder}%' THEN 1
+                WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE '%{$exactMatchForOrder}%' THEN 2
+                ELSE 3
             END, nama_sparepart ASC
         ")->paginate($limit);
 
-        // Proses data (enhance) setelah diambil
-        $enhancedData = $results->getCollection()->map(function ($item) {
-            // Informasi relasi (variants dan attributes) sudah otomatis ter-load
-            // Kita hanya perlu menambahkan data lain yang tidak ada di relasi
+
+        $results->getCollection()->transform(function ($item) {
+            // 1. Tambahkan data lain yang Anda butuhkan
             $item->kategori_nama = optional(KategoriSparepart::find($item->kode_kategori))->nama_kategori;
             $item->sub_kategori_nama = optional(SubKategoriSparepart::find($item->kode_sub_kategori))->nama_sub_kategori;
             $item->stock_status = $item->stok_sparepart > 0 ? 'available' : 'out_of_stock';
             $item->low_stock = $item->stok_sparepart > 0 && $item->stok_sparepart <= 5;
 
-            // Logika harga khusus bisa diterapkan di sini jika perlu
-            // (Saat ini, data harga ada di dalam tabel variants)
+            // 2. Logika untuk mengubah format harga khusus
+            // Ambil data harga khusus pertama dari relasi yang sudah di-load
+            $hargaKhususPertama = $item->hargaKhusus->first();
+
+            // Cek jika ada harga khusus
+            if ($hargaKhususPertama) {
+                // Buat properti baru 'harga_khusus' dengan format objek
+                $item->harga_khusus = [
+                    'harga_toko'   => (int) $hargaKhususPertama->harga_toko,
+                    'harga_satuan' => (int) $hargaKhususPertama->harga_satuan,
+                ];
+            } else {
+                // Jika tidak ada, kembalikan null atau objek dengan nilai default
+                $item->harga_khusus = null;
+            }
+
+            // 3. Hapus relasi asli agar tidak ikut tampil di JSON
+            unset($item->hargaKhusus);
 
             return $item;
         });
@@ -560,7 +694,7 @@ public function search(Request $request)
         return response()->json([
             'status' => 'success',
             'message' => 'Data retrieved successfully',
-            'data' => $enhancedData,
+            'data' => $results->items(),
             // Informasi pagination sudah disediakan oleh Laravel
             'pagination' => [
                 'current_page' => $results->currentPage(),

@@ -91,7 +91,7 @@ class HutangApiController extends Controller
             // PERUBAHAN 4: Mengembalikan response error dalam format JSON
             return response()->json([
                 'success' => false,
-                'message' => 'Terjadi kesalahan saat membayar hutang.'
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(), // tampilkan pesan asli
             ], 500);
         }
     }

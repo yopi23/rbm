@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+
 class Sparepart extends Model
 {
     use HasFactory;
@@ -115,7 +116,7 @@ class Sparepart extends Model
 
     public function variants()
     {
-        return $this->hasMany(ProductVariant::class);
+        return $this->hasMany(ProductVariant::class, 'sparepart_id');
     }
 
     public function supplier()

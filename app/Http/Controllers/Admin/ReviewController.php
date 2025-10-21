@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Sparepart;
+use App\Models\HargaKhusus;
 use App\Models\ProductVariant;
 use App\Models\Attribute;
 use App\Models\AttributeValue;
@@ -214,9 +215,9 @@ class ReviewController extends Controller
         $willBecomePrices = [
             'stock' => $sparepart->stok_sparepart,
             'purchase_price' => $sparepart->harga_beli,
-            'wholesale_price' => $calculatedPrices['wholesale_price'] ?? $sparepart->harga_jual,
+            'wholesale_price' => $calculatedPrices['wholesale_price'] ,
             'retail_price' => $calculatedPrices['retail_price'] ?? $sparepart->harga_ecer,
-            'internal_price' => $calculatedPrices['internal_price'] ?? $sparepart->harga_pasang,
+            'internal_price' => $calculatedPrices['internal_price'] ?? $sparepart->harga_jual,
         ];
 
         return response()->json([
@@ -282,7 +283,7 @@ class ReviewController extends Controller
                 'harga_beli' => $variant->purchase_price,
                 'harga_jual' => $variant->wholesale_price,
                 'harga_ecer' => $variant->retail_price,
-                'harga_pasang' => $variant->internal_price,
+                'harga_pasang' => $calculatedPrices['default_service_fee'],
                 'stok_sparepart' => $variant->stock,
             ]);
 
@@ -323,6 +324,15 @@ class ReviewController extends Controller
             'retail_price' => $calculatedPrices['retail_price'],
             'internal_price' => $calculatedPrices['internal_price'],
         ]);
+        $sparepart->update([
+                'harga_beli' => $variant->purchase_price,
+                'harga_jual' => $variant->internal_price,
+                'harga_ecer' => $variant->wholesale_price,
+                'harga_pasang' => $calculatedPrices['default_service_fee'],
+                'stok_sparepart' => $variant->stock,
+            ]);
+
+        $this->updateHargaKhusus($sparepart, $calculatedPrices);
 
         if (!empty($attributeValueIds)) {
             $variant->attributeValues()->attach($attributeValueIds);
@@ -345,6 +355,17 @@ class ReviewController extends Controller
             }, '=', count($attributeValueIds));
 
         return $query->exists();
+    }
+
+    protected function updateHargaKhusus($sparepart, $calculatedPrices)
+    {
+        HargaKhusus::updateOrCreate(
+            ['id_sp' => $sparepart->id],
+            [
+                'harga_toko'   =>  0,
+                'harga_satuan' => $calculatedPrices['retail_price'] ?? 0,
+            ]
+        );
     }
 
     /**

@@ -195,48 +195,74 @@ class PembelianController extends Controller
             ], 400);
         }
 
-        // FIX: Menggunakan ID owner yang dinamis dari user yang login
-
+        // Dapatkan ID owner yang dinamis
         $ownerId = $this->getThisUser()->id_upline;
 
+        // 1. Pecah search term menjadi kata kunci (keywords)
+        $normalizedInput = str_replace(',', '.', $searchTerm);
+        $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
 
         // Query untuk mencari varian
-        $variants = \App\Models\ProductVariant::query()
-            // Hanya cari varian milik owner yang aktif
+        $variants = ProductVariant::query()
+            // Filter berdasarkan owner
             ->whereHas('sparepart', function ($q) use ($ownerId) {
                 $q->where('kode_owner', $ownerId);
             })
-            // FIX: Memuat relasi yang benar. Kita butuh relasi 'attribute' DARI 'attributeValues'
+            // Eager loading untuk relasi (ini sudah benar)
             ->with(['sparepart', 'attributeValues.attribute'])
-            // Logika pencarian berdasarkan nama atau nilai atribut
-            ->where(function ($query) use ($searchTerm) {
-                $query->whereHas('sparepart', function ($q) use ($searchTerm) {
-                    $q->where('nama_sparepart', 'LIKE', '%' . $searchTerm . '%');
-                })
-                ->orWhereHas('attributeValues', function ($q) use ($searchTerm) {
-                    $q->where('value', 'LIKE', '%' . $searchTerm . '%');
+
+            // =================================================================
+            // ✅ PERBAIKAN LOGIKA PENCARIAN AKURAT DI SINI
+            // =================================================================
+            ->where(function ($query) use ($keywords) {
+
+                // KONDISI 1 (ATAU): Semua keyword ada di NAMA SPAREPART
+                $query->orWhere(function ($nameQuery) use ($keywords) {
+                    foreach ($keywords as $keyword) {
+                        // Pola REGEXP untuk kata utuh
+                        $pattern = '[[:<:]]' . preg_quote($keyword, '/') . '[[:>:]]';
+                        $nameQuery->whereHas('sparepart', function ($subQ) use ($pattern) {
+                            // Normalisasi kolom nama sparepart sebelum membandingkan
+                            $subQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'REGEXP', $pattern);
+                        });
+                    }
                 });
+
+                // KONDISI 2 (ATAU): Semua keyword ada di NILAI ATRIBUT
+                $query->orWhere(function ($attributeQuery) use ($keywords) {
+                    foreach ($keywords as $keyword) {
+                        $pattern = '[[:<:]]' . preg_quote($keyword, '/') . '[[:>:]]';
+                        $attributeQuery->whereHas('attributeValues', function ($subQ) use ($pattern) {
+                            $subQ->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
+                        });
+                    }
+                });
+
+                // (Opsional) KONDISI 3 (ATAU): Semua keyword ada di SKU
+                // $query->orWhere(function ($skuQuery) use ($keywords) {
+                //     foreach ($keywords as $keyword) {
+                //         $skuQuery->where(DB::raw('LOWER(sku)'), 'LIKE', '%' . $keyword . '%');
+                //     }
+                // });
+
             })
-            ->take(10)
+            // =================================================================
+            // AKHIR PERBAIKAN
+            // =================================================================
+
+            ->take(10) // Batasi hasil untuk AJAX
             ->get();
 
-        // Log untuk debugging (opsional)
-        \Log::info('Search Variants:', [
-            'search_term' => $searchTerm,
-            'results_count' => $variants->count(),
-            'owner_id' => $ownerId
-        ]);
+        // Tidak perlu transformasi di sini jika Anda ingin mengembalikan objek Eloquent lengkap
+        // $variants = $variants->map(function ($variant) { ... });
 
         return response()->json([
             'success' => true,
-            'results' => $variants
+            'results' => $variants // Kirim objek Eloquent lengkap dengan relasinya
         ]);
 
     } catch (\Exception $e) {
-        // ... (blok catch tidak berubah)
-        \Log::error('Search Variant AJAX Error: ' . $e->getMessage());
-        \Log::error('Stack trace: ' . $e->getTraceAsString());
-
+        \Log::error('Search Variant AJAX Error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
         return response()->json([
             'success' => false,
             'message' => 'Terjadi kesalahan internal pada server. Silakan cek log.'

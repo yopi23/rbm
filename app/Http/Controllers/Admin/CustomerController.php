@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth; // Pastikan Auth di-import
 
 class CustomerController extends Controller
 {
@@ -56,18 +57,16 @@ class CustomerController extends Controller
     private function generateKodeToko($kodeOwner)
     {
         return DB::transaction(function () use ($kodeOwner) {
-            // Cari kode terakhir untuk owner ini hari ini
             $lastCustomer = customer_table::where('kode_owner', $kodeOwner)
                                 ->whereDate('created_at', today())
                                 ->orderBy('id', 'desc')
-                                ->lockForUpdate() // Lock row untuk menghindari race condition
+                                ->lockForUpdate()
                                 ->first();
 
             $datePart = date('Ymd');
             $baseCode = 'CST-' .'0'. $kodeOwner . $datePart . '-';
 
             if ($lastCustomer && Str::startsWith($lastCustomer->kode_toko, $baseCode)) {
-                // Extract number from existing code
                 $lastNumber = (int) Str::substr($lastCustomer->kode_toko, -4);
                 $newNumber = $lastNumber + 1;
             } else {
@@ -86,13 +85,12 @@ class CustomerController extends Controller
      */
     public function store(Request $request)
     {
-        // Validasi data input
         $validator = Validator::make($request->all(), [
-            'nama_pelanggan' => 'required|string|max:255',
+            'nama_kontak' => 'required|string|max:255',
             'nama_toko' => 'required|string|max:255',
-            'alamat_toko' => 'required|string',
-            'status_toko' => 'required|in:biasa,konter,glosir,super',
-            'nomor_toko' => 'required|string|max:15',
+            'alamat' => 'required|string',
+            'tipe_pelanggan' => 'required|in:Retail,Grosir',
+            'nomor_telepon' => 'required|string|max:25',
             'kode_toko' => 'required|string|unique:customer_tables,kode_toko',
         ]);
 
@@ -102,26 +100,19 @@ class CustomerController extends Controller
                 ->withInput();
         }
 
-        // Gunakan transaction untuk memastikan konsistensi data
         DB::transaction(function () use ($request) {
-            // Get all data from request
             $customerData = $request->all();
-
-            // Add kode_owner to the data
             $kodeOwner = $this->getThisUser()->id_upline;
             $customerData['kode_owner'] = $kodeOwner;
 
-            // Double check kode_toko uniqueness dalam transaction
             $existingCustomer = customer_table::where('kode_toko', $customerData['kode_toko'])
                                     ->lockForUpdate()
                                     ->first();
 
             if ($existingCustomer) {
-                // Regenerate kode toko jika ternyata ada yang sama
                 $customerData['kode_toko'] = $this->generateKodeToko($kodeOwner);
             }
 
-            // Simpan data customer baru
             customer_table::create($customerData);
         });
 
@@ -140,7 +131,6 @@ class CustomerController extends Controller
         $page = 'Detail Customer';
         $customer = customer_table::findOrFail($id);
 
-        // Pastikan customer milik owner yang sesuai
         $kodeOwner = $this->getThisUser()->id_upline;
         if ($customer->kode_owner != $kodeOwner) {
             abort(403, 'Unauthorized action.');
@@ -161,7 +151,6 @@ class CustomerController extends Controller
         $page = 'Edit Customer';
         $customer = customer_table::findOrFail($id);
 
-        // Pastikan customer milik owner yang sesuai
         $kodeOwner = $this->getThisUser()->id_upline;
         if ($customer->kode_owner != $kodeOwner) {
             abort(403, 'Unauthorized action.');
@@ -182,19 +171,17 @@ class CustomerController extends Controller
     {
         $customer = customer_table::findOrFail($id);
 
-        // Pastikan customer milik owner yang sesuai
         $kodeOwner = $this->getThisUser()->id_upline;
         if ($customer->kode_owner != $kodeOwner) {
             abort(403, 'Unauthorized action.');
         }
 
-        // Validasi data input
         $validator = Validator::make($request->all(), [
-            'nama_pelanggan' => 'required|string|max:255',
+            'nama_kontak' => 'required|string|max:255',
             'nama_toko' => 'required|string|max:255',
-            'alamat_toko' => 'required|string',
-            'status_toko' => 'required|in:biasa,konter,glosir,super',
-            'nomor_toko' => 'required|string|max:15',
+            'alamat' => 'required|string',
+            'tipe_pelanggan' => 'required|in:Retail,Grosir',
+            'nomor_telepon' => 'required|string|max:25',
         ]);
 
         if ($validator->fails()) {
@@ -203,7 +190,6 @@ class CustomerController extends Controller
                 ->withInput();
         }
 
-        // Update data customer (excluding kode_owner and kode_toko)
         $updateData = $request->except(['kode_owner', 'kode_toko']);
         $customer->update($updateData);
 
@@ -221,7 +207,6 @@ class CustomerController extends Controller
     {
         $customer = customer_table::findOrFail($id);
 
-        // Pastikan customer milik owner yang sesuai
         $kodeOwner = $this->getThisUser()->id_upline;
         if ($customer->kode_owner != $kodeOwner) {
             abort(403, 'Unauthorized action.');
@@ -231,5 +216,37 @@ class CustomerController extends Controller
 
         return redirect()->route('customer.index')
             ->with('success', 'Customer berhasil dihapus!');
+    }
+
+    /**
+     * Search for customers based on a query for the API.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function search(Request $request)
+    {
+        // PERBAIKAN: Mengganti ›input() menjadi ->input()
+        $query = $request->input('query', '');
+
+        if (strlen($query) < 3) {
+            return response()->json(['success' => true, 'data' => []]);
+        }
+
+        // Mengambil kode owner dari user yang sedang login via API
+        // $kodeOwner = ;
+        $kodeOwner = $this->getThisUser()->id_upline;
+
+        $customers = customer_table::where('kode_owner', $kodeOwner)
+            ->where(function ($q) use ($query) {
+                $q->where('nama_kontak', 'LIKE', "%{$query}%")
+                  ->orWhere('nomor_telepon', 'LIKE', "%{$query}%")
+                  ->orWhere('nama_toko', 'LIKE', "%{$query}%");
+            })
+            ->select('id', 'nama_kontak', 'nomor_telepon', 'alamat', 'tipe_pelanggan')
+            ->limit(15)
+            ->get();
+
+        return response()->json(['success' => true, 'data' => $customers]);
     }
 }

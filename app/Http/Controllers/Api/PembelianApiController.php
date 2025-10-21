@@ -228,7 +228,9 @@ class PembelianApiController extends Controller
             'product_variant_id' => 'nullable|exists:product_variants,id',
             'attributes' => 'nullable|array',
             'item_kategori' => 'nullable|exists:kategori_spareparts,id',
+
         ]);
+
 
         DB::beginTransaction();
 
@@ -257,6 +259,7 @@ class PembelianApiController extends Controller
                 $detailData['attributes'] = json_encode($validated['attributes'] ?? []);
             } else {
                 $detailData['product_variant_id'] = $validated['product_variant_id'];
+                $detailData['item_kategori'] = $validated['item_kategori'];
                 $detailData['attributes'] = json_encode($validated['attributes'] ?? []);
 
                 $variant = ProductVariant::find($validated['product_variant_id']);
@@ -598,77 +601,97 @@ $this->updateHargaKhusus($sparepart, $calculatedPrices);
      * Pencarian varian produk
      */
     public function searchVariants(Request $request)
-    {
-        try {
-            $searchTerm = $request->input('search');
+{
+    try {
+        $searchTerm = $request->input('search');
 
-            if (empty($searchTerm)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Parameter pencarian diperlukan'
-                ], 400);
-            }
-
-            $ownerId = $this->getOwnerId();
-
-            $variants = ProductVariant::query()
-                ->whereHas('sparepart', function ($q) use ($ownerId) {
-                    $q->where('kode_owner', $ownerId);
-                })
-                // Eager loading ini sudah benar dan akan memuat semua data yang Anda butuhkan
-                ->with(['sparepart.kategori', 'attributeValues.attribute'])
-                ->where(function ($query) use ($searchTerm) {
-                    $query->whereHas('sparepart', function ($q) use ($searchTerm) {
-                        $q->where('nama_sparepart', 'LIKE', '%' . $searchTerm . '%');
-                    })
-                    ->orWhereHas('attributeValues', function ($q) use ($searchTerm) {
-                        $q->where('value', 'LIKE', '%' . $searchTerm . '%');
-                    });
-                })
-                ->take(10)
-                ->get()
-                ->map(function ($variant) {
-                    if (!$variant->sparepart) {
-                        return null;
-                    }
-
-                    // ✅ PERBAIKAN UTAMA: Hapus blok 'foreach' yang membuat array $attributes manual.
-                    // Kita tidak perlu lagi menyederhanakan data.
-
-                    return [
-                        'id' => $variant->id,
-
-                        'sparepart' => [
-                            'id' => $variant->sparepart->id,
-                            'nama_sparepart' => $variant->sparepart->nama_sparepart,
-                            'kode_kategori' => $variant->sparepart->kode_kategori,
-                            'nama_kategori' => $variant->sparepart->kategori->nama_kategori ?? 'N/A',
-                        ],
-
-                        'sku' => $variant->sku,
-                        'stock' => $variant->stock,
-                        'purchase_price' => $variant->purchase_price,
-                        'wholesale_price' => $variant->wholesale_price,
-                        'retail_price' => $variant->retail_price,
-                        'internal_price' => $variant->internal_price,
-
-                        // ✅ PERBAIKAN UTAMA: Langsung sertakan objek relasi yang sudah di-load.
-                        // Laravel akan secara otomatis mengubahnya menjadi JSON yang kaya data.
-                        'attribute_values' => $variant->attributeValues,
-                    ];
-                })->filter();
-
-            return response()->json([
-                'success' => true,
-                'results' => $variants->values(),
-            ]);
-        } catch (\Exception $e) {
+        if (empty($searchTerm)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-            ], 500);
+                'message' => 'Parameter pencarian diperlukan'
+            ], 400);
         }
+
+        $ownerId = $this->getOwnerId();
+
+        // 1. Pecah search term menjadi beberapa kata kunci (keywords)
+        $normalizedInput = str_replace(',', '.', $searchTerm);
+        $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
+
+        $variants = ProductVariant::query()
+            ->whereHas('sparepart', function ($q) use ($ownerId) {
+                $q->where('kode_owner', $ownerId);
+            })
+            // Eager loading Anda sudah benar
+            ->with(['sparepart.kategori', 'attributeValues.attribute'])
+
+            // =================================================================
+            // ✅ PERBAIKAN LOGIKA PENCARIAN AKURAT DI SINI
+            // =================================================================
+            ->where(function ($query) use ($keywords) {
+
+                // KONDISI 1 (ATAU): Semua keyword ada di NAMA SPAREPART
+                $query->orWhere(function ($nameQuery) use ($keywords) {
+                    foreach ($keywords as $keyword) {
+                        $pattern = '[[:<:]]' . preg_quote($keyword, '/') . '[[:>:]]';
+                        $nameQuery->whereHas('sparepart', function ($subQ) use ($pattern) {
+                            $subQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'REGEXP', $pattern);
+                        });
+                    }
+                });
+
+                // KONDISI 2 (ATAU): Semua keyword ada di NILAI ATRIBUT
+                $query->orWhere(function ($attributeQuery) use ($keywords) {
+                    foreach ($keywords as $keyword) {
+                        $pattern = '[[:<:]]' . preg_quote($keyword, '/') . '[[:>:]]';
+                        $attributeQuery->whereHas('attributeValues', function ($subQ) use ($pattern) {
+                            $subQ->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
+                        });
+                    }
+                });
+
+            })
+            // =================================================================
+            // AKHIR PERBAIKAN
+            // =================================================================
+
+            ->take(10)
+            ->get()
+            ->map(function ($variant) {
+                // Sisa dari logika 'map' Anda sudah benar dan tidak diubah
+                if (!$variant->sparepart) {
+                    return null;
+                }
+
+                return [
+                    'id' => $variant->id,
+                    'sparepart' => [
+                        'id' => $variant->sparepart->id,
+                        'nama_sparepart' => $variant->sparepart->nama_sparepart,
+                        'kode_kategori' => $variant->sparepart->kode_kategori,
+                        'nama_kategori' => $variant->sparepart->kategori->nama_kategori ?? 'N/A',
+                    ],
+                    'sku' => $variant->sku,
+                    'stock' => $variant->stock,
+                    'purchase_price' => $variant->purchase_price,
+                    'wholesale_price' => $variant->wholesale_price,
+                    'retail_price' => $variant->retail_price,
+                    'internal_price' => $variant->internal_price,
+                    'attribute_values' => $variant->attributeValues,
+                ];
+            })->filter();
+
+        return response()->json([
+            'success' => true,
+            'results' => $variants->values(),
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+        ], 500);
     }
+}
 
     /**
      * GET /api/suppliers
