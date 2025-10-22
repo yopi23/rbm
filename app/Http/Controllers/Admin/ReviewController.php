@@ -22,7 +22,7 @@ class ReviewController extends Controller
         $page = "Review & Migrasi Sparepart Lama";
 
         // 3. Mulai membangun query, jangan langsung eksekusi
-        $query = Sparepart::with('kategori')
+        $query = Sparepart::with(['kategori','subKategori'])
             ->doesntHave('variants');
 
         // 4. Tambahkan kondisi WHERE jika ada input pencarian

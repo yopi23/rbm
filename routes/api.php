@@ -218,7 +218,9 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     // Sales (POS) related
     Route::get('/sparepart/suggestions', [SalesApiController::class, 'searchSuggestions']);
     Route::get('/spareparts/search', [SalesApiController::class, 'search']);
-    Route::get('spareparts/{id}', [SalesApiController::class, 'getSparepartById']);
+    Route::get('/spareparts/{id}', [SalesApiController::class, 'getSparepartDetail']);
+
+    // Route::get('spareparts/{id}', [SalesApiController::class, 'getSparepartById']);
     Route::get('/spareparts/popular', [SalesApiController::class, 'getPopularSearches']);
     Route::get('/service/search', [ServiceApiController::class, 'allservice']); // This is for all services search by general query
     Route::get('/sales-history', [SalesApiController::class, 'getSalesHistory']);

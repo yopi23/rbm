@@ -122,6 +122,8 @@
                             </td>
                             <td>
                                 <span class="badge badge-info">{{ $sp->kategori->nama_kategori ?? 'N/A' }}</span>
+                                <span
+                                    class="badge badge-warning">{{ $sp->subKategori->nama_sub_kategori ?? 'N/A' }}</span>
                             </td>
                             <td class="text-right">
                                 @if ($sp->stok_sparepart > 0)
@@ -187,7 +189,11 @@
                             class="fas fa-spinner fa-spin fa-2x"></i></div>
                     <div x-show="!isLoadingPreview && previewData.sparepart">
                         <p><strong>Nama:</strong> <span x-text="previewData.sparepart?.nama"></span></p>
-                        <p><strong>Kategori:</strong> <span x-text="previewData.sparepart?.kategori"></span></p>
+                        <p>
+                            <strong>Kategori:</strong> <span x-text="previewData.sparepart?.kategori"></span>
+                            <span
+                                class="badge badge-warning">{{ $sp->subKategori->nama_sub_kategori ?? 'N/A' }}</span>
+                        </p>
                         <hr>
                         <div class="row">
                             <div class="col-md-6">
@@ -249,6 +255,7 @@
                     <div x-show="!isLoadingModal">
                         <div class="alert alert-info" x-show="modalData.sparepart"><strong
                                 x-text="modalData.sparepart?.nama"></strong></div>
+                        <span class="badge badge-warning">{{ $sp->subKategori->nama_sub_kategori ?? 'N/A' }}</span>
                         <div x-show="modalData.attributes && modalData.attributes.length > 0">
                             <template x-for="attr in modalData.attributes" :key="attr.id">
                                 <div class="form-group">
@@ -309,6 +316,8 @@
                                         <td width="40%">
                                             <strong x-text="item.sparepart.nama"></strong><br>
                                             <small class="text-muted" x-text="item.sparepart.kategori_nama"></small>
+                                            <span
+                                                class="badge badge-warning">{{ $sp->subKategori->nama_sub_kategori ?? 'N/A' }}</span>
                                         </td>
                                         <td>
                                             <div x-show="item.attributes.length > 0">
