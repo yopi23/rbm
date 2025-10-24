@@ -1070,6 +1070,7 @@ public function reversePenalty(Request $request)
 
     private function generateEmployeeMonthlyReport($userId, $year, $month)
     {
+        $ownerCode=$this->getThisUser()->id_upline;
         $startDate = Carbon::create($year, $month, 1)->startOfMonth();
         $endDate = Carbon::create($year, $month, 1)->endOfMonth();
 
@@ -1268,7 +1269,8 @@ public function reversePenalty(Request $request)
                 $penaltyInfo = \App\Http\Controllers\Admin\PenaltyRulesController::getApplicablePenalty(
                     'outside_office_late',
                     'both',
-                    $violation->late_return_minutes
+                    $violation->late_return_minutes,
+                    $ownerCode
                 );
                 if ($penaltyInfo['success'] && $penaltyInfo['should_create_violation']) {
                     $penaltyPercentage = $penaltyInfo['penalty_percentage'];
