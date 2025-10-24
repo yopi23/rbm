@@ -145,7 +145,7 @@ class ProductSearchService
             'variant_id' => $variant->id,
             'sparepart_id' => $variant->sparepart->id,
             'display_name' => $displayName,
-            'harga_internal' => (int)$variant->sparepart->harga_jual,
+            'harga_internal' => (int)$variant->internal_price,
             'harga_glosir' => (int)$variant->sparepart->harga_ecer,
             'jasa' => (int)$variant->sparepart->harga_pasang,
             'sku' => $variant->sku,

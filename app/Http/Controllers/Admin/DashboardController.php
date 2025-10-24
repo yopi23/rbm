@@ -650,7 +650,7 @@ class DashboardController extends Controller
             if (!$customerId) {
                 $newCustomer = customer_table::create([
                     'nama_kontak' => $request->nama_kontak,
-                    'nomor_telepon' => $request->nomor_telepon,
+                    'nomor_telepon' => $request->nomor_telepon ??0,
                     'tipe_pelanggan' => $request->tipe_pelanggan,
                     'nama_toko' => $request->nama_toko ?? $request->nama_kontak, // Default nama toko
                     'alamat' => $request->alamat,
@@ -665,7 +665,11 @@ class DashboardController extends Controller
             $manualServiceCost = $request->input('biaya_servis', 0);
 
             // Jika total dari part lebih dari 0, gunakan itu. Jika tidak, gunakan biaya manual.
-            $finalTotalBiaya = $grandTotalFromParts > 0 ? $grandTotalFromParts : $manualServiceCost;
+            if ($manualServiceCost>0) {
+               $finalTotalBiaya=$manualServiceCost;
+            }else{
+                $finalTotalBiaya = $grandTotalFromParts > 0 ? $grandTotalFromParts : $manualServiceCost;
+            }
 
             // --- 4. Buat Data Service Utama ---
             $service = modelServices::create([
@@ -674,7 +678,7 @@ class DashboardController extends Controller
                 'tgl_service' => Carbon::now()->format('Y-m-d'),
                 // --- PERBAIKAN PENAMAAN KOLOM ---
                 'nama_pelanggan' => $request->nama_kontak,
-                'no_telp' => $request->nomor_telepon,
+                'no_telp' => $request->nomor_telepon ??0,
                 // ---------------------------------
                 'type_unit' => $request->type_unit,
                 'keterangan' => $request->keterangan,
