@@ -468,10 +468,10 @@ class PenaltyRulesController extends Controller
     /**
      * Get applicable penalty rule for given parameters with owner scope
      */
-    public static function getApplicablePenalty($ruleType, $compensationType, $minutes, $ownerCode)
+    public static function getApplicablePenalty($ruleType, $compensationType, $minutes)
     {
         try {
-            // $ownerCode=$this->getThisUser()->id_upline;
+            $ownerCode=$this->getThisUser()->id_upline;
             // If no owner code provided, try to get from current context
             if (!$ownerCode) {
                 $controller = new static();
