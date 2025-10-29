@@ -25,6 +25,7 @@ use App\Http\Controllers\Admin\EmployeeManagementController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Api\HutangApiController;
 use App\Http\Controllers\Api\PembelianApiController;
+use App\Http\Controllers\Api\QrisController;
 use Illuminate\Support\Facades\Broadcast;
 
 /*
@@ -78,6 +79,18 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     // Route::get('/user', function (Request $request) {
     //     return $request->user();
     // });
+     // Get QRIS info untuk kasir/owner
+    Route::get('/qris-info', [QrisController::class, 'getQrisInfo']);
+    // Get riwayat mutasi QRIS (untuk kasir)
+    Route::get('/qris-mutations', [QrisController::class, 'getMutations']);
+    // Mark mutasi as read
+    Route::put('/qris-mutations/{id}/mark-read', [QrisController::class, 'markAsRead']);
+    // Set kasir yang sedang aktif (dipanggil dari Flutter saat buka halaman QRIS)
+    Route::post('/webhook/set-active-kasir', [WebhookController::class, 'setActiveKasir']);
+
+    Route::get('qris-setting', [TokoSettingController::class, 'getQrisSetting']);
+    Route::post('qris-setting', [TokoSettingController::class, 'updateQrisSetting']);
+
     Route::get('/customers/search', [CustomerController::class, 'search']);
     Route::get('/product/search', [ProductSearchApiController::class, 'search']);
 

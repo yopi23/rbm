@@ -24,9 +24,9 @@ class AuthController extends Controller
             ]);
 
             // Cek versi aplikasi terlebih dahulu
-            $clientVersion = '2025.08.19';
-            // $clientVersion = $request->input('version');
-            $minVersion = '2025.08.19'; // versi minimum yang diizinkan
+            // $clientVersion = '2025.08.19';
+            $clientVersion = $request->input('version');
+            $minVersion = '2025.10.29'; // versi minimum yang diizinkan
 
             if (version_compare($clientVersion, $minVersion, '<')) {
                 return response()->json([
@@ -48,9 +48,11 @@ class AuthController extends Controller
 
             // --- PENGECEKAN STATUS USER ---
             // Cek apakah user detail ada dan statusnya aktif ('1')
-            if ($user->userDetail && $user->userDetail->status_user != '1') {
+            if (!$user->userDetail || $user->userDetail->status_user != '1') {
                 // Jika tidak aktif, langsung logout dan kirim pesan error
                 Auth::logout();
+                $request->user()?->currentAccessToken()?->delete();
+
 
                 return response()->json([
                     'status' => 'error',
@@ -62,9 +64,14 @@ class AuthController extends Controller
             // $user = User::where('email', $request->email)
             //     ->with('userDetail')
             //     ->first();
-            $user = User::with(['userDetail', 'salarySetting:id,user_id,compensation_type'])
-                ->where('email', $request->email)
-                ->first();
+            // $user = User::with(['userDetail', 'salarySetting:id,user_id,compensation_type','activeSubscription',])
+            //     ->where('email', $request->email)
+            //     ->first();
+            $user = Auth::user()->load([
+                'userDetail',
+                'salarySetting:id,user_id,compensation_type',
+            ]);
+
             $token = $user->createToken('auth_token')->plainTextToken;
 
 
@@ -88,9 +95,9 @@ class AuthController extends Controller
     {
         try {
             // Ambil versi dari request
-            $clientVersion = '2025.08.19';
-            // $clientVersion = $request->input('version');
-            $minVersion = '2025.08.19'; // versi minimum yang diizinkan
+            // $clientVersion = '2025.08.19';
+            $clientVersion = $request->input('version');
+            $minVersion = '2025.10.29'; // versi minimum yang diizinkan
 
             // Cek versi aplikasi terlebih dahulu, terlepas dari token
             if (version_compare($clientVersion, $minVersion, '<')) {
@@ -104,18 +111,15 @@ class AuthController extends Controller
 
             // --- PENGECEKAN STATUS USER ---
             // Cek apakah user detail ada dan statusnya aktif ('1')
-            if ($user->userDetail && $user->userDetail->status_user != '1') {
-                // Jika tidak aktif, langsung logout dan kirim pesan error
+            if (!$user->userDetail || $user->userDetail->status_user != '1') {
                 Auth::logout();
+                $request->user()?->currentAccessToken()?->delete();
 
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Akun kamu Belum aktif, Silahkan Hubungi Admin untuk Mengaktifkan Akunmu Kembali',
-                ], 403); // 403 Forbidden, karena user terautentikasi tapi tidak diizinkan
+                    'message' => 'Akun kamu belum aktif, silakan hubungi admin.',
+                ], 403);
             }
-
-            // Kemudian cek validitas token
-            $user = $request->user();
 
             if ($user) {
                 return response()->json([

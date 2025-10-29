@@ -29,6 +29,9 @@ class UserDetail extends Model
         'link_facebook',
         'link_instagram',
         'link_linkedin',
+        'qris_payload',
+        'qris_payload',
+        'macrodroid_secret'
     ];
 
     public function withdrawals()

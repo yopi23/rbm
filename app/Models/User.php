@@ -83,6 +83,7 @@ class User extends Authenticatable
         return $this->hasOne(Subscription::class);
     }
 
+
     /**
      * Mendapatkan riwayat pembayaran dari user ini.
      */
