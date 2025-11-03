@@ -31,7 +31,11 @@ class UserDetail extends Model
         'link_linkedin',
         'qris_payload',
         'qris_payload',
-        'macrodroid_secret'
+        'macrodroid_secret',
+        'face_embedding',
+        'default_lat',
+        'default_lon',
+        'allowed_radius_m',
     ];
 
     public function withdrawals()

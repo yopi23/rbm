@@ -1339,162 +1339,258 @@ class ServiceApiController extends Controller
         }
     }
 
-//     public function getDailyReportServices(Request $request)
-// {
-//     try {
-//         $page = $request->get('page', 1);
-//         $limit = min($request->get('limit', 20), 50);
-//         $search = $request->get('search', '');
-//         $technician_id = $request->get('technician_id');
-//         $date_from = $request->get('date_from');
-//         $date_to = $request->get('date_to');
-//         $status = $request->get('status'); // 'Selesai', 'Diambil', atau kosong untuk semua
+    public function getDailyReportServices(Request $request)
+    {
+        try {
+            $page = $request->get('page', 1);
+            $limit = min($request->get('limit', 20), 50);
+            $search = $request->get('search', '');
+            $technician_id = $request->get('technician_id');
+            $date_from = $request->get('date_from');
+            $date_to = $request->get('date_to');
+            $status = $request->get('status');
 
-//         $cacheKey = "daily_report_{$this->getThisUser()->id_upline}_{$page}_{$limit}_" .
-//                    md5($search . $technician_id . $date_from . $date_to . $status);
+            $cacheKey = "daily_report_{$this->getThisUser()->id_upline}_{$page}_{$limit}_" .
+                    md5($search . $technician_id . $date_from . $date_to . $status);
 
-//         $result = Cache::remember($cacheKey, 300, function () use ($page, $limit, $search, $technician_id, $date_from, $date_to, $status) {
-//             $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
-//                 ->whereIn('status_services', ['Selesai', 'Diambil']) // Ambil kedua status
-//                 ->join('users', 'sevices.id_teknisi', '=', 'users.id')
-//                 ->select(
-//                     'sevices.*',
-//                     'users.name as teknisi',
-//                     'sevices.status_services as service_status'
-//                 );
+            $result = Cache::remember($cacheKey, 300, function () use ($page, $limit, $search, $technician_id, $date_from, $date_to, $status) {
+                $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+                    ->whereIn('status_services', ['Selesai', 'Diambil'])
+                    ->join('users', 'sevices.id_teknisi', '=', 'users.id')
+                    ->select(
+                        'sevices.*',
+                        'users.name as teknisi',
+                        'sevices.status_services as service_status'
+                    );
 
-//             // Filter by specific status if provided
-//             if (!empty($status)) {
-//                 $query->where('sevices.status_services', $status);
-//             }
+                if (!empty($status)) {
+                    $query->where('sevices.status_services', $status);
+                }
 
-//             // Apply search filters
-//             if (!empty($search)) {
-//                 $query->where(function ($q) use ($search) {
-//                     $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
-//                       ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
-//                       ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
-//                       ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
-//                 });
-//             }
+                if (!empty($search)) {
+                    $query->where(function ($q) use ($search) {
+                        $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
+                        ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
+                        ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
+                        ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
+                    });
+                }
 
-//             if ($technician_id) {
-//                 $query->where('sevices.id_teknisi', $technician_id);
-//             }
+                if ($technician_id) {
+                    $query->where('sevices.id_teknisi', $technician_id);
+                }
 
-//             if ($date_from) {
-//                 $query->whereDate('sevices.tgl_service', '>=', $date_from);
-//             }
+                // FIXED: Filter berdasarkan tanggal yang tepat sesuai konteks
+                if ($date_from) {
+                    $query->where(function ($q) use ($date_from) {
+                        $q->where(function ($subQ) use ($date_from) {
+                            // Service Selesai: gunakan tgl_service
+                            $subQ->where('sevices.status_services', 'Selesai')
+                                ->whereDate('sevices.tgl_service', '>=', $date_from);
+                        })->orWhere(function ($subQ) use ($date_from) {
+                            // Service Diambil: gunakan updated_at (tanggal diambil)
+                            $subQ->where('sevices.status_services', 'Diambil')
+                                ->whereDate('sevices.updated_at', '>=', $date_from);
+                        });
+                    });
+                }
 
-//             if ($date_to) {
-//                 $query->whereDate('sevices.tgl_service', '<=', $date_to);
-//             }
+                if ($date_to) {
+                    $query->where(function ($q) use ($date_to) {
+                        $q->where(function ($subQ) use ($date_to) {
+                            // Service Selesai: gunakan tgl_service
+                            $subQ->where('sevices.status_services', 'Selesai')
+                                ->whereDate('sevices.tgl_service', '<=', $date_to);
+                        })->orWhere(function ($subQ) use ($date_to) {
+                            // Service Diambil: gunakan updated_at (tanggal diambil)
+                            $subQ->where('sevices.status_services', 'Diambil')
+                                ->whereDate('sevices.updated_at', '<=', $date_to);
+                        });
+                    });
+                }
 
-//             $totalCount = $query->count();
-//             $services = $query->orderBy('sevices.tgl_service', 'desc')
-//                              ->offset(($page - 1) * $limit)
-//                              ->limit($limit)
-//                              ->get();
+                $totalCount = $query->count();
+                $services = $query->orderBy('sevices.updated_at', 'desc')
+                                ->offset(($page - 1) * $limit)
+                                ->limit($limit)
+                                ->get();
 
-//             // FIXED: Add computed fields with CORRECT payment logic
-//             $services = $services->map(function ($service) {
-//                 $totalBiaya = (float) $service->total_biaya;
-//                 $dp = (float) $service->dp;
-//                 $sisaBayar = $totalBiaya - $dp;
-//                 $isLunas = $sisaBayar <= 0;
+                // FIXED: Enhanced mapping dengan logika tanggal dan omset yang BENAR
+                $services = $services->map(function ($service) {
+                    $totalBiaya = (float) $service->total_biaya;
+                    $dp = (float) $service->dp;
+                    $sisaBayar = $totalBiaya - $dp;
+                    $isLunas = $sisaBayar <= 0;
 
-//                 // FIXED: Correct omset calculation based on business logic
-//                 $omsetValue = 0;
-//                 if ($service->service_status === 'Diambil') {
-//                     // Service Diambil = PASTI LUNAS = uang masuk = total_biaya
-//                     $omsetValue = $totalBiaya;
-//                 } elseif ($service->service_status === 'Selesai') {
-//                     // Service Selesai = cek status pembayaran
-//                     $omsetValue = $isLunas ? $totalBiaya : $dp;
-//                 } else {
-//                     // Status lainnya
-//                     $omsetValue = $isLunas ? $totalBiaya : $dp;
-//                 }
+                    // FIXED: Tentukan tanggal yang tepat untuk menghitung omset
+                    $relevantDate = null;
+                    $omsetValue = 0;
 
-//                 return [
-//                     'id' => $service->id,
-//                     'kode_service' => $service->kode_service,
-//                     'nama_pelanggan' => $service->nama_pelanggan,
-//                     'tgl_service' => $service->tgl_service,
-//                     'type_unit' => $service->type_unit,
-//                     'teknisi' => $service->teknisi,
-//                     'id_teknisi' => $service->id_teknisi,
-//                     'total_biaya' => $totalBiaya,
-//                     'dp' => $dp,
-//                     'sisa_bayar' => $sisaBayar,
-//                     'is_lunas' => $isLunas || $service->service_status === 'Diambil', // Diambil = pasti lunas
-//                     'service_status' => $service->service_status,
-//                     'keterangan' => $service->keterangan,
-//                     'created_at' => $service->created_at,
-//                     'updated_at' => $service->updated_at,
-//                     // FIXED: Correct omset value calculation
-//                     'omset_value' => $omsetValue,
-//                 ];
-//             });
+                    if ($service->service_status === 'Diambil') {
+                        // Service Diambil = gunakan updated_at (tanggal status berubah ke Diambil)
+                        $relevantDate = $service->updated_at;
+                        $omsetValue = $totalBiaya; // Diambil = pasti lunas = total biaya
+                    } elseif ($service->service_status === 'Selesai') {
+                        // Service Selesai = gunakan tgl_service (tanggal service selesai)
+                        $relevantDate = $service->tgl_service;
+                        // Omset berdasarkan status pembayaran
+                        $omsetValue = $isLunas ? $totalBiaya : $dp;
+                    } else {
+                        // Status lainnya = gunakan updated_at
+                        $relevantDate = $service->updated_at;
+                        $omsetValue = $isLunas ? $totalBiaya : $dp;
+                    }
 
-//             return [
-//                 'data' => $services,
-//                 'pagination' => [
-//                     'current_page' => (int) $page,
-//                     'per_page' => (int) $limit,
-//                     'total' => (int) $totalCount,
-//                     'total_pages' => ceil($totalCount / $limit),
-//                     'has_next_page' => $page < ceil($totalCount / $limit),
-//                     'has_previous_page' => $page > 1,
-//                 ]
-//             ];
-//         });
+                    return [
+                        'id' => $service->id,
+                        'kode_service' => $service->kode_service,
+                        'nama_pelanggan' => $service->nama_pelanggan,
+                        'no_telp' => $service->no_telp,
+                        'tgl_service' => $service->tgl_service,
+                        'tgl_diambil' => $service->service_status === 'Diambil' ? $service->updated_at : null,
+                        'type_unit' => $service->type_unit,
+                        'teknisi' => $service->teknisi,
+                        'id_teknisi' => $service->id_teknisi,
+                        'total_biaya' => $totalBiaya,
+                        'dp' => $dp,
+                        'sisa_bayar' => $sisaBayar,
+                        'is_lunas' => $isLunas || $service->service_status === 'Diambil',
+                        'service_status' => $service->service_status,
+                        'keterangan' => $service->keterangan,
+                        'created_at' => $service->created_at,
+                        'updated_at' => $service->updated_at,
+                        // FIXED: Omset dengan tanggal yang tepat
+                        'omset_value' => $omsetValue,
+                        'relevant_date' => $relevantDate, // Tanggal untuk grouping yang benar
+                    ];
+                });
 
-//         // Calculate summary with corrected logic
-//         $summary = $this->calculateDailySummary($date_from, $date_to);
+                return [
+                    'data' => $services,
+                    'pagination' => [
+                        'current_page' => (int) $page,
+                        'per_page' => (int) $limit,
+                        'total' => (int) $totalCount,
+                        'total_pages' => ceil($totalCount / $limit),
+                        'has_next_page' => $page < ceil($totalCount / $limit),
+                        'has_previous_page' => $page > 1,
+                    ]
+                ];
+            });
 
-//         return response()->json([
-//             'success' => true,
-//             'message' => 'Data layanan harian berhasil diambil.',
-//             'data' => $result['data'],
-//             'pagination' => $result['pagination'],
-//             'summary' => $summary,
-//             'filters' => [
-//                 'search' => $search,
-//                 'technician_id' => $technician_id,
-//                 'date_from' => $date_from,
-//                 'date_to' => $date_to,
-//                 'status' => $status
-//             ]
-//         ], 200);
-//     } catch (\Exception $e) {
-//         Log::error("Get Daily Report Services Error: " . $e->getMessage());
-//         return response()->json([
-//             'success' => false,
-//             'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-//         ], 500);
-//     }
-// }
+            // FIXED: Summary calculation dengan tanggal yang tepat
+            $summary = $this->calculateDailySummaryFixed($date_from, $date_to);
 
-/**
- * FIXED: Calculate summary for daily report with CORRECT payment logic
- */
+            return response()->json([
+                'success' => true,
+                'message' => 'Data layanan harian berhasil diambil.',
+                'data' => $result['data'],
+                'pagination' => $result['pagination'],
+                'summary' => $summary,
+                'filters' => [
+                    'search' => $search,
+                    'technician_id' => $technician_id,
+                    'date_from' => $date_from,
+                    'date_to' => $date_to,
+                    'status' => $status
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error("Get Daily Report Services Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 
-public function getDailyReportServices(Request $request)
-{
-    try {
-        $page = $request->get('page', 1);
-        $limit = min($request->get('limit', 20), 50);
-        $search = $request->get('search', '');
-        $technician_id = $request->get('technician_id');
-        $date_from = $request->get('date_from');
-        $date_to = $request->get('date_to');
-        $status = $request->get('status');
+    // FIXED: Summary calculation yang benar berdasarkan tanggal yang tepat
+    private function calculateDailySummaryFixed($dateFrom, $dateTo)
+    {
+        try {
+            $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+                ->whereIn('status_services', ['Selesai', 'Diambil']);
 
-        $cacheKey = "daily_report_{$this->getThisUser()->id_upline}_{$page}_{$limit}_" .
-                   md5($search . $technician_id . $date_from . $date_to . $status);
+            // Filter berdasarkan tanggal yang relevan dengan konteks
+            if ($dateFrom && $dateTo) {
+                $query->where(function ($q) use ($dateFrom, $dateTo) {
+                    $q->where(function ($subQ) use ($dateFrom, $dateTo) {
+                        // Service Selesai: filter berdasarkan tgl_service
+                        $subQ->where('status_services', 'Selesai')
+                            ->whereDate('tgl_service', '>=', $dateFrom)
+                            ->whereDate('tgl_service', '<=', $dateTo);
+                    })->orWhere(function ($subQ) use ($dateFrom, $dateTo) {
+                        // Service Diambil: filter berdasarkan updated_at
+                        $subQ->where('status_services', 'Diambil')
+                            ->whereDate('updated_at', '>=', $dateFrom)
+                            ->whereDate('updated_at', '<=', $dateTo);
+                    });
+                });
+            }
 
-        $result = Cache::remember($cacheKey, 300, function () use ($page, $limit, $search, $technician_id, $date_from, $date_to, $status) {
+            $services = $query->get();
+
+            $completedServices = 0;
+            $takenServices = 0;
+            $totalOmset = 0;
+            $totalDpCollected = 0;
+            $totalRemainingPayment = 0;
+
+            foreach ($services as $service) {
+                $totalBiaya = (float) $service->total_biaya;
+                $dp = (float) $service->dp;
+                $sisaBayar = $totalBiaya - $dp;
+
+                if ($service->status_services === 'Diambil') {
+                    $takenServices++;
+                    $totalOmset += $totalBiaya; // Diambil = pasti lunas = total biaya
+                } elseif ($service->status_services === 'Selesai') {
+                    $completedServices++;
+                    if ($sisaBayar <= 0) {
+                        // Selesai dan lunas
+                        $totalOmset += $totalBiaya;
+                    } else {
+                        // Selesai tapi belum lunas
+                        $totalOmset += $dp;
+                        $totalRemainingPayment += $sisaBayar;
+                    }
+                }
+
+                $totalDpCollected += $dp;
+            }
+
+            return [
+                'total_services' => $completedServices + $takenServices,
+                'completed_services' => $completedServices,
+                'taken_services' => $takenServices,
+                'total_omset' => $totalOmset,
+                'total_dp_collected' => $totalDpCollected,
+                'total_remaining_payment' => $totalRemainingPayment,
+            ];
+        } catch (\Exception $e) {
+            Log::error("Calculate Daily Summary Error: " . $e->getMessage());
+            return [
+                'total_services' => 0,
+                'completed_services' => 0,
+                'taken_services' => 0,
+                'total_omset' => 0,
+                'total_dp_collected' => 0,
+                'total_remaining_payment' => 0,
+            ];
+        }
+    }
+
+    /**
+     * FIXED: Get daily report grouped by date with CORRECT payment logic
+     * Endpoint: GET /api/services/dailyReportGrouped
+     */
+    public function getDailyReportGrouped(Request $request)
+    {
+        try {
+            $date_from = $request->get('date_from');
+            $date_to = $request->get('date_to');
+            $technician_id = $request->get('technician_id');
+
             $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
                 ->whereIn('status_services', ['Selesai', 'Diambil'])
                 ->join('users', 'sevices.id_teknisi', '=', 'users.id')
@@ -1504,511 +1600,274 @@ public function getDailyReportServices(Request $request)
                     'sevices.status_services as service_status'
                 );
 
-            if (!empty($status)) {
-                $query->where('sevices.status_services', $status);
+            if ($technician_id) {
+                $query->where('sevices.id_teknisi', $technician_id);
             }
 
-            if (!empty($search)) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
-                      ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
-                      ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
-                      ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
-                });
+            if ($date_from) {
+                $query->whereDate('sevices.updated_at', '>=', $date_from);
+            }
+
+            if ($date_to) {
+                $query->whereDate('sevices.updated_at', '<=', $date_to);
+            }
+
+            $services = $query->orderBy('sevices.updated_at', 'desc')->get();
+
+            // Group by date
+            $groupedServices = $services->groupBy(function ($service) {
+                return Carbon::parse($service->updated_at)->format('Y-m-d');
+            });
+
+            $result = [];
+            foreach ($groupedServices as $date => $dateServices) {
+                $dailyOmset = 0;
+                $processedServices = [];
+
+                foreach ($dateServices as $service) {
+                    $totalBiaya = (float) $service->total_biaya;
+                    $dp = (float) $service->dp;
+                    $sisaBayar = $totalBiaya - $dp;
+                    $isLunas = $sisaBayar <= 0;
+
+                    // FIXED: Correct omset calculation
+                    $omsetValue = 0;
+                    if ($service->service_status === 'Diambil') {
+                        // Service Diambil = PASTI LUNAS
+                        $omsetValue = $totalBiaya;
+                    } elseif ($service->service_status === 'Selesai') {
+                        // Service Selesai = cek status pembayaran
+                        $omsetValue = $isLunas ? $totalBiaya : $dp;
+                    } else {
+                        // Status lainnya
+                        $omsetValue = $isLunas ? $totalBiaya : $dp;
+                    }
+
+                    $dailyOmset += $omsetValue;
+
+                    $processedServices[] = [
+                        'id' => $service->id,
+                        'kode_service' => $service->kode_service,
+                        'nama_pelanggan' => $service->nama_pelanggan,
+                        'type_unit' => $service->type_unit,
+                        'teknisi' => $service->teknisi,
+                        'total_biaya' => $totalBiaya,
+                        'dp' => $dp,
+                        'sisa_bayar' => $sisaBayar,
+                        'is_lunas' => $isLunas || $service->service_status === 'Diambil', // Diambil = pasti lunas
+                        'service_status' => $service->service_status,
+                        'omset_value' => $omsetValue, // FIXED: Correct omset value
+                        'updated_at' => $service->updated_at,
+                    ];
+                }
+
+                $result[] = [
+                    'date' => $date,
+                    'date_formatted' => Carbon::parse($date)->format('d F Y'),
+                    'day_name' => Carbon::parse($date)->locale('id')->dayName,
+                    'total_services' => count($processedServices),
+                    'completed_services' => collect($processedServices)->where('service_status', 'Selesai')->count(),
+                    'taken_services' => collect($processedServices)->where('service_status', 'Diambil')->count(),
+                    'daily_omset' => $dailyOmset, // FIXED: Correct daily omset
+                    'services' => $processedServices,
+                ];
+            }
+
+            // Sort by date descending
+            usort($result, function ($a, $b) {
+                return strcmp($b['date'], $a['date']);
+            });
+
+            $summary = $this->calculateDailySummary($date_from, $date_to);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data laporan harian berhasil diambil.',
+                'data' => $result,
+                'summary' => $summary,
+                'filters' => [
+                    'technician_id' => $technician_id,
+                    'date_from' => $date_from,
+                    'date_to' => $date_to,
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error("Get Daily Report Grouped Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function searchServiceExtended(Request $request)
+    {
+        try {
+            $search        = $request->input('search');
+            $page          = (int) $request->get('page', 1);
+            $limit         = min((int) $request->get('limit', 20), 50);
+            $status        = $request->get('status');         // Optional filter status
+            $technician_id = $request->get('technician_id');  // Optional filter teknisi
+            $sort_by       = $request->get('sort_by', 'created_at');
+            $sort_order    = strtolower($request->get('sort_order', 'desc'));
+
+            // Validation keyword
+            if (empty($search) || strlen($search) < 2) {
+                return response()->json([
+                    'success'    => false,
+                    'message'    => 'Kata kunci pencarian minimal 2 karakter.',
+                    'data'       => [],
+                    'pagination' => null
+                ], 400);
+            }
+
+            // Range waktu: Tahun berjalan + 3 bulan terakhir tahun sebelumnya
+            $currentYear = date('Y');
+            $previousYear = $currentYear - 1;
+
+            $dateFrom = Carbon::create($previousYear, 10, 1)->startOfDay(); // 1 Okt tahun lalu
+            $dateTo   = Carbon::create($currentYear, 12, 31)->endOfDay();   // 31 Des tahun ini
+
+            $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+                ->whereBetween('sevices.created_at', [$dateFrom, $dateTo])
+                ->leftJoin('users', 'sevices.id_teknisi', '=', 'users.id')
+                ->select(
+                    'sevices.*',
+                    'users.name as teknisi',
+                    DB::raw('CASE
+                        WHEN sevices.created_at >= "' . date('Y-01-01') . '" THEN "current_year"
+                        ELSE "previous_year_last_quarter"
+                    END as period_category')
+                );
+
+            // Pencarian fleksibel
+            $query->where(function ($q) use ($search) {
+                $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
+                ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
+                ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
+                ->orWhere('sevices.no_telp', 'LIKE', "%$search%")
+                ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
+            });
+
+            // Filter tambahan
+            if ($status) {
+                $query->where('sevices.status_services', $status);
             }
 
             if ($technician_id) {
                 $query->where('sevices.id_teknisi', $technician_id);
             }
 
-            // FIXED: Filter berdasarkan tanggal yang tepat sesuai konteks
-            if ($date_from) {
-                $query->where(function ($q) use ($date_from) {
-                    $q->where(function ($subQ) use ($date_from) {
-                        // Service Selesai: gunakan tgl_service
-                        $subQ->where('sevices.status_services', 'Selesai')
-                             ->whereDate('sevices.tgl_service', '>=', $date_from);
-                    })->orWhere(function ($subQ) use ($date_from) {
-                        // Service Diambil: gunakan updated_at (tanggal diambil)
-                        $subQ->where('sevices.status_services', 'Diambil')
-                             ->whereDate('sevices.updated_at', '>=', $date_from);
-                    });
-                });
+            // Validasi sort
+            $allowedSortColumns = ['created_at', 'tgl_service', 'updated_at', 'total_biaya', 'nama_pelanggan'];
+            if (!in_array($sort_by, $allowedSortColumns)) {
+                $sort_by = 'created_at';
+            }
+            if (!in_array($sort_order, ['asc', 'desc'])) {
+                $sort_order = 'desc';
             }
 
-            if ($date_to) {
-                $query->where(function ($q) use ($date_to) {
-                    $q->where(function ($subQ) use ($date_to) {
-                        // Service Selesai: gunakan tgl_service
-                        $subQ->where('sevices.status_services', 'Selesai')
-                             ->whereDate('sevices.tgl_service', '<=', $date_to);
-                    })->orWhere(function ($subQ) use ($date_to) {
-                        // Service Diambil: gunakan updated_at (tanggal diambil)
-                        $subQ->where('sevices.status_services', 'Diambil')
-                             ->whereDate('sevices.updated_at', '<=', $date_to);
-                    });
-                });
-            }
-
+            // Hitung total
             $totalCount = $query->count();
-            $services = $query->orderBy('sevices.updated_at', 'desc')
-                             ->offset(($page - 1) * $limit)
-                             ->limit($limit)
-                             ->get();
 
-            // FIXED: Enhanced mapping dengan logika tanggal dan omset yang BENAR
+            // Ambil data dengan pagination
+            $services = $query->orderBy("sevices.{$sort_by}", $sort_order)
+                ->orderBy('sevices.id', 'desc')
+                ->offset(($page - 1) * $limit)
+                ->limit($limit)
+                ->get();
+
+            // Tambahan data untuk tiap service
             $services = $services->map(function ($service) {
+                // Cek garansi
+                $warranty = Garansi::where('kode_garansi', $service->kode_service)
+                    ->where('type_garansi', 'service')
+                    ->first();
+
+                $service->warranty_info = $warranty ? [
+                    'exists'         => true,
+                    'expiry_date'    => $warranty->tgl_exp_garansi,
+                    'status'         => $this->getWarrantyStatus($warranty->tgl_exp_garansi),
+                    'days_remaining' => now()->diffInDays($warranty->tgl_exp_garansi, false)
+                ] : ['exists' => false];
+
+                $service->is_already_claimed = \App\Models\Sevices::where('claimed_from_service_id', $service->id)->exists();
+
+                // Hitung parts
+                $service->parts_count = [
+                    'toko' => DetailPartServices::where('kode_services', $service->id)->count(),
+                    'luar' => DetailPartLuarService::where('kode_services', $service->id)->count()
+                ];
+
+                // Catatan terakhir
+                $latestNote = DetailCatatanService::where('kode_services', $service->id)
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+
+                $service->latest_note = $latestNote ? $latestNote->catatan_service : null;
+                $service->has_notes   = $latestNote != null;
+
+                // Info pembayaran
                 $totalBiaya = (float) $service->total_biaya;
-                $dp = (float) $service->dp;
-                $sisaBayar = $totalBiaya - $dp;
-                $isLunas = $sisaBayar <= 0;
+                $dp         = (float) $service->dp;
+                $sisaBayar  = $totalBiaya - $dp;
 
-                // FIXED: Tentukan tanggal yang tepat untuk menghitung omset
-                $relevantDate = null;
-                $omsetValue = 0;
+                $service->payment_info = [
+                    'total_biaya'       => $totalBiaya,
+                    'dp_paid'           => $dp,
+                    'remaining'         => $sisaBayar,
+                    'is_fully_paid'     => $sisaBayar <= 0 || $service->status_services === 'Diambil',
+                    'payment_percentage'=> $totalBiaya > 0 ? round(($dp / $totalBiaya) * 100, 2) : 0
+                ];
 
-                if ($service->service_status === 'Diambil') {
-                    // Service Diambil = gunakan updated_at (tanggal status berubah ke Diambil)
-                    $relevantDate = $service->updated_at;
-                    $omsetValue = $totalBiaya; // Diambil = pasti lunas = total biaya
-                } elseif ($service->service_status === 'Selesai') {
-                    // Service Selesai = gunakan tgl_service (tanggal service selesai)
-                    $relevantDate = $service->tgl_service;
-                    // Omset berdasarkan status pembayaran
-                    $omsetValue = $isLunas ? $totalBiaya : $dp;
-                } else {
-                    // Status lainnya = gunakan updated_at
-                    $relevantDate = $service->updated_at;
-                    $omsetValue = $isLunas ? $totalBiaya : $dp;
+                // Lama service (jika selesai)
+                if ($service->status_services === 'Selesai' && $service->tgl_service) {
+                    $service->completion_time = [
+                        'hours' => Carbon::parse($service->created_at)->diffInHours(Carbon::parse($service->tgl_service)),
+                        'days'  => Carbon::parse($service->created_at)->diffInDays(Carbon::parse($service->tgl_service))
+                    ];
                 }
 
-                return [
-                    'id' => $service->id,
-                    'kode_service' => $service->kode_service,
-                    'nama_pelanggan' => $service->nama_pelanggan,
-                    'no_telp' => $service->no_telp,
-                    'tgl_service' => $service->tgl_service,
-                    'tgl_diambil' => $service->service_status === 'Diambil' ? $service->updated_at : null,
-                    'type_unit' => $service->type_unit,
-                    'teknisi' => $service->teknisi,
-                    'id_teknisi' => $service->id_teknisi,
-                    'total_biaya' => $totalBiaya,
-                    'dp' => $dp,
-                    'sisa_bayar' => $sisaBayar,
-                    'is_lunas' => $isLunas || $service->service_status === 'Diambil',
-                    'service_status' => $service->service_status,
-                    'keterangan' => $service->keterangan,
-                    'created_at' => $service->created_at,
-                    'updated_at' => $service->updated_at,
-                    // FIXED: Omset dengan tanggal yang tepat
-                    'omset_value' => $omsetValue,
-                    'relevant_date' => $relevantDate, // Tanggal untuk grouping yang benar
-                ];
+                return $service;
             });
 
-            return [
-                'data' => $services,
-                'pagination' => [
-                    'current_page' => (int) $page,
-                    'per_page' => (int) $limit,
-                    'total' => (int) $totalCount,
-                    'total_pages' => ceil($totalCount / $limit),
-                    'has_next_page' => $page < ceil($totalCount / $limit),
-                    'has_previous_page' => $page > 1,
-                ]
-            ];
-        });
-
-        // FIXED: Summary calculation dengan tanggal yang tepat
-        $summary = $this->calculateDailySummaryFixed($date_from, $date_to);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Data layanan harian berhasil diambil.',
-            'data' => $result['data'],
-            'pagination' => $result['pagination'],
-            'summary' => $summary,
-            'filters' => [
-                'search' => $search,
-                'technician_id' => $technician_id,
-                'date_from' => $date_from,
-                'date_to' => $date_to,
-                'status' => $status
-            ]
-        ], 200);
-    } catch (\Exception $e) {
-        Log::error("Get Daily Report Services Error: " . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-        ], 500);
-    }
-}
-
-// FIXED: Summary calculation yang benar berdasarkan tanggal yang tepat
-private function calculateDailySummaryFixed($dateFrom, $dateTo)
-{
-    try {
-        $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
-            ->whereIn('status_services', ['Selesai', 'Diambil']);
-
-        // Filter berdasarkan tanggal yang relevan dengan konteks
-        if ($dateFrom && $dateTo) {
-            $query->where(function ($q) use ($dateFrom, $dateTo) {
-                $q->where(function ($subQ) use ($dateFrom, $dateTo) {
-                    // Service Selesai: filter berdasarkan tgl_service
-                    $subQ->where('status_services', 'Selesai')
-                         ->whereDate('tgl_service', '>=', $dateFrom)
-                         ->whereDate('tgl_service', '<=', $dateTo);
-                })->orWhere(function ($subQ) use ($dateFrom, $dateTo) {
-                    // Service Diambil: filter berdasarkan updated_at
-                    $subQ->where('status_services', 'Diambil')
-                         ->whereDate('updated_at', '>=', $dateFrom)
-                         ->whereDate('updated_at', '<=', $dateTo);
-                });
-            });
-        }
-
-        $services = $query->get();
-
-        $completedServices = 0;
-        $takenServices = 0;
-        $totalOmset = 0;
-        $totalDpCollected = 0;
-        $totalRemainingPayment = 0;
-
-        foreach ($services as $service) {
-            $totalBiaya = (float) $service->total_biaya;
-            $dp = (float) $service->dp;
-            $sisaBayar = $totalBiaya - $dp;
-
-            if ($service->status_services === 'Diambil') {
-                $takenServices++;
-                $totalOmset += $totalBiaya; // Diambil = pasti lunas = total biaya
-            } elseif ($service->status_services === 'Selesai') {
-                $completedServices++;
-                if ($sisaBayar <= 0) {
-                    // Selesai dan lunas
-                    $totalOmset += $totalBiaya;
-                } else {
-                    // Selesai tapi belum lunas
-                    $totalOmset += $dp;
-                    $totalRemainingPayment += $sisaBayar;
-                }
-            }
-
-            $totalDpCollected += $dp;
-        }
-
-        return [
-            'total_services' => $completedServices + $takenServices,
-            'completed_services' => $completedServices,
-            'taken_services' => $takenServices,
-            'total_omset' => $totalOmset,
-            'total_dp_collected' => $totalDpCollected,
-            'total_remaining_payment' => $totalRemainingPayment,
-        ];
-    } catch (\Exception $e) {
-        Log::error("Calculate Daily Summary Error: " . $e->getMessage());
-        return [
-            'total_services' => 0,
-            'completed_services' => 0,
-            'taken_services' => 0,
-            'total_omset' => 0,
-            'total_dp_collected' => 0,
-            'total_remaining_payment' => 0,
-        ];
-    }
-}
-
-/**
- * FIXED: Get daily report grouped by date with CORRECT payment logic
- * Endpoint: GET /api/services/dailyReportGrouped
- */
-public function getDailyReportGrouped(Request $request)
-{
-    try {
-        $date_from = $request->get('date_from');
-        $date_to = $request->get('date_to');
-        $technician_id = $request->get('technician_id');
-
-        $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
-            ->whereIn('status_services', ['Selesai', 'Diambil'])
-            ->join('users', 'sevices.id_teknisi', '=', 'users.id')
-            ->select(
-                'sevices.*',
-                'users.name as teknisi',
-                'sevices.status_services as service_status'
-            );
-
-        if ($technician_id) {
-            $query->where('sevices.id_teknisi', $technician_id);
-        }
-
-        if ($date_from) {
-            $query->whereDate('sevices.updated_at', '>=', $date_from);
-        }
-
-        if ($date_to) {
-            $query->whereDate('sevices.updated_at', '<=', $date_to);
-        }
-
-        $services = $query->orderBy('sevices.updated_at', 'desc')->get();
-
-        // Group by date
-        $groupedServices = $services->groupBy(function ($service) {
-            return Carbon::parse($service->updated_at)->format('Y-m-d');
-        });
-
-        $result = [];
-        foreach ($groupedServices as $date => $dateServices) {
-            $dailyOmset = 0;
-            $processedServices = [];
-
-            foreach ($dateServices as $service) {
-                $totalBiaya = (float) $service->total_biaya;
-                $dp = (float) $service->dp;
-                $sisaBayar = $totalBiaya - $dp;
-                $isLunas = $sisaBayar <= 0;
-
-                // FIXED: Correct omset calculation
-                $omsetValue = 0;
-                if ($service->service_status === 'Diambil') {
-                    // Service Diambil = PASTI LUNAS
-                    $omsetValue = $totalBiaya;
-                } elseif ($service->service_status === 'Selesai') {
-                    // Service Selesai = cek status pembayaran
-                    $omsetValue = $isLunas ? $totalBiaya : $dp;
-                } else {
-                    // Status lainnya
-                    $omsetValue = $isLunas ? $totalBiaya : $dp;
-                }
-
-                $dailyOmset += $omsetValue;
-
-                $processedServices[] = [
-                    'id' => $service->id,
-                    'kode_service' => $service->kode_service,
-                    'nama_pelanggan' => $service->nama_pelanggan,
-                    'type_unit' => $service->type_unit,
-                    'teknisi' => $service->teknisi,
-                    'total_biaya' => $totalBiaya,
-                    'dp' => $dp,
-                    'sisa_bayar' => $sisaBayar,
-                    'is_lunas' => $isLunas || $service->service_status === 'Diambil', // Diambil = pasti lunas
-                    'service_status' => $service->service_status,
-                    'omset_value' => $omsetValue, // FIXED: Correct omset value
-                    'updated_at' => $service->updated_at,
-                ];
-            }
-
-            $result[] = [
-                'date' => $date,
-                'date_formatted' => Carbon::parse($date)->format('d F Y'),
-                'day_name' => Carbon::parse($date)->locale('id')->dayName,
-                'total_services' => count($processedServices),
-                'completed_services' => collect($processedServices)->where('service_status', 'Selesai')->count(),
-                'taken_services' => collect($processedServices)->where('service_status', 'Diambil')->count(),
-                'daily_omset' => $dailyOmset, // FIXED: Correct daily omset
-                'services' => $processedServices,
-            ];
-        }
-
-        // Sort by date descending
-        usort($result, function ($a, $b) {
-            return strcmp($b['date'], $a['date']);
-        });
-
-        $summary = $this->calculateDailySummary($date_from, $date_to);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Data laporan harian berhasil diambil.',
-            'data' => $result,
-            'summary' => $summary,
-            'filters' => [
-                'technician_id' => $technician_id,
-                'date_from' => $date_from,
-                'date_to' => $date_to,
-            ]
-        ], 200);
-    } catch (\Exception $e) {
-        Log::error("Get Daily Report Grouped Error: " . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-        ], 500);
-    }
-}
-
-public function searchServiceExtended(Request $request)
-{
-    try {
-        $search        = $request->input('search');
-        $page          = (int) $request->get('page', 1);
-        $limit         = min((int) $request->get('limit', 20), 50);
-        $status        = $request->get('status');         // Optional filter status
-        $technician_id = $request->get('technician_id');  // Optional filter teknisi
-        $sort_by       = $request->get('sort_by', 'created_at');
-        $sort_order    = strtolower($request->get('sort_order', 'desc'));
-
-        // Validation keyword
-        if (empty($search) || strlen($search) < 2) {
+            // Response final
             return response()->json([
-                'success'    => false,
-                'message'    => 'Kata kunci pencarian minimal 2 karakter.',
-                'data'       => [],
-                'pagination' => null
-            ], 400);
-        }
-
-        // Range waktu: Tahun berjalan + 3 bulan terakhir tahun sebelumnya
-        $currentYear = date('Y');
-        $previousYear = $currentYear - 1;
-
-        $dateFrom = Carbon::create($previousYear, 10, 1)->startOfDay(); // 1 Okt tahun lalu
-        $dateTo   = Carbon::create($currentYear, 12, 31)->endOfDay();   // 31 Des tahun ini
-
-        $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
-            ->whereBetween('sevices.created_at', [$dateFrom, $dateTo])
-            ->leftJoin('users', 'sevices.id_teknisi', '=', 'users.id')
-            ->select(
-                'sevices.*',
-                'users.name as teknisi',
-                DB::raw('CASE
-                    WHEN sevices.created_at >= "' . date('Y-01-01') . '" THEN "current_year"
-                    ELSE "previous_year_last_quarter"
-                END as period_category')
-            );
-
-        // Pencarian fleksibel
-        $query->where(function ($q) use ($search) {
-            $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
-              ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
-              ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
-              ->orWhere('sevices.no_telp', 'LIKE', "%$search%")
-              ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
-        });
-
-        // Filter tambahan
-        if ($status) {
-            $query->where('sevices.status_services', $status);
-        }
-
-        if ($technician_id) {
-            $query->where('sevices.id_teknisi', $technician_id);
-        }
-
-        // Validasi sort
-        $allowedSortColumns = ['created_at', 'tgl_service', 'updated_at', 'total_biaya', 'nama_pelanggan'];
-        if (!in_array($sort_by, $allowedSortColumns)) {
-            $sort_by = 'created_at';
-        }
-        if (!in_array($sort_order, ['asc', 'desc'])) {
-            $sort_order = 'desc';
-        }
-
-        // Hitung total
-        $totalCount = $query->count();
-
-        // Ambil data dengan pagination
-        $services = $query->orderBy("sevices.{$sort_by}", $sort_order)
-            ->orderBy('sevices.id', 'desc')
-            ->offset(($page - 1) * $limit)
-            ->limit($limit)
-            ->get();
-
-        // Tambahan data untuk tiap service
-        $services = $services->map(function ($service) {
-            // Cek garansi
-            $warranty = Garansi::where('kode_garansi', $service->kode_service)
-                ->where('type_garansi', 'service')
-                ->first();
-
-            $service->warranty_info = $warranty ? [
-                'exists'         => true,
-                'expiry_date'    => $warranty->tgl_exp_garansi,
-                'status'         => $this->getWarrantyStatus($warranty->tgl_exp_garansi),
-                'days_remaining' => now()->diffInDays($warranty->tgl_exp_garansi, false)
-            ] : ['exists' => false];
-
-            $service->is_already_claimed = \App\Models\Sevices::where('claimed_from_service_id', $service->id)->exists();
-
-            // Hitung parts
-            $service->parts_count = [
-                'toko' => DetailPartServices::where('kode_services', $service->id)->count(),
-                'luar' => DetailPartLuarService::where('kode_services', $service->id)->count()
-            ];
-
-            // Catatan terakhir
-            $latestNote = DetailCatatanService::where('kode_services', $service->id)
-                ->orderBy('created_at', 'desc')
-                ->first();
-
-            $service->latest_note = $latestNote ? $latestNote->catatan_service : null;
-            $service->has_notes   = $latestNote != null;
-
-            // Info pembayaran
-            $totalBiaya = (float) $service->total_biaya;
-            $dp         = (float) $service->dp;
-            $sisaBayar  = $totalBiaya - $dp;
-
-            $service->payment_info = [
-                'total_biaya'       => $totalBiaya,
-                'dp_paid'           => $dp,
-                'remaining'         => $sisaBayar,
-                'is_fully_paid'     => $sisaBayar <= 0 || $service->status_services === 'Diambil',
-                'payment_percentage'=> $totalBiaya > 0 ? round(($dp / $totalBiaya) * 100, 2) : 0
-            ];
-
-            // Lama service (jika selesai)
-            if ($service->status_services === 'Selesai' && $service->tgl_service) {
-                $service->completion_time = [
-                    'hours' => Carbon::parse($service->created_at)->diffInHours(Carbon::parse($service->tgl_service)),
-                    'days'  => Carbon::parse($service->created_at)->diffInDays(Carbon::parse($service->tgl_service))
-                ];
-            }
-
-            return $service;
-        });
-
-        // Response final
-        return response()->json([
-            'success'    => true,
-            'message'    => "Ditemukan {$totalCount} layanan yang cocok dengan pencarian.",
-            'data'       => $services,
-            'pagination' => [
-                'current_page'     => $page,
-                'per_page'         => $limit,
-                'total'            => $totalCount,
-                'total_pages'      => ceil($totalCount / $limit),
-                'has_next_page'    => $page < ceil($totalCount / $limit),
-                'has_previous_page'=> $page > 1,
-            ],
-            'search_info'=> [
-                'query'       => $search,
-                'period'      => [
-                    'from'        => $dateFrom->format('Y-m-d'),
-                    'to'          => $dateTo->format('Y-m-d'),
-                    'description' => "Tahun {$currentYear} dan 3 bulan terakhir tahun " . ($currentYear - 1)
+                'success'    => true,
+                'message'    => "Ditemukan {$totalCount} layanan yang cocok dengan pencarian.",
+                'data'       => $services,
+                'pagination' => [
+                    'current_page'     => $page,
+                    'per_page'         => $limit,
+                    'total'            => $totalCount,
+                    'total_pages'      => ceil($totalCount / $limit),
+                    'has_next_page'    => $page < ceil($totalCount / $limit),
+                    'has_previous_page'=> $page > 1,
                 ],
-                'filters'     => [
-                    'status'        => $status,
-                    'technician_id' => $technician_id,
-                    'sort_by'       => $sort_by,
-                    'sort_order'    => $sort_order
+                'search_info'=> [
+                    'query'       => $search,
+                    'period'      => [
+                        'from'        => $dateFrom->format('Y-m-d'),
+                        'to'          => $dateTo->format('Y-m-d'),
+                        'description' => "Tahun {$currentYear} dan 3 bulan terakhir tahun " . ($currentYear - 1)
+                    ],
+                    'filters'     => [
+                        'status'        => $status,
+                        'technician_id' => $technician_id,
+                        'sort_by'       => $sort_by,
+                        'sort_order'    => $sort_order
+                    ]
                 ]
-            ]
-        ], 200);
+            ], 200);
 
-    } catch (\Exception $e) {
-        Log::error("Search Service Extended Error: " . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Terjadi kesalahan saat melakukan pencarian: ' . $e->getMessage(),
-        ], 500);
+        } catch (\Exception $e) {
+            Log::error("Search Service Extended Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan saat melakukan pencarian: ' . $e->getMessage(),
+            ], 500);
+        }
     }
-}
 
 
     /**

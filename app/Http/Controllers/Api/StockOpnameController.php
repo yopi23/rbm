@@ -11,10 +11,14 @@ use App\Models\KategoriSparepart ;
 use App\Models\Supplier ;
 use App\Models\StockHistory;
 use App\Models\User;
+use App\Models\ProductVariant;
+use App\Models\HargaKhusus;
+use App\Services\PriceCalculationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class StockOpnameController extends Controller
@@ -567,17 +571,145 @@ class StockOpnameController extends Controller
         }
     }
 
-    public function addNewItem(Request $request, $periodId)
+    public function getAttributesByCategory($categoryId)
     {
+        try {
+            $kode_owner = $this->getThisUser()->id_upline;
+            $kategori = KategoriSparepart::where('kode_owner', $kode_owner)
+                ->orWhereNull('kode_owner')
+                ->findOrFail($categoryId);
+
+            $attributes = $kategori->attributes()->with('values')->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $attributes
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil atribut kategori: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    // public function addNewItem(Request $request, $periodId)
+    // {
+    //     $validator = Validator::make($request->all(), [
+    //         'nama_sparepart' => 'required|string',
+    //         'stock_aktual'   => 'required|integer|min:0',
+    //         'harga_beli'     => 'nullable|numeric|min:0',
+    //         'kode_kategori'  => 'required|exists:kategori_spareparts,id',
+    //         'kode_supplier'  => 'required|exists:suppliers,id',
+    //     ]);
+
+    //     if ($validator->fails()) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Validasi gagal',
+    //             'errors'  => $validator->errors()
+    //         ], 422);
+    //     }
+
+    //     try {
+    //         DB::beginTransaction();
+
+    //         $user = $this->getThisUser();
+    //         $kode_owner = $user->id_upline;
+
+    //         // Generate kode unik
+    //         do {
+    //             $kode_sparepart = 'SP-' . date('Ymd') . '-' . rand(1000, 9999);
+    //         } while (Sparepart::where('kode_sparepart', $kode_sparepart)->exists());
+
+    //         // Buat sparepart baru
+    //         $sparepart = Sparepart::create([
+    //             'kode_sparepart' => $kode_sparepart,
+    //             'nama_sparepart' => $request->nama_sparepart,
+    //             'stok_sparepart' => $request->stock_aktual,
+    //             'harga_beli'     => $request->harga_beli ?? 0,
+    //             'harga_jual'     => ($request->harga_beli ?? 0) * 1.2, // Contoh markup 20%
+    //             'harga_ecer'     => ($request->harga_beli ?? 0) * 1.3, // Contoh markup 30%
+    //             'harga_pasang'   => ($request->harga_beli ?? 0) * 1.4, // Contoh markup 40%
+    //             'kode_kategori'  => $request->kode_kategori,
+    //             'kode_supplier'  => $request->kode_supplier,
+    //             'kode_owner'     => $kode_owner,
+    //             'foto_sparepart' => '-',
+    //         ]);
+
+    //         // Tambahkan ke detail stock opname
+    //         $detail = StockOpnameDetail::create([
+    //             'period_id' => $periodId,
+    //             'sparepart_id' => $sparepart->id,
+    //             'stock_tercatat' => $request->stock_aktual, // Sama dengan aktual karena baru
+    //             'stock_aktual' => $request->stock_aktual,
+    //             'selisih' => 0, // Tidak ada selisih untuk item baru
+    //             'status' => 'adjusted', // Langsung adjusted karena tidak perlu penyesuaian
+    //             'catatan' => 'Item baru ditambahkan selama stock opname',
+    //             'user_check' => $user->id,
+    //             'checked_at' => now(),
+    //             'kode_owner' => $kode_owner,
+    //         ]);
+
+    //         DB::commit();
+
+    //         return response()->json([
+    //             'success' => true,
+    //             'data'    => [
+    //                 'id' => $detail->id,
+    //                 'sparepart_id' => $sparepart->id,
+    //                 'kode_sparepart' => $sparepart->kode_sparepart,
+    //                 'nama_sparepart' => $sparepart->nama_sparepart,
+    //                 'kategori' => $sparepart->kode_kategori,
+    //                 'supplier' => $sparepart->kode_supplier,
+    //                 'stock_tercatat' => $request->stock_aktual,
+    //                 'stock_aktual' => $request->stock_aktual,
+    //                 'selisih' => 0,
+    //                 'status' => 'adjusted',
+    //                 'already_checked' => true,
+    //                 'current_stock' => $request->stock_aktual,
+    //                 'new_stock_after_adjustment' => $request->stock_aktual
+    //             ]
+    //         ]);
+
+    //     } catch (\Exception $e) {
+    //         DB::rollBack();
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Gagal menambahkan item: ' . $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+    protected function updateHargaKhusus($sparepart, $calculatedPrices)
+    {
+        HargaKhusus::updateOrCreate(
+            ['id_sp' => $sparepart->id],
+            [
+                'harga_toko'   =>  0,
+                'harga_satuan' => $calculatedPrices['retail_price'] ?? 0,
+            ]
+        );
+    }
+
+    public function addNewItem(Request $request, $periodId, PriceCalculationService $priceCalculator)
+    {
+        Log::info('addNewItem: Request diterima', [
+            'period_id' => $periodId,
+            'request_data' => $request->all(),
+        ]);
+
         $validator = Validator::make($request->all(), [
             'nama_sparepart' => 'required|string',
             'stock_aktual'   => 'required|integer|min:0',
             'harga_beli'     => 'nullable|numeric|min:0',
             'kode_kategori'  => 'required|exists:kategori_spareparts,id',
             'kode_supplier'  => 'required|exists:suppliers,id',
+            'attributes'     => 'nullable|array',
         ]);
 
         if ($validator->fails()) {
+            // ... (Log validasi gagal)
             return response()->json([
                 'success' => false,
                 'message' => 'Validasi gagal',
@@ -585,41 +717,89 @@ class StockOpnameController extends Controller
             ], 422);
         }
 
-        try {
-            DB::beginTransaction();
+        DB::beginTransaction();
 
+        try {
             $user = $this->getThisUser();
             $kode_owner = $user->id_upline;
+            $hargaBeli = $request->harga_beli ?? 0;
+            $rawAttributes = $request->input('attributes');
+            $attributeValueIds = array_filter(is_array($rawAttributes) ? $rawAttributes : []);
 
-            // Generate kode unik
+            // 1. Hitung Harga Jual menggunakan PriceCalculationService
+            $calculatedPrices = $priceCalculator->calculate(
+                $hargaBeli,
+                $request->kode_kategori,
+                $attributeValueIds
+            );
+
+            Log::info('addNewItem: Memulai perhitungan harga', [
+                'period_id' => $periodId,
+                'user_id' => $user->id,
+                'owner_id' => $kode_owner,
+                'harga_beli' => $hargaBeli,
+                'kode_kategori' => $request->kode_kategori,
+                'attribute_ids' => $attributeValueIds,
+            ]);
+
+            if (is_null($calculatedPrices)) {
+                throw new \Exception('Tidak ada aturan harga yang valid untuk item baru: "' . $request->nama_sparepart . '"');
+            }
+
+            // 2. Generate kode unik (seperti sebelumnya)
             do {
-                $kode_sparepart = 'SP-' . date('Ymd') . '-' . rand(1000, 9999);
+                $kode_sparepart = 'SP' . date('Ymd') .  rand(1000, 9999);
             } while (Sparepart::where('kode_sparepart', $kode_sparepart)->exists());
 
-            // Buat sparepart baru
+            // 3. Buat sparepart baru
             $sparepart = Sparepart::create([
                 'kode_sparepart' => $kode_sparepart,
                 'nama_sparepart' => $request->nama_sparepart,
                 'stok_sparepart' => $request->stock_aktual,
-                'harga_beli'     => $request->harga_beli ?? 0,
-                'harga_jual'     => ($request->harga_beli ?? 0) * 1.2, // Contoh markup 20%
-                'harga_ecer'     => ($request->harga_beli ?? 0) * 1.3, // Contoh markup 30%
-                'harga_pasang'   => ($request->harga_beli ?? 0) * 1.4, // Contoh markup 40%
+                'harga_beli'     => $hargaBeli,
+                'harga_jual'     => $calculatedPrices['internal_price'],
+                'harga_ecer'     => $calculatedPrices['wholesale_price'],
+                'harga_pasang'   => $calculatedPrices['default_service_fee'] ?? 0,
                 'kode_kategori'  => $request->kode_kategori,
-                'kode_supplier'  => $request->kode_supplier,
+                'kode_spl'       => $request->kode_supplier,
                 'kode_owner'     => $kode_owner,
                 'foto_sparepart' => '-',
+                'kode_sub_kategori' => null,
+                'stock_asli' => null,
             ]);
 
-            // Tambahkan ke detail stock opname
+            // LOG BARU: Pastikan Sparepart berhasil dibuat sebelum melanjutkan
+            Log::info('addNewItem: Sparepart berhasil dibuat', [
+                'sparepart_id' => $sparepart->id,
+            ]);
+
+
+            // 4. Buat Product Variant default untuk sparepart baru
+            $variant = $sparepart->variants()->create([
+                'purchase_price' => $hargaBeli,
+                'stock' => $request->stock_aktual,
+                'wholesale_price' => $calculatedPrices['wholesale_price'],
+                'retail_price' => $calculatedPrices['retail_price'],
+                'internal_price' => $calculatedPrices['internal_price'],
+            ]);
+
+            // TAMBAH: Sinkronisasi Atribut jika ada
+            if (!empty($attributeValueIds)) {
+                $variant->attributeValues()->sync(array_values($attributeValueIds));
+            }
+
+            // 5. Update Harga Khusus
+            $this->updateHargaKhusus($sparepart, $calculatedPrices);
+
+            // 6. Tambahkan ke detail stock opname (seperti sebelumnya)
             $detail = StockOpnameDetail::create([
                 'period_id' => $periodId,
                 'sparepart_id' => $sparepart->id,
-                'stock_tercatat' => $request->stock_aktual, // Sama dengan aktual karena baru
+                'stock_tercatat' => 0,
                 'stock_aktual' => $request->stock_aktual,
-                'selisih' => 0, // Tidak ada selisih untuk item baru
-                'status' => 'adjusted', // Langsung adjusted karena tidak perlu penyesuaian
-                'catatan' => 'Item baru ditambahkan selama stock opname',
+                'selisih' => $request->stock_aktual,
+                'status' => 'adjusted',
+                'catatan' => 'Item baru ditemukan dan ditambahkan selama stock opname',
                 'user_check' => $user->id,
                 'checked_at' => now(),
                 'kode_owner' => $kode_owner,
@@ -629,28 +809,40 @@ class StockOpnameController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data'    => [
+                'message' => 'Item baru berhasil ditambahkan dan disesuaikan',
+                // ... (return data seperti sebelumnya)
+                'data' => [
                     'id' => $detail->id,
                     'sparepart_id' => $sparepart->id,
                     'kode_sparepart' => $sparepart->kode_sparepart,
                     'nama_sparepart' => $sparepart->nama_sparepart,
-                    'kategori' => $sparepart->kode_kategori,
-                    'supplier' => $sparepart->kode_supplier,
-                    'stock_tercatat' => $request->stock_aktual,
+                    'kategori' => $request->kode_kategori, // Ganti dengan ID kategori
+                    'supplier' => $request->kode_supplier, // Ganti dengan ID supplier
+                    'stock_tercatat' => 0,
                     'stock_aktual' => $request->stock_aktual,
-                    'selisih' => 0,
+                    'selisih' => $request->stock_aktual,
                     'status' => 'adjusted',
                     'already_checked' => true,
                     'current_stock' => $request->stock_aktual,
                     'new_stock_after_adjustment' => $request->stock_aktual
                 ]
-            ]);
+            ], 200);
 
         } catch (\Exception $e) {
             DB::rollBack();
+            // PERBAIKAN LOG ERROR
+            Log::error('addNewItem: GAGAL (Rollback) - Error Internal Server', [
+                'period_id' => $periodId,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'stack' => $e->getTraceAsString(), // Log stack trace lengkap
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menambahkan item: ' . $e->getMessage()
+                // Mengembalikan pesan error yang lebih spesifik untuk membantu debugging
+                'message' => 'Gagal menambahkan item. Error: ' . $e->getMessage()
             ], 500);
         }
     }

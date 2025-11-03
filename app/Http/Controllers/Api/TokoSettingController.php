@@ -164,4 +164,81 @@ class TokoSettingController extends Controller
 
         return $userDetail;
     }
+
+    // =========================================================
+    // BARU: Pengaturan Lokasi Absensi (Geolocation)
+    // =========================================================
+
+    /**
+     * Ambil data pengaturan lokasi absen (hanya untuk owner)
+     */
+    public function getOfficeLocation()
+    {
+        $user = $this->getThisUser(); // user detail yang sedang login
+
+        // Pastikan user yang login adalah owner (id_upline-nya sendiri atau null)
+        $ownerDetailId = $user->id_upline ?? $user->id;
+
+        $owner = DB::table('user_details')
+            ->where('id', $ownerDetailId)
+            ->first();
+
+        if (!$owner) {
+             return response()->json(['message' => 'Owner detail not found'], 404);
+        }
+
+        return response()->json([
+            'status' => true,
+            'data' => [
+                'default_lat'       => $owner->default_lat,
+                'default_lon'       => $owner->default_lon,
+                'allowed_radius_m'  => $owner->allowed_radius_m ?? 50, // Default 50m
+                'owner_detail_id'   => $owner->id,
+            ]
+        ]);
+    }
+
+    /**
+     * Simpan/Update data pengaturan lokasi absen (hanya untuk owner)
+     */
+    public function updateOfficeLocation(Request $request)
+    {
+        $user = $this->getThisUser(); // user detail yang sedang login
+
+        $validated = $request->validate([
+            'default_lat'       => 'required|numeric|between:-90,90',
+            'default_lon'       => 'required|numeric|between:-180,180',
+            'allowed_radius_m'  => 'required|integer|min:10|max:1000', // Radius min 10m, max 1000m
+        ]);
+
+        // Pastikan user yang login adalah owner (id_upline-nya sendiri atau null)
+        $ownerDetailId = $user->id_upline ?? $user->id;
+
+        $owner = DB::table('user_details')
+            ->where('id', $ownerDetailId)
+            ->first();
+
+        if (!$owner) {
+             return response()->json(['message' => 'Owner detail not found'], 404);
+        }
+
+        DB::table('user_details')
+            ->where('id', $ownerDetailId)
+            ->update([
+                'default_lat'       => $validated['default_lat'],
+                'default_lon'       => $validated['default_lon'],
+                'allowed_radius_m'  => $validated['allowed_radius_m'],
+                'updated_at'        => now(),
+            ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Pengaturan Lokasi Usaha berhasil disimpan.',
+            'data' => [
+                'default_lat'       => $validated['default_lat'],
+                'default_lon'       => $validated['default_lon'],
+                'allowed_radius_m'  => $validated['allowed_radius_m'],
+            ]
+        ]);
+    }
 }

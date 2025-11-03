@@ -26,6 +26,7 @@ use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Api\HutangApiController;
 use App\Http\Controllers\Api\PembelianApiController;
 use App\Http\Controllers\Api\QrisController;
+use App\Http\Controllers\Api\AttendanceController;
 use Illuminate\Support\Facades\Broadcast;
 
 /*
@@ -118,6 +119,8 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     // sampai sini
     Route::get('/toko-settings', [TokoSettingController::class, 'getSettings']);
     Route::post('/toko-settings', [TokoSettingController::class, 'updateSettings']);
+    Route::get('toko-settings/location', [TokoSettingController::class, 'getOfficeLocation']);
+    Route::post('toko-settings/location', [TokoSettingController::class, 'updateOfficeLocation']);
 
     Route::get('/user-profile/{kode_user}', [UserDataController::class, 'getUserProfile']);
     Route::post('/penarikan', [UserDataController::class, 'store_penarikan']);
@@ -156,6 +159,11 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::post('/attendance/manual-checkin', [EmployeeManagementController::class, 'manualCheckIn']);
     Route::post('/attendance/manual-checkout', [EmployeeManagementController::class, 'manualCheckOut']);
     Route::get('/attendance/employee-status/{employeeId}', [EmployeeManagementController::class, 'getEmployeeAttendanceStatus']);
+
+    Route::get('/attendance/face-status/{user_id}', [AttendanceController::class, 'checkFaceEnrollmentStatus']);
+    Route::post('/attendance/register-face', [AttendanceController::class, 'registerFace']);
+    Route::post('/attendance/scan-face', [AttendanceController::class, 'scanFaceAttendance']);
+    Route::delete('/attendance/delete-face/{user_id}', [AttendanceController::class, 'deleteFaceData']);
 
     Route::prefix('attendance')->group(function () {
         Route::post('/generate-employee-qr', [EmployeeManagementController::class, 'generateEmployeeQrCode']);
@@ -365,6 +373,7 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
         Route::get('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'getAdjustmentDetail']);
         Route::post('/periods/{periodId}/items/{detailId}/adjustment', [StockOpnameController::class, 'saveAdjustment']);
         Route::post('/periods/{periodId}/add-new-item', [StockOpnameController::class, 'addNewItem']);
+        Route::get('categories/{categoryId}/attributes', [StockOpnameController::class, 'getAttributesByCategory']);
         Route::get('/periods/{id}/report', [StockOpnameController::class, 'getReport']);
         Route::get('/periods/{id}/items-with-selisih', [StockOpnameController::class, 'getItemsWithSelisih']);
         Route::get('/categories', [StockOpnameController::class, 'getCategories']);

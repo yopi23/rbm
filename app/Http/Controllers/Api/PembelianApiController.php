@@ -452,7 +452,7 @@ class PembelianApiController extends Controller
                             'kode_kategori' => $detail->item_kategori
                         ],
                         [
-                            'kode_sparepart' => 'SP-' . date('YmdHis') . rand(100, 999),
+                            'kode_sparepart' => 'SP' . date('YmdHis') . rand(100, 999),
                             'kode_owner' => $this->getOwnerId(),
                             'kode_spl' => $validated['supplier'],
                             'foto_sparepart' => '-',
