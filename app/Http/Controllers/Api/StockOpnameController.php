@@ -1028,6 +1028,7 @@ class StockOpnameController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'alasan_adjustment' => 'required|string',
+            'adjustment_qty' => 'required|integer', // Memastikan adjustment_qty diterima
         ]);
 
         if ($validator->fails()) {
@@ -1047,7 +1048,7 @@ class StockOpnameController extends Controller
             $period = StockOpnamePeriod::where('kode_owner', $kode_owner)
                 ->findOrFail($periodId);
 
-            $detail = StockOpnameDetail::with('sparepart')
+            $detail = StockOpnameDetail::with('sparepart.variants') // Eager load sparepart dan variannya
                 ->where('period_id', $periodId)
                 ->where('id', $detailId)
                 ->first();
@@ -1067,13 +1068,16 @@ class StockOpnameController extends Controller
                 ], 400);
             }
 
-            // Dapatkan sparepart
             $sparepart = $detail->sparepart;
             $currentStock = $sparepart->stok_sparepart;
-            $adjustmentQty = $detail->selisih; // Selisih sudah berisi nilai positif atau negatif
+
+            // Ambil adjustmentQty dari Request (Ini adalah DELTA yang diinput Admin)
+            $adjustmentQty = $request->adjustment_qty;
+
+            // Hitung stok baru (Ini adalah stok baru di INVENTARIS UTAMA/GUDANG)
             $newStock = $currentStock + $adjustmentQty;
 
-            // Simpan riwayat penyesuaian
+            // 1. Simpan riwayat penyesuaian
             $adjustment = StockOpnameAdjustment::create([
                 'detail_id' => $detail->id,
                 'stock_before' => $currentStock,
@@ -1084,15 +1088,27 @@ class StockOpnameController extends Controller
                 'kode_owner' => $kode_owner,
             ]);
 
-            // Update stok sparepart
+            // 2. Update stok Sparepart (tabel utama)
             $sparepart->stok_sparepart = $newStock;
             $sparepart->save();
 
-            // Update status detail
-            $detail->status = 'adjusted';
+            // 3. Update stok Product Variant
+            $variant = $sparepart->variants->first();
+            if ($variant) {
+                $variant->stock = $newStock;
+                $variant->save();
+            }
+
+            // 4. [PERBAIKAN UTAMA] Update StockOpnameDetail
+            // Hitung selisih baru: Selisih antara STOK GUDANG TERBARU dengan STOK TERCATAT awal
+            $newDetailSelisih = $newStock - $detail->stock_tercatat;
+
+            $detail->stock_aktual = $newStock; // Set stok aktual di detail SO menjadi stok gudang terbaru
+            $detail->selisih = $newDetailSelisih; // Set selisih baru
+            $detail->status = 'adjusted'; // Status sudah pasti adjusted
             $detail->save();
 
-            // Catat di stock history jika model ada
+            // 5. Catat di stock history
             if (class_exists('App\Models\StockHistory')) {
                 StockHistory::create([
                     'sparepart_id' => $sparepart->id,

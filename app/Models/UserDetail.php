@@ -33,6 +33,7 @@ class UserDetail extends Model
         'qris_payload',
         'macrodroid_secret',
         'face_embedding',
+        'face_registered_at',
         'default_lat',
         'default_lon',
         'allowed_radius_m',

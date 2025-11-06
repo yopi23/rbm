@@ -187,204 +187,7 @@ class AttendanceController extends Controller
             'success'=>'sukses',
         ]);
     }
-    // Lanjutan dari kode AttendanceController.php sebelumnya
-    // public function scanFace(Request $request)
-    // {
-    //     $request->validate([
-    //         'user_id' => 'required|string',
-    //         'photo' => 'required|string',
-    //         'latitude' => 'required|numeric',
-    //         'longitude' => 'required|numeric',
-    //         'type' => 'required|in:check_in,check_out',
-    //         'live_embedding' => 'required|json', // Real embedding dari Flutter
-    //     ]);
 
-    //     $userId = auth()->id();
-    //     $today = Carbon::today();
-    //     $isCheckIn = $request->input('type') === 'check_in';
-
-    //     // Get user data
-    //     $user = $this->getThisUser();
-
-    //     // 1. CEK ENROLLMENT WAJAH
-    //     if (empty($user->face_embedding)) {
-    //         return response()->json([
-    //             'success' => false,
-    //             'message' => 'Wajah belum terdaftar. Silakan lakukan pendaftaran wajah terlebih dahulu.'
-    //         ], 403);
-    //     }
-
-    //     // 2. CEK LOKASI
-    //     $ownerDetailId = $user->id_upline ?? $user->id;
-    //     $owner = DB::table('user_details')
-    //         ->where('id', $ownerDetailId)
-    //         ->first(['default_lat', 'default_lon', 'allowed_radius_m']);
-
-    //     if (!$owner || !$owner->default_lat || !$owner->default_lon) {
-    //         return response()->json([
-    //             'success' => false,
-    //             'message' => 'Pengaturan lokasi kantor belum ditentukan oleh Admin/Owner.'
-    //         ], 400);
-    //     }
-
-    //     $officeLatitude = $owner->default_lat;
-    //     $officeLongitude = $owner->default_lon;
-    //     $allowedRadiusMeters = $owner->allowed_radius_m ?? 50;
-
-    //     $distance = $this->calculateDistance(
-    //         $request->latitude,
-    //         $request->longitude,
-    //         $officeLatitude,
-    //         $officeLongitude
-    //     );
-
-    //     if ($distance > $allowedRadiusMeters) {
-    //         return response()->json([
-    //             'success' => false,
-    //             'message' => "Lokasi absensi terlalu jauh. Harus di dalam radius {$allowedRadiusMeters} meter dari kantor. Jarak Anda: " . round($distance, 2) . " meter."
-    //         ], 400);
-    //     }
-
-    //     // 3. VERIFIKASI WAJAH (REAL)
-    //     $liveEmbedding = json_decode($request->live_embedding, true);
-    //     $storedEmbedding = json_decode($user->face_embedding, true);
-
-    //     if (empty($storedEmbedding) || empty($liveEmbedding)) {
-    //         return response()->json([
-    //             'success' => false,
-    //             'message' => 'Data embedding wajah tidak valid.'
-    //         ], 400);
-    //     }
-
-    //     // Hitung Cosine Similarity
-    //     $similarity = $this->calculateCosineSimilarity($liveEmbedding, $storedEmbedding);
-
-    //     // Threshold: 0.7 untuk MobileFaceNet (lebih rendah dari FaceNet512)
-    //     // Sesuaikan berdasarkan testing Anda
-    //     $requiredThreshold = 0.70;
-
-    //     if ($similarity < $requiredThreshold) {
-    //         return response()->json([
-    //             'success' => false,
-    //             'message' => 'Verifikasi wajah gagal. Wajah tidak cocok dengan data yang terdaftar. (Similarity: ' . round($similarity, 3) . ')'
-    //         ], 400);
-    //     }
-
-    //     // 4. LOGIKA ABSENSI
-    //     $attendance = Attendance::where('user_id', $userId)
-    //         ->whereDate('attendance_date', $today)
-    //         ->first();
-
-    //     if ($isCheckIn) {
-    //         // Check-in logic
-    //         if ($attendance && $attendance->check_in) {
-    //             return response()->json([
-    //                 'success' => false,
-    //                 'message' => 'Anda sudah check-in hari ini.'
-    //             ], 400);
-    //         }
-
-    //         if ($attendance && in_array($attendance->status, ['izin', 'sakit', 'cuti'])) {
-    //             return response()->json([
-    //                 'success' => false,
-    //                 'message' => 'Gagal check-in. Status Anda hari ini adalah ' . $attendance->status . '.'
-    //             ], 400);
-    //         }
-
-    //         // Calculate late minutes
-    //         $schedule = WorkSchedule::where('user_id', $userId)
-    //             ->where('day_of_week', $today->format('l'))
-    //             ->first();
-
-    //         $lateMinutes = 0;
-    //         if ($schedule && $schedule->is_working_day) {
-    //             $checkInTime = Carbon::now();
-    //             $scheduleStartTime = Carbon::parse($today->format('Y-m-d') . ' ' . $schedule->start_time);
-    //             if ($checkInTime->gt($scheduleStartTime)) {
-    //                 $lateMinutes = $checkInTime->diffInMinutes($scheduleStartTime);
-    //             }
-    //         }
-
-    //         // Save check-in photo (optional)
-    //         $photoPath = null;
-    //         if ($request->photo !== 'face_recognition') {
-    //             $photoPath = $this->saveBase64Image($request->photo, 'attendance/checkin');
-    //         }
-
-    //         $attendance = Attendance::updateOrCreate(
-    //             ['user_id' => $userId, 'attendance_date' => $today],
-    //             [
-    //                 'check_in' => Carbon::now(),
-    //                 'status' => 'hadir',
-    //                 'location' => "Face Scan | Lat:{$request->latitude}, Lon:{$request->longitude}",
-    //                 'late_minutes' => $lateMinutes,
-    //                 'check_in_photo' => $photoPath,
-    //                 'created_by' => $userId,
-    //             ]
-    //         );
-
-    //         // Create violation if late > 30 minutes
-    //         if ($lateMinutes > 30) {
-    //             Violation::create([
-    //                 'user_id' => $userId,
-    //                 'violation_date' => $today,
-    //                 'type' => 'telat',
-    //                 'description' => "Terlambat $lateMinutes menit (Absensi Wajah)",
-    //                 'penalty_percentage' => 5,
-    //                 'status' => 'pending',
-    //                 'created_by' => $userId,
-    //             ]);
-    //         }
-
-    //         return response()->json([
-    //             'success' => true,
-    //             'message' => 'Check-in wajah berhasil! Verifikasi selesai. (Similarity: ' . round($similarity, 3) . ')',
-    //             'data' => [
-    //                 'attendance' => $attendance,
-    //                 'is_late' => $lateMinutes > 0,
-    //                 'late_minutes' => $lateMinutes,
-    //                 'face_similarity' => round($similarity, 3)
-    //             ]
-    //         ]);
-
-    //     } else {
-    //         // Check-out logic
-    //         if (!$attendance || !$attendance->check_in) {
-    //             return response()->json([
-    //                 'success' => false,
-    //                 'message' => 'Anda belum check-in hari ini.'
-    //             ], 400);
-    //         }
-
-    //         if ($attendance->check_out) {
-    //             return response()->json([
-    //                 'success' => false,
-    //                 'message' => 'Anda sudah check-out hari ini.'
-    //             ], 400);
-    //         }
-
-    //         // Save check-out photo (optional)
-    //         $photoPath = null;
-    //         if ($request->photo !== 'face_recognition') {
-    //             $photoPath = $this->saveBase64Image($request->photo, 'attendance/checkout');
-    //         }
-
-    //         $attendance->update([
-    //             'check_out' => Carbon::now(),
-    //             'location' => "Face Scan | Lat:{$request->latitude}, Lon:{$request->longitude}",
-    //             'check_out_photo' => $photoPath,
-    //         ]);
-
-    //         return response()->json([
-    //             'success' => true,
-    //             'message' => 'Check-out wajah berhasil! (Similarity: ' . round($similarity, 3) . ')',
-    //             'data' => [
-    //                 'attendance' => $attendance,
-    //                 'face_similarity' => round($similarity, 3)
-    //             ]
-    //         ]);
-    //     }
-    // }
 
     public function checkFaceEnrollmentStatus($user_id)
     {
@@ -418,295 +221,442 @@ class AttendanceController extends Controller
         }
     }
 
-    // REGISTER FACE - REAL IMPLEMENTATION
+    /**
+     * Register wajah dengan validasi lebih ketat
+     */
     public function registerFace(Request $request)
-{
-    try {
-        $request->validate([
-            'user_id' => 'required',
-            'face_embedding' => 'required|string',
-        ]);
+    {
+        try {
+            $request->validate([
+                'user_id' => 'required',
+                'face_embedding' => 'required|string',
+            ]);
 
-        // Cari atau buat record di user_details
-        $userDetail = UserDetail::where('kode_user', $request->user_id)->first();
+            // Decode dan validasi embedding
+            $embeddingArray = json_decode($request->face_embedding, true);
 
-        if (!$userDetail) {
+            if (!is_array($embeddingArray)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Format data wajah tidak valid'
+                ], 400);
+            }
+
+            // Validasi ukuran embedding (192 dimensi untuk MobileFaceNet, 512 untuk FaceNet)
+            $expectedDimension = 192; // MobileFaceNet
+            $actualDimension = count($embeddingArray);
+
+            // Support both models
+            if (!in_array($actualDimension, [192, 512])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Dimensi data wajah tidak sesuai. Expected: 192 atau 512, Got: ' . $actualDimension
+                ], 400);
+            }
+
+            // Validasi nilai embedding (tidak boleh NaN atau Infinity)
+            foreach ($embeddingArray as $value) {
+                if (!is_numeric($value) || is_nan($value) || is_infinite($value)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Data wajah mengandung nilai tidak valid'
+                    ], 400);
+                }
+            }
+
+            // Cari user
+            $userDetail = UserDetail::where('kode_user', $request->user_id)->first();
+
+            if (!$userDetail) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data user tidak ditemukan'
+                ], 404);
+            }
+
+            // Cek apakah sudah pernah mendaftar
+            if (!empty($userDetail->face_embedding)) {
+                \Log::info('User mencoba registrasi ulang', ['user_id' => $request->user_id]);
+
+                // Izinkan update jika user memang ingin update wajah
+                // Tapi beri peringatan
+            }
+
+            // Simpan face embedding
+            $userDetail->face_embedding = $request->face_embedding;
+            $userDetail->face_registered_at = now(); // Tambahkan kolom ini di migration
+            $userDetail->save();
+
+            \Log::info('Face registration successful', [
+                'user_id' => $request->user_id,
+                'embedding_size' => count($embeddingArray)
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Wajah berhasil didaftarkan! Sekarang Anda dapat menggunakan fitur absensi wajah.',
+                'data' => [
+                    'user_name' => $userDetail->fullname,
+                    'registered_at' => $userDetail->face_registered_at,
+                ]
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Data user tidak ditemukan'
-            ], 404);
+                'message' => 'Data tidak valid',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Face registration error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mendaftarkan wajah: ' . $e->getMessage()
+            ], 500);
         }
-
-        // Simpan face embedding
-        $userDetail->face_embedding = $request->face_embedding;
-        $userDetail->save();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Wajah berhasil didaftarkan! Sekarang Anda dapat menggunakan fitur absensi wajah.',
-            'data' => [
-                'user_name' => $userDetail->fullname,
-            ]
-        ]);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Gagal mendaftarkan wajah: ' . $e->getMessage()
-        ], 500);
     }
-}
 
-/**
- * Scan face untuk absensi (check-in/check-out)
- */
-public function scanFaceAttendance(Request $request)
-{
-    try {
-        \Log::info('Face attendance request received', [
-            'user_id' => $request->user_id,
-            'type' => $request->type,
-            'latitude' => $request->latitude,
-            'longitude' => $request->longitude,
-        ]);
+    /**
+     * Scan face untuk absensi dengan validasi dan logging lebih baik
+     */
+    public function scanFaceAttendance(Request $request)
+    {
+        try {
+            \Log::info('Face attendance request received', [
+                'user_id' => $request->user_id,
+                'type' => $request->type,
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+            ]);
 
-        $request->validate([
-            'user_id' => 'required',
-            'latitude' => 'required|numeric',
-            'longitude' => 'required|numeric',
-            'type' => 'required|in:check_in,check_out',
-            'live_embedding' => 'required|string',
-        ]);
+            $request->validate([
+                'user_id' => 'required',
+                'latitude' => 'required|numeric',
+                'longitude' => 'required|numeric',
+                'type' => 'required|in:check_in,check_out',
+                'live_embedding' => 'required|string',
+            ]);
 
-        $userId = $request->user_id;
+            $userId = $request->user_id;
+            $userDetail = UserDetail::where('kode_user', $userId)->first();
 
-        // Ambil data user dari user_details
-        $userDetail = UserDetail::where('kode_user', $userId)->first();
+            if (!$userDetail) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data user tidak ditemukan'
+                ], 404);
+            }
 
-        if (!$userDetail) {
+            // Cek enrollment
+            if (empty($userDetail->face_embedding)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Wajah belum terdaftar. Silakan daftarkan wajah terlebih dahulu di menu Pengaturan.'
+                ], 403);
+            }
+
+            // Decode dan validasi embeddings
+            $storedEmbedding = json_decode($userDetail->face_embedding, true);
+            $liveEmbedding = json_decode($request->live_embedding, true);
+
+            // Validasi format
+            if (!is_array($storedEmbedding) || !is_array($liveEmbedding)) {
+                \Log::error('Invalid embedding format', [
+                    'user_id' => $userId,
+                    'stored_is_array' => is_array($storedEmbedding),
+                    'live_is_array' => is_array($liveEmbedding)
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Format data wajah tidak valid'
+                ], 400);
+            }
+
+            // Validasi dimensi
+            if (count($storedEmbedding) !== count($liveEmbedding)) {
+                \Log::error('Embedding dimension mismatch', [
+                    'stored_size' => count($storedEmbedding),
+                    'live_size' => count($liveEmbedding)
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Dimensi data wajah tidak cocok. Silakan daftarkan wajah ulang.'
+                ], 400);
+            }
+
+            // Hitung similarity
+            $similarity = $this->calculateCosineSimilarity($storedEmbedding, $liveEmbedding);
+
+            \Log::info('Face similarity calculated', [
+                'user_id' => $userId,
+                'similarity' => $similarity,
+                'similarity_percentage' => round($similarity * 100, 2)
+            ]);
+
+            // Threshold lebih fleksibel: 0.70 = 70% similarity
+            // Untuk production, bisa diturunkan ke 0.65-0.70 tergantung testing
+            $threshold = 0.80;
+
+            if ($similarity < $threshold) {
+                \Log::warning('Face verification failed', [
+                    'user_id' => $userId,
+                    'similarity' => $similarity,
+                    'threshold' => $threshold
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Verifikasi wajah gagal. Wajah tidak cocok dengan data terdaftar.',
+                    'data' => [
+                        'similarity' => round($similarity * 100, 2) . '%',
+                        'threshold' => round($threshold * 100, 2) . '%',
+                        'tips' => [
+                            'Pastikan pencahayaan cukup',
+                            'Hadapkan wajah langsung ke kamera',
+                            'Lepas masker/kacamata',
+                            'Jika masih gagal, coba daftar ulang wajah'
+                        ]
+                    ]
+                ], 401);
+            }
+
+            // Validasi lokasi jika required
+            if ($userDetail->is_outside_office == 0) {
+                // Definisikan variabel untuk menyimpan lokasi kantor yang akan digunakan
+                $officeLat = $userDetail->default_lat;
+                $officeLon = $userDetail->default_lon;
+                $isUplineLocation = false; // Flag untuk melacak apakah lokasi dari upline
+                $idUpline = $userDetail->id_upline ?? null; // Asumsi kolom: id_upline di user_details
+
+                // 1. Cek apakah lokasi di akun pengguna kosong
+                if (empty($officeLat) || empty($officeLon)) {
+                    // 2. Jika kosong, cek Upline
+                    if ($idUpline) {
+                        // 3. Ambil data UserDetail dari Upline
+                        $uplineDetail = UserDetail::where('kode_user', $idUpline)->first();
+
+                        if ($uplineDetail) {
+                            // 4. Gunakan lokasi Upline jika tersedia
+                            if (!empty($uplineDetail->default_lat) && !empty($uplineDetail->default_lon)) {
+                                $officeLat = $uplineDetail->default_lat;
+                                $officeLon = $uplineDetail->default_lon;
+                                $isUplineLocation = true;
+                                \Log::info('Using upline location for attendance', ['user_id' => $userId, 'upline_id' => $idUpline]);
+                            }
+                        }
+                    }
+
+                    // 5. Jika lokasi (milik user atau upline) masih kosong, keluarkan error
+                    if (empty($officeLat) || empty($officeLon)) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Lokasi kantor belum diatur. Hubungi admin untuk mengatur lokasi kantor Anda atau upline Anda.'
+                        ], 400);
+                    }
+                }
+
+                // Lanjutkan dengan perhitungan jarak menggunakan $officeLat dan $officeLon
+                $distance = $this->calculateDistance(
+                    $request->latitude,
+                    $request->longitude,
+                    $officeLat,
+                    $officeLon
+                );
+
+                $maxDistance = $userDetail->allowed_radius_m ?? 10;
+
+                if ($distance > $maxDistance) {
+                    \Log::warning('Location validation failed', [
+                        'user_id' => $userId,
+                        'distance' => $distance,
+                        'max_distance' => $maxDistance,
+                        'location_source' => $isUplineLocation ? 'Upline' : 'Self'
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Lokasi Anda terlalu jauh dari kantor " . ($isUplineLocation ? "(lokasi Upline)" : "") . ".\nJarak: " . round($distance, 2) . "m\nMaksimal: {$maxDistance}m",
+                        'data' => [
+                            'current_distance' => round($distance, 2),
+                            'max_allowed' => $maxDistance,
+                            'unit' => 'meters'
+                        ]
+                    ], 400);
+                }
+            }
+
+            // Validasi jadwal kerja
+            $today = Carbon::today();
+            $dayName = $today->format('l');
+
+            $schedule = WorkSchedule::where('user_id', $userId)
+                ->where('day_of_week', $dayName)
+                ->first();
+
+            if (!$schedule || !$schedule->is_working_day) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Anda tidak memiliki jadwal kerja hari ini (' . $dayName . ')'
+                ], 400);
+            }
+
+            // Proses absensi
+            $attendance = Attendance::where('user_id', $userId)
+                ->whereDate('attendance_date', $today)
+                ->first();
+
+            $isLate = false;
+            $lateMinutes = 0;
+            $message = '';
+
+            if ($request->type === 'check_in') {
+                // Validasi check-in
+                if ($attendance && $attendance->check_in) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Anda sudah check-in hari ini pada ' .
+                                    Carbon::parse($attendance->check_in)->format('H:i')
+                    ], 400);
+                }
+
+                if ($attendance && in_array($attendance->status, ['izin', 'sakit', 'cuti'])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Status hari ini adalah ' . $attendance->status . '. Tidak dapat check-in.'
+                    ], 400);
+                }
+
+                // Hitung keterlambatan
+                $checkInTime = Carbon::now();
+                $scheduleTime = Carbon::parse($schedule->start_time);
+                $scheduledTime = Carbon::create(
+                    $today->year,
+                    $today->month,
+                    $today->day,
+                    $scheduleTime->hour,
+                    $scheduleTime->minute,
+                    0
+                );
+
+                if ($checkInTime->gt($scheduledTime)) {
+                    $isLate = true;
+                    $lateMinutes = $checkInTime->diffInMinutes($scheduledTime);
+                }
+
+                // Simpan attendance
+                if ($attendance) {
+                    $attendance->update([
+                        'check_in' => $checkInTime,
+                        'status' => 'hadir',
+                        'is_late' => $isLate,
+                        'late_minutes' => $lateMinutes,
+                        'location' => "Face Recognition | Lat:{$request->latitude}, Lon:{$request->longitude}",
+                    ]);
+                } else {
+                    $attendance = Attendance::create([
+                        'user_id' => $userId,
+                        'attendance_date' => $today,
+                        'check_in' => $checkInTime,
+                        'status' => 'hadir',
+                        'is_late' => $isLate,
+                        'late_minutes' => $lateMinutes,
+                        'location' => "Face Recognition | Lat:{$request->latitude}, Lon:{$request->longitude}",
+                        'created_by' => $userId,
+                    ]);
+                }
+
+                // Buat violation jika terlambat > 30 menit
+                if ($lateMinutes > 30) {
+                    Violation::create([
+                        'user_id' => $userId,
+                        'violation_date' => $today,
+                        'type' => 'telat',
+                        'description' => "Terlambat $lateMinutes menit (Absensi Wajah)",
+                        'penalty_percentage' => 5,
+                        'status' => 'pending',
+                        'created_by' => $userId,
+                    ]);
+
+                    \Log::info('Violation created for late attendance', [
+                        'user_id' => $userId,
+                        'late_minutes' => $lateMinutes
+                    ]);
+                }
+
+                $message = $isLate
+                    ? "Check-in berhasil! ⚠️ Anda terlambat $lateMinutes menit"
+                    : 'Check-in berhasil! ✓ Selamat bekerja';
+
+            } else {
+                // Check-out
+                if (!$attendance || !$attendance->check_in) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Anda harus check-in terlebih dahulu sebelum check-out'
+                    ], 400);
+                }
+
+                if ($attendance->check_out) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Anda sudah check-out hari ini pada ' .
+                                    Carbon::parse($attendance->check_out)->format('H:i')
+                    ], 400);
+                }
+
+                $attendance->update([
+                    'check_out' => Carbon::now(),
+                    'location' => $attendance->location . " | Checkout Face",
+                ]);
+
+                $message = 'Check-out berhasil! ✓ Terima kasih atas kerja keras Anda hari ini';
+            }
+
+            \Log::info('Face attendance successful', [
+                'user_id' => $userId,
+                'type' => $request->type,
+                'is_late' => $isLate,
+                'late_minutes' => $lateMinutes,
+                'similarity' => round($similarity * 100, 2)
+            ]);
+
             return response()->json([
-                'success' => false,
-                'message' => 'Data user tidak ditemukan'
-            ], 404);
-        }
+                'success' => true,
+                'message' => $message,
+                'data' => [
+                    'is_late' => $isLate,
+                    'late_minutes' => $lateMinutes,
+                    'similarity' => round($similarity * 100, 2) . '%',
+                    'check_in' => $attendance->check_in ? Carbon::parse($attendance->check_in)->format('H:i') : null,
+                    'check_out' => $attendance->check_out ? Carbon::parse($attendance->check_out)->format('H:i') : null,
+                    'attendance_date' => $attendance->attendance_date,
+                ]
+            ]);
 
-        // Cek apakah user sudah mendaftar wajah
-        if (empty($userDetail->face_embedding)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Wajah belum terdaftar. Silakan daftarkan wajah terlebih dahulu.'
-            ], 403);
-        }
-
-        // Decode embeddings
-        $storedEmbedding = json_decode($userDetail->face_embedding, true);
-        $liveEmbedding = json_decode($request->live_embedding, true);
-
-        // Validasi format embedding
-        if (!is_array($storedEmbedding) || !is_array($liveEmbedding)) {
-            \Log::error('Invalid embedding format', [
-                'stored_is_array' => is_array($storedEmbedding),
-                'live_is_array' => is_array($liveEmbedding)
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Validation error in face attendance', [
+                'errors' => $e->errors()
             ]);
             return response()->json([
                 'success' => false,
-                'message' => 'Format data wajah tidak valid'
-            ], 400);
-        }
-
-        // Hitung similarity (cosine similarity)
-        $similarity = $this->calculateCosineSimilarity($storedEmbedding, $liveEmbedding);
-
-        \Log::info('Face similarity calculated', [
-            'user_id' => $userId,
-            'similarity' => $similarity
-        ]);
-
-        // Threshold untuk verifikasi (0.5 = 50% similarity)
-        $threshold = 0.90;
-
-        if ($similarity < $threshold) {
+                'message' => 'Data tidak valid',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Error in face attendance: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'user_id' => $request->user_id ?? 'unknown'
+            ]);
             return response()->json([
                 'success' => false,
-                'message' => 'Verifikasi wajah gagal. Wajah tidak cocok dengan data terdaftar. Silakan coba lagi atau hubungi admin.',
-                'data' => [
-                    'similarity' => round($similarity * 100, 2) . '%',
-                    'threshold' => round($threshold * 100, 2) . '%'
-                ]
-            ], 401);
+                'message' => 'Terjadi kesalahan sistem. Silakan coba lagi atau hubungi admin.',
+                'debug' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
         }
-
-        // Cek lokasi (jika is_outside_office = 0)
-        if ($userDetail->is_outside_office == 0) {
-            $validLocation = $this->checkLocation(
-                $request->latitude,
-                $request->longitude,
-                $userDetail->default_lat,
-                $userDetail->default_lon,
-                $userDetail->allowed_radius_m ?? 100
-            );
-
-            if (!$validLocation) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Lokasi Anda di luar jangkauan kantor. Jarak maksimal: ' .
-                                ($userDetail->allowed_radius_m ?? 100) . ' meter'
-                ], 400);
-            }
-        }
-
-        // Cek jadwal kerja hari ini
-        $today = Carbon::today();
-        $dayName = $today->format('l'); // Nama hari (Monday, Tuesday, etc)
-
-        $schedule = WorkSchedule::where('user_id', $userId)
-            ->where('day_of_week', $dayName)
-            ->first();
-
-        if (!$schedule || !$schedule->is_working_day) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Anda tidak memiliki jadwal kerja hari ini'
-            ], 400);
-        }
-
-        // Cek keberadaan attendance hari ini
-        $attendance = Attendance::where('user_id', $userId)
-            ->whereDate('attendance_date', $today)
-            ->first();
-
-        $isLate = false;
-        $lateMinutes = 0;
-
-        if ($request->type === 'check_in') {
-            // Logic Check-In
-            if ($attendance && $attendance->check_in) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Anda sudah check-in hari ini pada ' .
-                                Carbon::parse($attendance->check_in)->format('H:i')
-                ], 400);
-            }
-
-            $checkInTime = Carbon::now();
-
-            // Parse waktu jadwal dengan benar
-            $scheduleTime = Carbon::parse($schedule->start_time);
-            $scheduledTime = Carbon::create(
-                $today->year,
-                $today->month,
-                $today->day,
-                $scheduleTime->hour,
-                $scheduleTime->minute,
-                0
-            );
-
-            if ($checkInTime->gt($scheduledTime)) {
-                $isLate = true;
-                $lateMinutes = $checkInTime->diffInMinutes($scheduledTime);
-            }
-
-            if ($attendance) {
-                $attendance->check_in = $checkInTime;
-                $attendance->status = 'hadir';
-                $attendance->is_late = $isLate;
-                $attendance->late_minutes = $lateMinutes;
-                $attendance->location = "Face Recognition | Lat:{$request->latitude}, Lon:{$request->longitude}";
-                $attendance->save();
-            } else {
-                $attendance = Attendance::create([
-                    'user_id' => $userId,
-                    'attendance_date' => $today,
-                    'check_in' => $checkInTime,
-                    'status' => 'hadir',
-                    'is_late' => $isLate,
-                    'late_minutes' => $lateMinutes,
-                    'location' => "Face Recognition | Lat:{$request->latitude}, Lon:{$request->longitude}",
-                    'created_by' => $userId,
-                ]);
-            }
-
-            // Buat violation jika terlambat > 30 menit
-            if ($lateMinutes > 30) {
-                Violation::create([
-                    'user_id' => $userId,
-                    'violation_date' => $today,
-                    'type' => 'telat',
-                    'description' => "Terlambat $lateMinutes menit (Absensi Wajah)",
-                    'penalty_percentage' => 5,
-                    'status' => 'pending',
-                    'created_by' => $userId,
-                ]);
-            }
-
-            $message = $isLate
-                ? "Check-in berhasil! Anda terlambat $lateMinutes menit"
-                : 'Check-in berhasil! Selamat bekerja';
-
-        } else {
-            // Logic Check-Out
-            if (!$attendance || !$attendance->check_in) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Anda harus check-in terlebih dahulu sebelum check-out'
-                ], 400);
-            }
-
-            if ($attendance->check_out) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Anda sudah check-out hari ini pada ' .
-                                Carbon::parse($attendance->check_out)->format('H:i')
-                ], 400);
-            }
-
-            $attendance->check_out = Carbon::now();
-            $attendance->save();
-
-            $message = 'Check-out berhasil! Terima kasih atas kerja keras Anda hari ini';
-        }
-
-        \Log::info('Face attendance successful', [
-            'user_id' => $userId,
-            'type' => $request->type,
-            'is_late' => $isLate,
-            'late_minutes' => $lateMinutes,
-            'similarity' => $similarity
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => $message,
-            'data' => [
-                'is_late' => $isLate,
-                'late_minutes' => $lateMinutes,
-                'similarity' => round($similarity * 100, 2) . '%',
-                'check_in' => $attendance->check_in ? Carbon::parse($attendance->check_in)->format('H:i') : null,
-                'check_out' => $attendance->check_out ? Carbon::parse($attendance->check_out)->format('H:i') : null,
-                'attendance_date' => $attendance->attendance_date,
-            ]
-        ]);
-
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        \Log::error('Validation error in face attendance', [
-            'errors' => $e->errors()
-        ]);
-        return response()->json([
-            'success' => false,
-            'message' => 'Data tidak valid',
-            'errors' => $e->errors()
-        ], 422);
-    } catch (\Exception $e) {
-        \Log::error('Error in face attendance: ' . $e->getMessage(), [
-            'trace' => $e->getTraceAsString()
-        ]);
-        return response()->json([
-            'success' => false,
-            'message' => 'Terjadi kesalahan saat memproses absensi: ' . $e->getMessage()
-        ], 500);
     }
-}
-
 /**
  * Hapus data wajah user
  */
@@ -745,34 +695,41 @@ public function deleteFaceData($user_id)
     }
 }
 
-/**
- * Helper: Hitung Cosine Similarity antara dua embedding
- */
-private function calculateCosineSimilarity($embedding1, $embedding2)
-{
-    if (count($embedding1) !== count($embedding2)) {
-        throw new \Exception('Dimensi embedding tidak cocok. Expected: ' . count($embedding1) . ', Got: ' . count($embedding2));
+    /**
+     * Helper: Hitung Cosine Similarity antara dua embedding
+     */
+    private function calculateCosineSimilarity($embedding1, $embedding2)
+    {
+        if (count($embedding1) !== count($embedding2)) {
+            throw new \Exception('Dimensi embedding tidak cocok. Expected: ' . count($embedding1) . ', Got: ' . count($embedding2));
+        }
+
+        $dotProduct = 0;
+        $magnitude1 = 0;
+        $magnitude2 = 0;
+
+        for ($i = 0; $i < count($embedding1); $i++) {
+            $val1 = floatval($embedding1[$i]);
+            $val2 = floatval($embedding2[$i]);
+
+            $dotProduct += $val1 * $val2;
+            $magnitude1 += $val1 * $val1;
+            $magnitude2 += $val2 * $val2;
+        }
+
+        $magnitude1 = sqrt($magnitude1);
+        $magnitude2 = sqrt($magnitude2);
+
+        if ($magnitude1 == 0 || $magnitude2 == 0) {
+            \Log::warning('Zero magnitude detected in similarity calculation');
+            return 0;
+        }
+
+        $similarity = $dotProduct / ($magnitude1 * $magnitude2);
+
+        // Clamp nilai antara 0 dan 1
+        return max(0, min(1, $similarity));
     }
-
-    $dotProduct = 0;
-    $magnitude1 = 0;
-    $magnitude2 = 0;
-
-    for ($i = 0; $i < count($embedding1); $i++) {
-        $dotProduct += $embedding1[$i] * $embedding2[$i];
-        $magnitude1 += $embedding1[$i] * $embedding1[$i];
-        $magnitude2 += $embedding2[$i] * $embedding2[$i];
-    }
-
-    $magnitude1 = sqrt($magnitude1);
-    $magnitude2 = sqrt($magnitude2);
-
-    if ($magnitude1 == 0 || $magnitude2 == 0) {
-        return 0;
-    }
-
-    return $dotProduct / ($magnitude1 * $magnitude2);
-}
 
 /**
  * Helper: Cek lokasi menggunakan koordinat dari user_details
