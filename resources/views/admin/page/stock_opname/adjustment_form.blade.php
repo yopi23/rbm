@@ -1,5 +1,3 @@
-<!-- resources/views/admin/page/stock_opname/adjustment_form.blade.php -->
-
 <div class="row">
     <div class="col-md-12">
         <div class="card card-warning card-outline">
@@ -17,7 +15,6 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-6">
-                        <!-- Informasi Item -->
                         <div class="card">
                             <div class="card-header bg-info">
                                 <h3 class="card-title">Informasi Item</h3>
@@ -48,7 +45,6 @@
                             </div>
                         </div>
 
-                        <!-- Informasi Stock Opname -->
                         <div class="card mt-3">
                             <div class="card-header bg-warning">
                                 <h3 class="card-title">Hasil Pemeriksaan</h3>
@@ -60,11 +56,11 @@
                                         <h3>{{ $detail->stock_tercatat }}</h3>
                                     </div>
                                     <div class="col-md-4 text-center">
-                                        <h6>Stok Aktual</h6>
+                                        <h6>Stok Aktual Fisik</h6>
                                         <h3>{{ $detail->stock_aktual }}</h3>
                                     </div>
                                     <div class="col-md-4 text-center">
-                                        <h6>Selisih</h6>
+                                        <h6>Selisih Opname</h6>
                                         <h3
                                             class="{{ $detail->selisih > 0 ? 'text-success' : ($detail->selisih < 0 ? 'text-danger' : '') }}">
                                             @if ($detail->selisih > 0)
@@ -86,8 +82,8 @@
                     </div>
 
                     <div class="col-md-6">
-                        <!-- Form Penyesuaian -->
-                        @if ($detail->selisih != 0 && $detail->status != 'adjusted')
+                        @if ($detail->selisih != 0 || $detail->status == 'adjusted')
+                            {{-- Tampilkan form jika ada selisih ATAU jika status sudah adjusted (untuk riwayat) --}}
                             <div class="card">
                                 <div class="card-header bg-primary">
                                     <h3 class="card-title">Form Penyesuaian Stok</h3>
@@ -98,23 +94,40 @@
                                         method="POST">
                                         @csrf
 
-                                        <div
-                                            class="alert {{ $detail->selisih > 0 ? 'alert-success' : 'alert-danger' }}">
-                                            <h5>Konfirmasi Penyesuaian</h5>
-                                            <p>
-                                                Anda akan melakukan penyesuaian stok sebanyak
-                                                <strong>{{ $detail->selisih > 0 ? '+' : '' }}{{ $detail->selisih }}</strong>
-                                                untuk item <strong>{{ $detail->sparepart->nama_sparepart }}</strong>.
-                                            </p>
-                                            <p>
-                                                Stok akan berubah dari
-                                                <strong>{{ $detail->sparepart->stok_sparepart }}</strong>
-                                                menjadi
-                                                <strong>{{ $detail->sparepart->stok_sparepart + $detail->selisih }}</strong>.
-                                            </p>
+                                        {{-- INFORMASI STOK SAAT INI DARI TABEL SPAREPART --}}
+                                        <div class="form-group">
+                                            <label for="current_stock">Stok Gudang Saat Ini (di DB)</label>
+                                            <input type="text" id="current_stock" class="form-control"
+                                                value="{{ $detail->sparepart->stok_sparepart }}" readonly>
+                                            <small class="form-text text-muted">Stok saat ini di inventaris utama
+                                                sebelum penyesuaian.</small>
                                         </div>
 
+                                        {{-- INPUT WAJIB BARU: adjustment_qty --}}
                                         <div class="form-group">
+                                            <label for="adjustment_qty">Kuantitas Penyesuaian (Delta) <span
+                                                    class="text-danger">*</span></label>
+                                            <input type="number" id="adjustment_qty" name="adjustment_qty"
+                                                class="form-control @error('adjustment_qty') is-invalid @enderror"
+                                                value="{{ old('adjustment_qty', $detail->selisih) }}" required>
+                                            <small class="form-text text-muted">
+                                                Masukkan nilai **positif** untuk menambah stok, atau nilai **negatif**
+                                                untuk mengurangi stok. Nilai awal adalah selisih hasil opname, tapi bisa
+                                                diubah.
+                                            </small>
+                                            @error('adjustment_qty')
+                                                <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
+                                        {{-- PREVIEW STOK BARU --}}
+                                        <div class="mt-2 p-2 border rounded">
+                                            Stok Baru (Prediksi): <strong id="new_stock_preview"
+                                                class="text-primary">{{ $detail->sparepart->stok_sparepart + $detail->selisih }}</strong>
+                                        </div>
+
+                                        {{-- ALASAN PENYESUAIAN --}}
+                                        <div class="form-group mt-3">
                                             <label for="alasan_adjustment">Alasan Penyesuaian <span
                                                     class="text-danger">*</span></label>
                                             <textarea class="form-control @error('alasan_adjustment') is-invalid @enderror" id="alasan_adjustment"
@@ -127,23 +140,21 @@
                                             @enderror
                                         </div>
 
-                                        <button type="submit" class="btn btn-primary btn-block">
-                                            <i class="fas fa-save mr-1"></i> Simpan Penyesuaian
-                                        </button>
+                                        @if ($detail->status != 'adjusted')
+                                            <button type="submit" class="btn btn-primary btn-block">
+                                                <i class="fas fa-save mr-1"></i> Simpan Penyesuaian
+                                            </button>
+                                        @else
+                                            <button type="button" class="btn btn-success btn-block" disabled>
+                                                <i class="fas fa-check-circle mr-1"></i> Item Sudah Disesuaikan
+                                            </button>
+                                        @endif
                                     </form>
                                 </div>
                             </div>
-                        @elseif($detail->status == 'adjusted')
-                            <div class="alert alert-success">
-                                <h5><i class="icon fas fa-check"></i> Stok Sudah Disesuaikan</h5>
-                                <p>
-                                    Stok untuk item ini sudah disesuaikan. Lihat riwayat penyesuaian di bawah.
-                                </p>
-                            </div>
                         @endif
 
-                        <!-- Riwayat Penyesuaian -->
-                        <div class="card {{ $detail->status == 'adjusted' ? '' : 'mt-3' }}">
+                        <div class="card {{ $detail->selisih == 0 && $detail->status == 'checked' ? 'mt-3' : '' }}">
                             <div class="card-header bg-secondary">
                                 <h3 class="card-title">Riwayat Penyesuaian</h3>
                             </div>
@@ -194,3 +205,29 @@
         </div>
     </div>
 </div>
+
+<script>
+    $(document).ready(function() {
+        const currentStock = parseInt($('#current_stock').val());
+        const adjustmentQtyInput = $('#adjustment_qty');
+        const newStockPreview = $('#new_stock_preview');
+
+        function updateNewStockPreview() {
+            let adjustmentQty = parseInt(adjustmentQtyInput.val());
+
+            // Handle NaN or empty input by treating it as 0
+            if (isNaN(adjustmentQty) || adjustmentQtyInput.val() === '') {
+                adjustmentQty = 0;
+            }
+
+            const newStock = currentStock + adjustmentQty;
+            newStockPreview.text(newStock);
+        }
+
+        // Run on load
+        updateNewStockPreview();
+
+        // Run on input change
+        adjustmentQtyInput.on('input', updateNewStockPreview);
+    });
+</script>

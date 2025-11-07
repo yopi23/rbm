@@ -1,5 +1,3 @@
-<!-- resources/views/admin/page/stock_opname/show.blade.php -->
-
 <div class="row">
     <div class="col-md-12">
         <div class="card card-primary card-outline">
@@ -10,10 +8,13 @@
                 </h3>
                 <div class="card-tools">
                     @if (in_array($period->status, ['draft', 'in_progress']))
-                        <a href="{{ route('stock-opname.start-process', $period->id) }}"
-                            class="btn btn-primary btn-sm mr-1">
-                            <i class="fas fa-play mr-1"></i> Mulai Proses
-                        </a>
+                        {{-- Hapus tombol Mulai Proses jika sudah 'in_progress' --}}
+                        @if ($period->status == 'draft')
+                            <a href="{{ route('stock-opname.start-process', $period->id) }}"
+                                class="btn btn-primary btn-sm mr-1">
+                                <i class="fas fa-play mr-1"></i> Mulai Proses
+                            </a>
+                        @endif
                     @endif
 
                     @if ($period->status == 'in_progress' && $pendingCount == 0)
@@ -93,7 +94,11 @@
                                 </div>
                                 <div class="mt-2">
                                     <span class="badge badge-info">{{ $pendingCount }} item belum diperiksa</span>
-                                    <span class="badge badge-primary">{{ $checkedCount }} item sudah diperiksa</span>
+                                    <span
+                                        class="badge badge-primary">{{ $checkedCount - ($itemsWithSelisih - $adjustedCount) }}
+                                        item sudah diperiksa (nol selisih)</span>
+                                    <span class="badge badge-danger">{{ $itemsWithSelisih - $adjustedCount }} item
+                                        perlu disesuaikan</span>
                                     <span class="badge badge-success">{{ $adjustedCount }} item sudah
                                         disesuaikan</span>
                                 </div>
@@ -147,6 +152,7 @@
                     </div>
                 </div>
 
+                {{-- TAB FILTER BARU --}}
                 <ul class="nav nav-tabs mt-3" id="stockOpnameTabs" role="tablist">
                     <li class="nav-item">
                         <a class="nav-link active" id="pending-tab" data-toggle="tab" href="#pending" role="tab"
@@ -156,16 +162,29 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" id="checked-tab" data-toggle="tab" href="#checked" role="tab"
-                            aria-controls="checked" aria-selected="false">
-                            <i class="fas fa-check mr-1"></i> Sudah Diperiksa <span
-                                class="badge badge-primary">{{ $checkedCount + $adjustedCount }}</span>
+                        <a class="nav-link" id="zero-selisih-tab" data-toggle="tab" href="#zero-selisih" role="tab"
+                            aria-controls="zero-selisih" aria-selected="false">
+                            <i class="fas fa-thumbs-up mr-1"></i> Sesuai (Selisih 0) <span
+                                class="badge badge-primary">{{ $checkedCount - ($itemsWithSelisih - $adjustedCount) }}</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="to-adjust-tab" data-toggle="tab" href="#to-adjust" role="tab"
+                            aria-controls="to-adjust" aria-selected="false">
+                            <i class="fas fa-exclamation-triangle mr-1"></i> Perlu Disesuaikan <span
+                                class="badge badge-danger">{{ $itemsWithSelisih - $adjustedCount }}</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="adjusted-tab" data-toggle="tab" href="#adjusted" role="tab"
+                            aria-controls="adjusted" aria-selected="false">
+                            <i class="fas fa-exchange-alt mr-1"></i> Sudah Disesuaikan <span
+                                class="badge badge-success">{{ $adjustedCount }}</span>
                         </a>
                     </li>
                 </ul>
 
                 <div class="tab-content" id="stockOpnameTabsContent">
-                    <!-- Tab Belum Diperiksa -->
                     <div class="tab-pane fade show active" id="pending" role="tabpanel"
                         aria-labelledby="pending-tab">
                         <div class="table-responsive mt-3">
@@ -204,10 +223,55 @@
                         </div>
                     </div>
 
-                    <!-- Tab Sudah Diperiksa -->
-                    <div class="tab-pane fade" id="checked" role="tabpanel" aria-labelledby="checked-tab">
+                    {{-- Tab 2: Sesuai (Selisih 0) --}}
+                    <div class="tab-pane fade" id="zero-selisih" role="tabpanel" aria-labelledby="zero-selisih-tab">
                         <div class="table-responsive mt-3">
-                            <table class="table table-striped table-bordered" id="checkedItemsTable">
+                            <table class="table table-striped table-bordered" id="zeroSelisihItemsTable">
+                                <thead>
+                                    <tr>
+                                        <th width="5%">No</th>
+                                        <th width="15%">Kode</th>
+                                        <th>Nama Sparepart</th>
+                                        <th width="10%" class="text-center">Stok Tercatat</th>
+                                        <th width="10%" class="text-center">Stok Aktual</th>
+                                        <th width="10%" class="text-center">Selisih</th>
+                                        <th width="10%" class="text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{-- Filter: status == 'checked' dan selisih == 0 --}}
+                                    @php
+                                        $zeroSelisihItems = $checkedItems->filter(function ($item) {
+                                            return $item->status == 'checked' && $item->selisih == 0;
+                                        });
+                                    @endphp
+                                    @forelse($zeroSelisihItems as $index => $item)
+                                        <tr>
+                                            <td>{{ $index + 1 }}</td>
+                                            <td>{{ $item->sparepart->kode_sparepart }}</td>
+                                            <td>{{ $item->sparepart->nama_sparepart }}</td>
+                                            <td class="text-center">{{ $item->stock_tercatat }}</td>
+                                            <td class="text-center">{{ $item->stock_aktual }}</td>
+                                            <td class="text-center"><span>0</span></td>
+                                            <td class="text-center">
+                                                <span class="badge badge-primary">Sesuai</span>
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="7" class="text-center">Tidak ada item yang sesuai (selisih
+                                                nol).</td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {{-- Tab 3: Perlu Disesuaikan (Selisih != 0) --}}
+                    <div class="tab-pane fade" id="to-adjust" role="tabpanel" aria-labelledby="to-adjust-tab">
+                        <div class="table-responsive mt-3">
+                            <table class="table table-striped table-bordered" id="toAdjustItemsTable">
                                 <thead>
                                     <tr>
                                         <th width="5%">No</th>
@@ -221,9 +285,74 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @forelse($checkedItems as $index => $item)
-                                        <tr
-                                            class="{{ $item->selisih > 0 ? 'table-success' : ($item->selisih < 0 ? 'table-danger' : '') }}">
+                                    {{-- Filter: status == 'checked' dan selisih != 0 --}}
+                                    @php
+                                        $toAdjustItems = $checkedItems->filter(function ($item) {
+                                            return $item->status == 'checked' && $item->selisih != 0;
+                                        });
+                                    @endphp
+                                    @forelse($toAdjustItems as $index => $item)
+                                        <tr class="{{ $item->selisih > 0 ? 'table-success' : 'table-danger' }}">
+                                            <td>{{ $index + 1 }}</td>
+                                            <td>{{ $item->sparepart->kode_sparepart }}</td>
+                                            <td>{{ $item->sparepart->nama_sparepart }}</td>
+                                            <td class="text-center">{{ $item->stock_tercatat }}</td>
+                                            <td class="text-center">{{ $item->stock_aktual }}</td>
+                                            <td class="text-center">
+                                                @if ($item->selisih > 0)
+                                                    <span class="text-success">+{{ $item->selisih }}</span>
+                                                @else
+                                                    <span class="text-danger">{{ $item->selisih }}</span>
+                                                @endif
+                                            </td>
+                                            <td class="text-center">
+                                                <span class="badge badge-primary">Perlu Disesuaikan</span>
+                                            </td>
+                                            <td class="text-center">
+                                                @if (in_array($period->status, ['in_progress', 'completed']))
+                                                    <a href="{{ route('stock-opname.adjustment-form', [$period->id, $item->id]) }}"
+                                                        class="btn btn-warning btn-sm">
+                                                        <i class="fas fa-exchange-alt mr-1"></i> Sesuaikan
+                                                    </a>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="9" class="text-center">Tidak ada item yang perlu
+                                                disesuaikan.</td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {{-- Tab 4: Sudah Disesuaikan (Status 'adjusted') --}}
+                    <div class="tab-pane fade" id="adjusted" role="tabpanel" aria-labelledby="adjusted-tab">
+                        <div class="table-responsive mt-3">
+                            <table class="table table-striped table-bordered" id="adjustedItemsTable">
+                                <thead>
+                                    <tr>
+                                        <th width="5%">No</th>
+                                        <th width="15%">Kode</th>
+                                        <th>Nama Sparepart</th>
+                                        <th width="10%" class="text-center">Stok Tercatat</th>
+                                        <th width="10%" class="text-center">Stok Aktual (Akhir)</th>
+                                        <th width="10%" class="text-center">Selisih Akhir</th>
+                                        <th width="10%" class="text-center">Status</th>
+                                        <th width="15%" class="text-center">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{-- Filter: status == 'adjusted' --}}
+                                    @php
+                                        $adjustedItemsList = $checkedItems->filter(function ($item) {
+                                            return $item->status == 'adjusted';
+                                        });
+                                    @endphp
+                                    @forelse($adjustedItemsList as $index => $item)
+                                        <tr class="table-success">
                                             <td>{{ $index + 1 }}</td>
                                             <td>{{ $item->sparepart->kode_sparepart }}</td>
                                             <td>{{ $item->sparepart->nama_sparepart }}</td>
@@ -239,38 +368,26 @@
                                                 @endif
                                             </td>
                                             <td class="text-center">
-                                                @if ($item->status == 'checked')
-                                                    <span class="badge badge-primary">Sudah Diperiksa</span>
-                                                @elseif($item->status == 'adjusted')
-                                                    <span class="badge badge-success">Sudah Disesuaikan</span>
-                                                @endif
+                                                <span class="badge badge-success">Sudah Disesuaikan</span>
                                             </td>
                                             <td class="text-center">
-                                                @if ($item->selisih != 0 && $item->status == 'checked' && in_array($period->status, ['in_progress', 'completed']))
-                                                    <a href="{{ route('stock-opname.adjustment-form', [$period->id, $item->id]) }}"
-                                                        class="btn btn-warning btn-sm">
-                                                        <i class="fas fa-exchange-alt mr-1"></i> Sesuaikan
-                                                    </a>
-                                                @endif
-
-                                                @if ($item->status == 'adjusted')
-                                                    <a href="{{ route('stock-opname.adjustment-form', [$period->id, $item->id]) }}"
-                                                        class="btn btn-info btn-sm">
-                                                        <i class="fas fa-history mr-1"></i> Riwayat
-                                                    </a>
-                                                @endif
+                                                <a href="{{ route('stock-opname.adjustment-form', [$period->id, $item->id]) }}"
+                                                    class="btn btn-info btn-sm">
+                                                    <i class="fas fa-history mr-1"></i> Riwayat
+                                                </a>
                                             </td>
                                         </tr>
                                     @empty
                                         <tr>
                                             <td colspan="8" class="text-center">Tidak ada item yang sudah
-                                                diperiksa.</td>
+                                                disesuaikan.</td>
                                         </tr>
                                     @endforelse
                                 </tbody>
                             </table>
                         </div>
                     </div>
+
                 </div>
             </div>
             <div class="card-footer">
@@ -282,7 +399,6 @@
     </div>
 </div>
 
-<!-- Modal Edit Catatan -->
 <div class="modal fade" id="editNotesModal" tabindex="-1" aria-labelledby="editNotesModalLabel"
     aria-hidden="true">
     <div class="modal-dialog">
@@ -313,7 +429,8 @@
 
 <script>
     $(function() {
-        $('#pendingItemsTable, #checkedItemsTable').DataTable({
+        // Menginisialisasi semua DataTable yang baru
+        $('#pendingItemsTable, #zeroSelisihItemsTable, #toAdjustItemsTable, #adjustedItemsTable').DataTable({
             "paging": true,
             "lengthChange": true,
             "searching": true,
@@ -336,6 +453,23 @@
                     "previous": "<<"
                 }
             }
+        });
+
+        // Mempertahankan tab aktif setelah refresh/post jika ada parameter 'tab'
+        let url = location.href.replace(/\/$/, "");
+        if (location.hash) {
+            const hash = url.split("#");
+            $('#stockOpnameTabs a[href="#' + hash[1] + '"]').tab("show");
+            url = location.href.replace(/\/#.*$/, "");
+        }
+
+        $('a[data-toggle="tab"]').on("click", function() {
+            let newUrl;
+            const hash = $(this).attr("href");
+            newUrl = url.split("#")[0] + hash;
+
+            // Mengganti URL tanpa me-reload halaman
+            history.replaceState(null, null, newUrl);
         });
     });
 </script>
