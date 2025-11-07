@@ -357,31 +357,15 @@ class StockOpnameController extends Controller
             'adjustment_qty' => 'required|integer',
         ]);
 
-        // Tambahkan Log untuk mencatat input yang diterima
-        \Log::info('Attempting Stock Adjustment', [
-            'period_id' => $periodId,
-            'detail_id' => $detailId,
-            'input' => $validated,
-            'user_id' => $this->getThisUser()->id ?? 'N/A'
-        ]);
-
         try {
             DB::beginTransaction();
 
             $period = StockOpnamePeriod::findOrFail($periodId);
             $detail = StockOpnameDetail::with('sparepart.variants')->findOrFail($detailId);
 
-            // Log detail sebelum proses
-            \Log::info('Stock Opname Detail found', [
-                'detail_id' => $detail->id,
-                'status' => $detail->status,
-                'stock_tercatat' => $detail->stock_tercatat,
-                'current_stock_sparepart' => $detail->sparepart->stok_sparepart
-            ]);
 
             // Verifikasi status
             if (!in_array($detail->status, ['checked', 'adjusted'])) {
-                \Log::warning('Adjustment failed: Invalid status', ['detail_id' => $detail->id, 'status' => $detail->status]);
                 return back()->withErrors(['error' => 'Item ini belum diperiksa atau tidak dapat disesuaikan.']);
             }
 
@@ -393,13 +377,6 @@ class StockOpnameController extends Controller
             $adjustmentQty = $validated['adjustment_qty'];
             $newStock = $currentStock + $adjustmentQty;
 
-            // Log perhitungan stok
-            \Log::info('Stock Calculation', [
-                'sparepart_id' => $sparepart->id,
-                'current_stock' => $currentStock,
-                'adjustment_qty' => $adjustmentQty,
-                'new_stock' => $newStock
-            ]);
 
             // 2. Simpan riwayat penyesuaian
             StockOpnameAdjustment::create([
@@ -411,19 +388,16 @@ class StockOpnameController extends Controller
                 'user_input' => $this->getThisUser()->id,
                 'kode_owner' => $this->getThisUser()->id_upline,
             ]);
-            \Log::info('StockOpnameAdjustment created successfully', ['detail_id' => $detail->id]);
 
             // 3. Update stok sparepart
             $sparepart->stok_sparepart = $newStock;
             $sparepart->save();
-            \Log::info('Sparepart stock updated', ['sparepart_id' => $sparepart->id, 'new_stock' => $newStock]);
 
             // 4. Update stok Product Variant
             $variant = $sparepart->variants->first();
             if ($variant) {
                 $variant->stock = $newStock;
                 $variant->save();
-                \Log::info('Product Variant stock updated', ['variant_id' => $variant->id ?? 'N/A', 'new_stock' => $newStock]);
             } else {
                 \Log::warning('No Product Variant found for sparepart', ['sparepart_id' => $sparepart->id]);
             }
@@ -435,7 +409,6 @@ class StockOpnameController extends Controller
             $detail->selisih = $newDetailSelisih;
             $detail->status = 'adjusted';
             $detail->save();
-            \Log::info('StockOpnameDetail updated successfully', ['detail_id' => $detail->id, 'new_selisih' => $newDetailSelisih]);
 
             // 6. Catat di stock history
             $this->logStockChange(
@@ -448,26 +421,14 @@ class StockOpnameController extends Controller
                 $currentStock,
                 $newStock
             );
-            \Log::info('Stock History logged successfully', ['sparepart_id' => $sparepart->id]);
 
             DB::commit();
-            \Log::info('Stock Adjustment completed and committed successfully', ['period_id' => $periodId, 'detail_id' => $detailId]);
 
 
             return redirect()->route('stock-opname.show', $periodId)
                 ->with('success', 'Penyesuaian stok berhasil disimpan.');
         } catch (\Exception $e) {
             DB::rollBack();
-
-            // LOG KRITIS: Catat semua detail error di sini
-            \Log::error('Stock Adjustment Failed (CRITICAL ERROR)', [
-                'period_id' => $periodId,
-                'detail_id' => $detailId,
-                'error_message' => $e->getMessage(),
-                'error_file' => $e->getFile(),
-                'error_line' => $e->getLine(),
-                'trace' => $e->getTraceAsString(), // Opsional, bisa sangat panjang
-            ]);
 
             return back()->withErrors(['error' => 'Terjadi kesalahan: ' . $e->getMessage()]);
         }
