@@ -874,7 +874,8 @@ class StockOpnameController extends Controller
             $period = StockOpnamePeriod::where('kode_owner', $kode_owner)
                 ->findOrFail($periodId);
 
-            $detail = StockOpnameDetail::where('period_id', $periodId)
+            $detail = StockOpnameDetail::with('sparepart.variants')
+                ->where('period_id', $periodId)
                 ->where('id', $detailId)
                 ->first();
 
@@ -901,17 +902,61 @@ class StockOpnameController extends Controller
                 ], 400);
             }
 
-            // Hitung selisih
-            $selisih = $request->stock_aktual - $detail->stock_tercatat;
+            $sparepart = $detail->sparepart;
+            $stockTercatat = $detail->stock_tercatat;
+            $stockAktual = $request->stock_aktual;
+            $selisih = $stockAktual - $stockTercatat;
 
-            // Update detail
-            $detail->stock_aktual = $request->stock_aktual;
+            // Update detail stock opname
+            $detail->stock_aktual = $stockAktual;
             $detail->selisih = $selisih;
-            $detail->status = 'checked';
+            $detail->status = 'adjusted'; // Langsung adjusted
             $detail->catatan = $request->catatan;
             $detail->user_check = $user->id;
             $detail->checked_at = now();
             $detail->save();
+
+            // LANGSUNG UPDATE STOK SPAREPART & VARIANT
+            if ($selisih != 0) {
+                $currentStock = $sparepart->stok_sparepart;
+                $newStock = $stockAktual; // Stok baru = stok aktual hasil pemeriksaan
+
+                // Update Sparepart
+                $sparepart->stok_sparepart = $newStock;
+                $sparepart->save();
+
+                // Update Variant
+                $variant = $sparepart->variants->first();
+                if ($variant) {
+                    $variant->stock = $newStock;
+                    $variant->save();
+                }
+
+                // Catat ke adjustment history untuk riwayat
+                StockOpnameAdjustment::create([
+                    'detail_id' => $detail->id,
+                    'stock_before' => $currentStock,
+                    'stock_after' => $newStock,
+                    'adjustment_qty' => $selisih,
+                    'alasan_adjustment' => $request->catatan ?? 'Penyesuaian otomatis dari pemeriksaan stock opname',
+                    'user_input' => $user->id,
+                    'kode_owner' => $kode_owner,
+                ]);
+
+                // Catat di stock history
+                if (class_exists('App\Models\StockHistory')) {
+                    StockHistory::create([
+                        'sparepart_id' => $sparepart->id,
+                        'quantity_change' => $selisih,
+                        'reference_type' => 'stock_opname',
+                        'reference_id' => $period->kode_periode,
+                        'stock_before' => $currentStock,
+                        'stock_after' => $newStock,
+                        'notes' => 'Penyesuaian dari stock opname: ' . ($request->catatan ?? 'Tidak ada catatan'),
+                        'user_input' => $user->id,
+                    ]);
+                }
+            }
 
             // Update status periode jika semua item sudah diperiksa
             $pendingCount = $period->details()->where('status', 'pending')->count();
@@ -924,7 +969,7 @@ class StockOpnameController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Item berhasil diperiksa',
+                'message' => 'Item berhasil diperiksa dan stok telah diperbarui',
                 'data' => [
                     'id' => $detail->id,
                     'sparepart_id' => $detail->sparepart_id,
@@ -936,11 +981,16 @@ class StockOpnameController extends Controller
                     'catatan' => $detail->catatan,
                     'checked_at' => $detail->checked_at->format('Y-m-d H:i:s'),
                     'period_status' => $period->status,
-                    'period_status_text' => $period->status_text
+                    'period_status_text' => $period->status_text,
+                    'new_stock' => $sparepart->stok_sparepart
                 ]
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('Error in saveItemCheck', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
 
             return response()->json([
                 'success' => false,
@@ -1023,12 +1073,12 @@ class StockOpnameController extends Controller
 
     /**
      * Menyimpan penyesuaian stok
-     */
+    */
     public function saveAdjustment(Request $request, $periodId, $detailId)
     {
         $validator = Validator::make($request->all(), [
             'alasan_adjustment' => 'required|string',
-            'adjustment_qty' => 'required|integer', // Memastikan adjustment_qty diterima
+            'adjustment_qty' => 'required|integer',
         ]);
 
         if ($validator->fails()) {
@@ -1045,10 +1095,18 @@ class StockOpnameController extends Controller
             $user = $this->getThisUser();
             $kode_owner = $user->id_upline;
 
+            // VALIDASI: Hanya admin yang bisa koreksi
+            if ($user->jabatan != '1') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hanya admin yang dapat melakukan koreksi stok'
+                ], 403);
+            }
+
             $period = StockOpnamePeriod::where('kode_owner', $kode_owner)
                 ->findOrFail($periodId);
 
-            $detail = StockOpnameDetail::with('sparepart.variants') // Eager load sparepart dan variannya
+            $detail = StockOpnameDetail::with('sparepart.variants')
                 ->where('period_id', $periodId)
                 ->where('id', $detailId)
                 ->first();
@@ -1060,8 +1118,8 @@ class StockOpnameController extends Controller
                 ], 404);
             }
 
-            // Verifikasi status
-            if (!in_array($detail->status, ['checked', 'adjusted'])) {
+            // Verifikasi status - harus sudah adjusted
+            if ($detail->status !== 'adjusted') {
                 return response()->json([
                     'success' => false,
                     'message' => 'Item ini belum diperiksa atau tidak dapat disesuaikan'
@@ -1070,12 +1128,16 @@ class StockOpnameController extends Controller
 
             $sparepart = $detail->sparepart;
             $currentStock = $sparepart->stok_sparepart;
-
-            // Ambil adjustmentQty dari Request (Ini adalah DELTA yang diinput Admin)
             $adjustmentQty = $request->adjustment_qty;
-
-            // Hitung stok baru (Ini adalah stok baru di INVENTARIS UTAMA/GUDANG)
             $newStock = $currentStock + $adjustmentQty;
+
+            // Validasi stok tidak boleh negatif
+            if ($newStock < 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Stok tidak boleh menjadi negatif'
+                ], 400);
+            }
 
             // 1. Simpan riwayat penyesuaian
             $adjustment = StockOpnameAdjustment::create([
@@ -1088,7 +1150,7 @@ class StockOpnameController extends Controller
                 'kode_owner' => $kode_owner,
             ]);
 
-            // 2. Update stok Sparepart (tabel utama)
+            // 2. Update stok Sparepart
             $sparepart->stok_sparepart = $newStock;
             $sparepart->save();
 
@@ -1099,13 +1161,9 @@ class StockOpnameController extends Controller
                 $variant->save();
             }
 
-            // 4. [PERBAIKAN UTAMA] Update StockOpnameDetail
-            // Hitung selisih baru: Selisih antara STOK GUDANG TERBARU dengan STOK TERCATAT awal
-            $newDetailSelisih = $newStock - $detail->stock_tercatat;
-
-            $detail->stock_aktual = $newStock; // Set stok aktual di detail SO menjadi stok gudang terbaru
-            $detail->selisih = $newDetailSelisih; // Set selisih baru
-            $detail->status = 'adjusted'; // Status sudah pasti adjusted
+            // 4. Update StockOpnameDetail
+            $detail->stock_aktual = $newStock;
+            $detail->selisih = $newStock - $detail->stock_tercatat;
             $detail->save();
 
             // 5. Catat di stock history
@@ -1113,11 +1171,11 @@ class StockOpnameController extends Controller
                 StockHistory::create([
                     'sparepart_id' => $sparepart->id,
                     'quantity_change' => $adjustmentQty,
-                    'reference_type' => 'stock_opname',
+                    'reference_type' => 'stock_opname_correction',
                     'reference_id' => $period->kode_periode,
                     'stock_before' => $currentStock,
                     'stock_after' => $newStock,
-                    'notes' => 'Penyesuaian dari stock opname: ' . $request->alasan_adjustment,
+                    'notes' => 'Koreksi stok oleh admin: ' . $request->alasan_adjustment,
                     'user_input' => $user->id,
                 ]);
             }
@@ -1126,7 +1184,7 @@ class StockOpnameController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Penyesuaian stok berhasil disimpan',
+                'message' => 'Koreksi stok berhasil disimpan',
                 'data' => [
                     'id' => $adjustment->id,
                     'detail_id' => $detail->id,
@@ -1145,6 +1203,10 @@ class StockOpnameController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('Error in saveAdjustment', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
 
             return response()->json([
                 'success' => false,
