@@ -575,9 +575,14 @@ class StockOpnameController extends Controller
     {
         try {
             $kode_owner = $this->getThisUser()->id_upline;
-            $kategori = KategoriSparepart::where('kode_owner', $kode_owner)
-                ->orWhereNull('kode_owner')
-                ->findOrFail($categoryId);
+
+            // $kategori = KategoriSparepart::where('kode_owner', $kode_owner)
+            //     ->orWhereNull('kode_owner')
+            //     ->findOrFail($categoryId);
+            $kategori = KategoriSparepart::where(function ($query) use ($kode_owner) {
+                $query->where('kode_owner', $kode_owner)
+                    ->orWhereNull('kode_owner');
+            })->where('id', $categoryId)->firstOrFail();
 
             $attributes = $kategori->attributes()->with('values')->get();
 
@@ -588,7 +593,7 @@ class StockOpnameController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal mengambil atribut kategori: ' . $e->getMessage()
+                'message' => 'Gagal mengambil atribut kategori: ' //. $e->getMessage()
             ], 500);
         }
     }
