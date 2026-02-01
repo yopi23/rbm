@@ -327,23 +327,23 @@ Route::group(['middleware' => ['auth']], function () {
     Route::get('/toko-settings/generate-slug', [TokoSettingController::class, 'generateSlug'])->name('toko-settings.generate-slug');
 
     // Inventory Management Routes
-    Route::get('/inventory/dashboard', [StockManagementController::class, 'dashboard'])->name('admin.inventory.home');
-    Route::get('/inventory/restock-report', [StockManagementController::class, 'restockReport'])->name('admin.inventory.restock-report');
-    Route::get('/inventory/bestsellers', [StockManagementController::class, 'bestSellersReport'])->name('admin.inventory.bestsellers');
+    Route::get('/inventory/dashboard', [StockManagementController::class, 'dashboard'])->name('admin.inventory.home.legacy');
+    Route::get('/inventory/restock-report', [StockManagementController::class, 'restockReport'])->name('admin.inventory.restock-report.legacy');
+    Route::get('/inventory/bestsellers', [StockManagementController::class, 'bestSellersReport'])->name('admin.inventory.bestsellers.legacy');
 
     // Stock Opname Routes
-    Route::get('/stock-opname', [StockOpnameController::class, 'index'])->name('stock-opname.index');
-    Route::get('/stock-opname/create', [StockOpnameController::class, 'create'])->name('stock-opname.create');
-    Route::post('/stock-opname', [StockOpnameController::class, 'store'])->name('stock-opname.store');
-    Route::get('/stock-opname/{id}', [StockOpnameController::class, 'show'])->name('stock-opname.show');
-    Route::post('/stock-opname/{id}/start', [StockOpnameController::class, 'startProcess'])->name('stock-opname.start');
-    Route::get('/stock-opname/{id}/check-items', [StockOpnameController::class, 'checkItems'])->name('stock-opname.check-items');
-    Route::post('/stock-opname/{periodId}/items/{detailId}/check', [StockOpnameController::class, 'saveItemCheck'])->name('stock-opname.save-check');
-    Route::get('/stock-opname/{periodId}/items/{detailId}/adjust', [StockOpnameController::class, 'adjustmentForm'])->name('stock-opname.adjustment-form');
-    Route::post('/stock-opname/{periodId}/items/{detailId}/adjust', [StockOpnameController::class, 'saveAdjustment'])->name('stock-opname.save-adjustment');
-    Route::post('/stock-opname/{id}/complete', [StockOpnameController::class, 'completePeriod'])->name('stock-opname.complete');
-    Route::post('/stock-opname/{id}/cancel', [StockOpnameController::class, 'cancelPeriod'])->name('stock-opname.cancel');
-    Route::get('/stock-opname/{id}/report', [StockOpnameController::class, 'report'])->name('stock-opname.report');
+    Route::get('/stock-opname', [StockOpnameController::class, 'index'])->name('stock-opname.index.legacy');
+    Route::get('/stock-opname/create', [StockOpnameController::class, 'create'])->name('stock-opname.create.legacy');
+    Route::post('/stock-opname', [StockOpnameController::class, 'store'])->name('stock-opname.store.legacy');
+    Route::get('/stock-opname/{id}', [StockOpnameController::class, 'show'])->name('stock-opname.show.legacy');
+    Route::post('/stock-opname/{id}/start', [StockOpnameController::class, 'startProcess'])->name('stock-opname.start.legacy');
+    Route::get('/stock-opname/{id}/check-items', [StockOpnameController::class, 'checkItems'])->name('stock-opname.check-items.legacy');
+    Route::post('/stock-opname/{periodId}/items/{detailId}/check', [StockOpnameController::class, 'saveItemCheck'])->name('stock-opname.save-check.legacy');
+    Route::get('/stock-opname/{periodId}/items/{detailId}/adjust', [StockOpnameController::class, 'adjustmentForm'])->name('stock-opname.adjustment-form.legacy');
+    Route::post('/stock-opname/{periodId}/items/{detailId}/adjust', [StockOpnameController::class, 'saveAdjustment'])->name('stock-opname.save-adjustment.legacy');
+    Route::post('/stock-opname/{id}/complete', [StockOpnameController::class, 'completePeriod'])->name('stock-opname.complete.legacy');
+    Route::post('/stock-opname/{id}/cancel', [StockOpnameController::class, 'cancelPeriod'])->name('stock-opname.cancel.legacy');
+    Route::get('/stock-opname/{id}/report', [StockOpnameController::class, 'report'])->name('stock-opname.report.legacy');
 
     // Review Routes
     Route::get('/review', [ReviewController::class, 'index'])->name('review.index.legacy');

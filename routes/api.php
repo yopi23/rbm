@@ -341,8 +341,8 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     // Get daily report grouped by date
     Route::get('/services/dailyReportGrouped', [ServiceApiController::class, 'getDailyReportGrouped']);
 
-    Route::get('/hutang', [HutangApiController::class, 'index'])->name('hutang.index');
-    Route::post('/hutang/bayar/{id}', [HutangApiController::class, 'bayar'])->name('hutang.bayar');
+    Route::get('/hutang', [HutangApiController::class, 'index'])->name('api.hutang.index');
+    Route::post('/hutang/bayar/{id}', [HutangApiController::class, 'bayar'])->name('api.hutang.bayar');
 
     // Customer Management
     Route::prefix('customer')->group(function () {
