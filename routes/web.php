@@ -351,10 +351,10 @@ Route::group(['middleware' => ['auth']], function () {
     Route::post('/review/{sparepart}/migrate', [ReviewController::class, 'migrateSingle'])->name('review.migrate-single');
     Route::post('/review/migrate-bulk', [ReviewController::class, 'migrateBulk'])->name('review.migrate-bulk');
     Route::post('/review/migrate-bulk-attributes', [ReviewController::class, 'migrateBulkWithAttributes'])->name('review.migrate-bulk-attributes');
-    Route::get('/review/{sparepart}/preview', [ReviewController::class, 'previewMigration'])->name('review.preview');
-    Route::post('/review/migrate-all', [ReviewController::class, 'migrateAll'])->name('review.migrate-all');
-    Route::get('/review/status', [ReviewController::class, 'checkMigrationStatus'])->name('review.status');
-    Route::post('/review/{sparepart}/rollback', [ReviewController::class, 'rollbackMigration'])->name('review.rollback');
+    Route::get('/review/{sparepart}/preview', [ReviewController::class, 'previewMigration'])->name('review.preview.legacy');
+    Route::post('/review/migrate-all', [ReviewController::class, 'migrateAll'])->name('review.migrate-all.legacy');
+    Route::get('/review/status', [ReviewController::class, 'checkMigrationStatus'])->name('review.status.legacy');
+    Route::post('/review/{sparepart}/rollback', [ReviewController::class, 'rollbackMigration'])->name('review.rollback.legacy');
 
 
     //Repair Controller
