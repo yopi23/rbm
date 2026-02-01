@@ -346,7 +346,7 @@ Route::group(['middleware' => ['auth']], function () {
     Route::get('/stock-opname/{id}/report', [StockOpnameController::class, 'report'])->name('stock-opname.report');
 
     // Review Routes
-    Route::get('/review', [ReviewController::class, 'index'])->name('review.index');
+    Route::get('/review', [ReviewController::class, 'index'])->name('review.index.legacy');
     Route::get('/review/{sparepart}/migration-data', [ReviewController::class, 'getMigrationData'])->name('review.migration-data');
     Route::post('/review/{sparepart}/migrate', [ReviewController::class, 'migrateSingle'])->name('review.migrate-single');
     Route::post('/review/migrate-bulk', [ReviewController::class, 'migrateBulk'])->name('review.migrate-bulk');
@@ -459,7 +459,7 @@ Route::group(['middleware' => ['auth']], function () {
         ->name('pembelian.search-spareparts-ajax');
     // Route::get('pembelian/search-variants-ajax', [\App\Http\Controllers\Admin\PembelianController::class, 'searchVariantsAjax'])->name('pembelian.search-variants-ajax');
 
-    Route::get('/admin/review-migrasi', [App\Http\Controllers\Admin\ReviewController::class, 'index'])->name('review.index');
+    Route::get('/admin/review-migrasi', [App\Http\Controllers\Admin\ReviewController::class, 'index'])->name('review.migrasi.index');
     Route::get('/admin/review-migrasi/data/{sparepart}', [App\Http\Controllers\Admin\ReviewController::class, 'getMigrationData'])->name('review.get-data');
     // Route::post('/admin/review-migrasi/{sparepart}', [App\Http\Controllers\Admin\ReviewController::class, 'migrateSingle'])->name('review.migrate');
 
