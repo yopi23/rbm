@@ -530,156 +530,227 @@ class SparepartApiController extends Controller
     //     }
     // }
 
+    // public function updateService(Request $request, $id)
+    // {
+    //     try {
+    //         return \DB::transaction(function () use ($request, $id) {
+    //             $service = ModelServices::findOrFail($id);
+
+    //             // Simpan data lama
+    //             $oldTotalBiaya = $service->total_biaya;
+    //             $oldDp = $service->dp ?? 0;
+    //             $oldLaciId = $service->id_kategorilaci;
+
+    //             $validatedData = $request->validate([
+    //                 'nama_pelanggan' => 'nullable|string|max:255',
+    //                 'type_unit'      => 'nullable|string|max:255',
+    //                 'keterangan'     => 'nullable|string',
+    //                 'no_telp'        => 'nullable|numeric',
+    //                 'total_biaya'    => 'nullable|numeric|min:0',
+    //                 'dp'             => 'nullable|numeric|min:0',
+    //                 'id_kategorilaci'=> [
+    //                     'nullable',
+    //                     'integer',
+    //                     function ($attribute, $value, $fail) use ($request, $oldDp) {
+    //                         $newDp = $request->input('dp', 0);
+
+    //                         // Hanya wajib isi jika DP berubah
+    //                         if ($newDp != $oldDp && $newDp > 0 && is_null($value)) {
+    //                             $fail("Kolom $attribute wajib diisi jika DP berubah.");
+    //                         }
+    //                     }
+    //                 ],
+    //                 'tipe_sandi' => ['nullable', 'string', Rule::in(['pola', 'pin', 'teks'])],
+    //                 'isi_sandi' => ['nullable', 'string', 'required_with:tipe_sandi'],
+    //                 'data_unit' => ['nullable', 'json'],
+    //             ]);
+
+    //             // Ambil data baru dari input
+    //             $newDp = $validatedData['dp'] ?? 0;
+    //             $newLaciId = $validatedData['id_kategorilaci'] ?? null;
+
+    //             // Update service dulu
+    //             $service->update($validatedData);
+
+    //             // Hitung selisih DP
+    //             $dpDifference = $newDp - $oldDp;
+
+    //             // ==== LOGIKA HISTORY LACI ====
+    //             if ($dpDifference !== 0) {
+    //                 if ($dpDifference > 0 && $newLaciId) {
+    //                     // DP bertambah
+    //                     $this->recordLaciHistory(
+    //                         $newLaciId,
+    //                         $dpDifference,
+    //                         null,
+    //                         "Update DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Penambahan)"
+    //                     );
+    //                 } elseif ($dpDifference < 0) {
+    //                     if ($oldLaciId) {
+    //                         // DP berkurang
+    //                         $this->recordLaciHistory(
+    //                             $oldLaciId,
+    //                             null,
+    //                             abs($dpDifference),
+    //                             "Update DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Pengurangan)"
+    //                         );
+    //                     }
+
+    //                     // Kalau pindah laci (baru dan lama beda)
+    //                     if ($newDp > 0 && $newLaciId && $newLaciId != $oldLaciId) {
+    //                         $this->recordLaciHistory(
+    //                             $newLaciId,
+    //                             $newDp,
+    //                             null,
+    //                             "Update DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Pindah Laci)"
+    //                         );
+    //                     }
+    //                 }
+    //             }
+    //             // DP sama tapi pindah laci
+    //             elseif ($oldLaciId != $newLaciId && $newDp > 0) {
+    //                 if ($oldLaciId) {
+    //                     $this->recordLaciHistory(
+    //                         $oldLaciId,
+    //                         null,
+    //                         $newDp,
+    //                         "Transfer DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Keluar)"
+    //                     );
+    //                 }
+    //                 if ($newLaciId) {
+    //                     $this->recordLaciHistory(
+    //                         $newLaciId,
+    //                         $newDp,
+    //                         null,
+    //                         "Transfer DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Masuk)"
+    //                     );
+    //                 }
+    //             }
+
+    //             // ==== Recalculate komisi kalau status sudah selesai/diambil & total biaya berubah ====
+    //             $status = strtolower($service->status_services);
+
+    //             if (in_array($status, ['selesai', 'diambil']) && $service->wasChanged('total_biaya')) {
+    //                 $this->performCommissionRecalculation($id);
+    //             }
+
+    //             return response()->json([
+    //                 'message' => 'Service updated successfully',
+    //                 'service' => $service->fresh(),
+    //             ], 200);
+    //         });
+
+    //     } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+    //         return response()->json([
+    //             'message' => 'Service not found',
+    //         ], 404);
+    //     } catch (\Illuminate\Validation\ValidationException $e) {
+    //         return response()->json([
+    //             'message' => 'Validation failed',
+    //             'errors' => $e->errors(),
+    //         ], 422);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'message' => 'Server error',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
     public function updateService(Request $request, $id)
     {
         try {
             return \DB::transaction(function () use ($request, $id) {
-                $service = ModelServices::findOrFail($id);
+                $service = modelServices::findOrFail($id);
 
-                // Simpan data lama
-                $oldTotalBiaya = $service->total_biaya;
+                // 1. Cari riwayat DP lama di tabel history_laci berdasarkan kode_service
+                // Kita cari transaksi 'masuk' yang pernah dicatat untuk service ini
+                $oldHistory = \App\Models\HistoryLaci::where('reference_code', $service->kode_service)
+                    ->where('reference_type', 'service')
+                    ->where('masuk', '>', 0)
+                    ->latest()
+                    ->first();
+
                 $oldDp = $service->dp ?? 0;
-                $oldLaciId = $service->id_kategorilaci;
+                $oldLaciId = $oldHistory ? $oldHistory->id_kategori : null;
 
                 $validatedData = $request->validate([
                     'nama_pelanggan' => 'nullable|string|max:255',
-                    'type_unit'      => 'nullable|string|max:255',
-                    'keterangan'     => 'nullable|string',
+                    'dp'             => 'nullable|numeric|min:0',
+                    'id_kategorilaci'=> 'nullable|integer', // ID laci baru dari input user
                     'no_telp'        => 'nullable|numeric',
                     'total_biaya'    => 'nullable|numeric|min:0',
-                    'dp'             => 'nullable|numeric|min:0',
-                    'id_kategorilaci'=> [
-                        'nullable',
-                        'integer',
-                        function ($attribute, $value, $fail) use ($request, $oldDp) {
-                            $newDp = $request->input('dp', 0);
-
-                            // Hanya wajib isi jika DP berubah
-                            if ($newDp != $oldDp && $newDp > 0 && is_null($value)) {
-                                $fail("Kolom $attribute wajib diisi jika DP berubah.");
-                            }
-                        }
-                    ],
-                    'tipe_sandi' => ['nullable', 'string', Rule::in(['pola', 'pin', 'teks'])],
-                    'isi_sandi' => ['nullable', 'string', 'required_with:tipe_sandi'],
-                    'data_unit' => ['nullable', 'json'],
+                    'type_unit'      => 'nullable|string|max:255',
+                    'keterangan'     => 'nullable|string',
                 ]);
 
-                // Ambil data baru dari input
-                $newDp = $validatedData['dp'] ?? 0;
-                $newLaciId = $validatedData['id_kategorilaci'] ?? null;
+                // 2. LOGIKA ROLLBACK (Penting agar tidak double)
+                // Jika ditemukan ada riwayat uang masuk sebelumnya, kita tarik keluar dulu
+                if ($oldHistory && $oldDp > 0) {
+                    $tanggalAsli = $oldHistory->created_at->format('d/m/Y');
+                    $this->recordLaciHistory(
+                        $oldLaciId,
+                        null,          // Masuk null
+                        $oldDp,        // Keluar (sebesar DP lama)
+                        "Rollback DP lama (Transaksi tgl $tanggalAsli) karena update: " . $service->nama_pelanggan . " - " . $service->kode_service . ' (' . $service->type_unit . ')',
+                        'service',
+                        $service->id,
+                        $service->kode_service
+                    );
+                }
 
-                // Update service dulu
+                // 3. Update data service di database
                 $service->update($validatedData);
 
-                // Hitung selisih DP
-                $dpDifference = $newDp - $oldDp;
+                // 4. LOGIKA CATAT DATA BARU
+                $newDp = $request->input('dp', 0);
+                $newLaciId = $request->input('id_kategorilaci');
 
-                // ==== LOGIKA HISTORY LACI ====
-                if ($dpDifference !== 0) {
-                    if ($dpDifference > 0 && $newLaciId) {
-                        // DP bertambah
-                        $this->recordLaciHistory(
-                            $newLaciId,
-                            $dpDifference,
-                            null,
-                            "Update DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Penambahan)"
-                        );
-                    } elseif ($dpDifference < 0) {
-                        if ($oldLaciId) {
-                            // DP berkurang
-                            $this->recordLaciHistory(
-                                $oldLaciId,
-                                null,
-                                abs($dpDifference),
-                                "Update DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Pengurangan)"
-                            );
-                        }
-
-                        // Kalau pindah laci (baru dan lama beda)
-                        if ($newDp > 0 && $newLaciId && $newLaciId != $oldLaciId) {
-                            $this->recordLaciHistory(
-                                $newLaciId,
-                                $newDp,
-                                null,
-                                "Update DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Pindah Laci)"
-                            );
-                        }
-                    }
-                }
-                // DP sama tapi pindah laci
-                elseif ($oldLaciId != $newLaciId && $newDp > 0) {
-                    if ($oldLaciId) {
-                        $this->recordLaciHistory(
-                            $oldLaciId,
-                            null,
-                            $newDp,
-                            "Transfer DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Keluar)"
-                        );
-                    }
-                    if ($newLaciId) {
-                        $this->recordLaciHistory(
-                            $newLaciId,
-                            $newDp,
-                            null,
-                            "Transfer DP Service: {$service->kode_service} - a/n {$service->nama_pelanggan} (Masuk)"
-                        );
-                    }
-                }
-
-                // ==== Recalculate komisi kalau status sudah selesai/diambil & total biaya berubah ====
-                $status = strtolower($service->status_services);
-
-                if (in_array($status, ['selesai', 'diambil']) && $service->wasChanged('total_biaya')) {
-                    $this->performCommissionRecalculation($id);
+                // Jika ada nilai DP baru dan laci dipilih, catat sebagai uang masuk
+                if ($newDp > 0 && $newLaciId) {
+                    $this->recordLaciHistory(
+                        $newLaciId,
+                        $newDp,        // Masuk (sebesar DP baru)
+                        null,          // Keluar null
+                        "DP Service (Update): " . $service->nama_pelanggan . " - " . $service->kode_service . ' (' . $service->type_unit . ')',
+                        'service',
+                        $service->id,
+                        $service->kode_service
+                    );
                 }
 
                 return response()->json([
-                    'message' => 'Service updated successfully',
-                    'service' => $service->fresh(),
-                ], 200);
+                    'success' => true,
+                    'message' => 'Data berhasil diupdate dan saldo laci disesuaikan'
+                ]);
             });
-
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'message' => 'Service not found',
-            ], 404);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $e->errors(),
-            ], 422);
         } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Server error',
-                'error' => $e->getMessage(),
-            ], 500);
+            return response()->json(['message' => $e->getMessage()], 500);
         }
     }
 
 
+    /**
+     * Helper function untuk mendapatkan saldo laci saat ini
+     *
+     * @param int $kategoriLaciId
+     * @return float
+     */
+    private function getLaciBalance($kategoriLaciId)
+    {
+        try {
+            $result = \DB::table('history_laci')
+                ->where('id_kategorilaci', $kategoriLaciId)
+                ->selectRaw('COALESCE(SUM(masuk), 0) - COALESCE(SUM(keluar), 0) as balance')
+                ->first();
 
-/**
- * Helper function untuk mendapatkan saldo laci saat ini
- *
- * @param int $kategoriLaciId
- * @return float
- */
-private function getLaciBalance($kategoriLaciId)
-{
-    try {
-        $result = \DB::table('history_laci')
-            ->where('id_kategorilaci', $kategoriLaciId)
-            ->selectRaw('COALESCE(SUM(masuk), 0) - COALESCE(SUM(keluar), 0) as balance')
-            ->first();
+            return $result ? (float) $result->balance : 0;
 
-        return $result ? (float) $result->balance : 0;
-
-    } catch (\Exception $e) {
-        \Log::error('Error getting laci balance: ' . $e->getMessage());
-        return 0;
+        } catch (\Exception $e) {
+            \Log::error('Error getting laci balance: ' . $e->getMessage());
+            return 0;
+        }
     }
-}
 
     /**
      * Deletes a service and all its related data (parts, notes, warranty, commission).
@@ -1326,61 +1397,61 @@ private function getLaciBalance($kategoriLaciId)
 
     // NEW: Adds an external part to a service.
     public function addPartLuarToCompletedService(Request $request) // Renamed from storeSparepartLuar
-{
-    $validator = Validator::make($request->all(), [
-        'kode_services' => 'required|exists:sevices,id',
-        'nama_part' => 'required|string',
-        'harga_part' => 'required|numeric|min:0',
-        'qty_part' => 'required|integer|min:1',
-    ]);
-
-    if ($validator->fails()) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Validation error',
-            'errors' => $validator->errors()
-        ], 422);
-    }
-
-    DB::beginTransaction();
-    try {
-        $serviceId = $request->kode_services;
-        // PERUBAHAN: Ambil model service untuk digunakan di trait kas
-        $service = modelServices::findOrFail($serviceId);
-
-        $create = DetailPartLuarService::create([
-            'kode_services' => $serviceId,
-            'nama_part' => $request->nama_part,
-            'harga_part' => $request->harga_part,
-            'qty_part' => $request->qty_part,
-            'user_input' => auth()->user()->id,
+    {
+        $validator = Validator::make($request->all(), [
+            'kode_services' => 'required|exists:sevices,id',
+            'nama_part' => 'required|string',
+            'harga_part' => 'required|numeric|min:0',
+            'qty_part' => 'required|integer|min:1',
         ]);
 
-        // PERUBAHAN: Hitung total biaya dan catat sebagai kas keluar
-        $totalCost = $request->harga_part * $request->qty_part;
-        $deskripsi = "Biaya Part Luar: {$request->nama_part} (x{$request->qty_part}) untuk Service {$service->kode_service}";
-        $this->catatKas($service, 0, $totalCost, $deskripsi);
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
 
-        // Lanjutkan dengan kalkulasi komisi
-        $this->performCommissionRecalculation($serviceId);
+        DB::beginTransaction();
+        try {
+            $serviceId = $request->kode_services;
+            // PERUBAHAN: Ambil model service untuk digunakan di trait kas
+            $service = modelServices::findOrFail($serviceId);
 
-        DB::commit();
+            $create = DetailPartLuarService::create([
+                'kode_services' => $serviceId,
+                'nama_part' => $request->nama_part,
+                'harga_part' => $request->harga_part,
+                'qty_part' => $request->qty_part,
+                'user_input' => auth()->user()->id,
+            ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Sparepart luar berhasil ditambahkan dan komisi dihitung ulang.',
-            'data' => $create
-        ], 201);
-    } catch (\Exception $e) {
-        DB::rollBack();
-        Log::error("Add Part Luar to Completed Service Error: " . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Gagal menambahkan sparepart luar.',
-            'error' => $e->getMessage()
-        ], 500);
+            // PERUBAHAN: Hitung total biaya dan catat sebagai kas keluar
+            $totalCost = $request->harga_part * $request->qty_part;
+            $deskripsi = "Biaya Part Luar: {$request->nama_part} (x{$request->qty_part}) untuk Service {$service->kode_service}";
+            $this->catatKas($service, 0, $totalCost, $deskripsi);
+
+            // Lanjutkan dengan kalkulasi komisi
+            $this->performCommissionRecalculation($serviceId);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Sparepart luar berhasil ditambahkan dan komisi dihitung ulang.',
+                'data' => $create
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Add Part Luar to Completed Service Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menambahkan sparepart luar.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
-}
 
     // NEW: Updates an existing external part for a service.
     public function updatePartLuarForCompletedService(Request $request, $detailPartLuarId) // Renamed from updateSparepartLuar
@@ -1454,49 +1525,49 @@ private function getLaciBalance($kategoriLaciId)
 
     // NEW: Deletes an external part from a service.
     public function deletePartLuarFromCompletedService($detailPartLuarId) // Renamed from deleteSparepartLuar
-{
-    DB::beginTransaction();
-    try {
-        $data = DetailPartLuarService::findOrFail($detailPartLuarId);
-        $serviceId = $data->kode_services;
-        // PERUBAHAN: Ambil model service untuk digunakan di trait kas
-        $service = modelServices::findOrFail($serviceId);
+    {
+        DB::beginTransaction();
+        try {
+            $data = DetailPartLuarService::findOrFail($detailPartLuarId);
+            $serviceId = $data->kode_services;
+            // PERUBAHAN: Ambil model service untuk digunakan di trait kas
+            $service = modelServices::findOrFail($serviceId);
 
-        // PERUBAHAN: Hitung total biaya yang dikembalikan dan buat deskripsi
-        $totalCostReversed = $data->harga_part * $data->qty_part;
-        $deskripsi = "Koreksi/Hapus Part Luar: {$data->nama_part} (x{$data->qty_part}) untuk Service {$service->kode_service}";
+            // PERUBAHAN: Hitung total biaya yang dikembalikan dan buat deskripsi
+            $totalCostReversed = $data->harga_part * $data->qty_part;
+            $deskripsi = "Koreksi/Hapus Part Luar: {$data->nama_part} (x{$data->qty_part}) untuk Service {$service->kode_service}";
 
-        // Hapus data part luar
-        $data->delete();
+            // Hapus data part luar
+            $data->delete();
 
-        // PERUBAHAN: Catat pengembalian sebagai kas masuk
-        $this->catatKas($service, $totalCostReversed, 0, $deskripsi);
+            // PERUBAHAN: Catat pengembalian sebagai kas masuk
+            $this->catatKas($service, $totalCostReversed, 0, $deskripsi);
 
-        // Lanjutkan dengan kalkulasi komisi
-        $this->performCommissionRecalculation($serviceId);
+            // Lanjutkan dengan kalkulasi komisi
+            $this->performCommissionRecalculation($serviceId);
 
-        DB::commit();
+            DB::commit();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Sparepart luar berhasil dihapus dan komisi dihitung ulang.'
-        ], 200);
-    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-        DB::rollBack();
-        return response()->json([
-            'success' => false,
-            'message' => 'Detail sparepart luar tidak ditemukan.',
-        ], 404);
-    } catch (\Exception $e) {
-        DB::rollBack();
-        Log::error("Delete Part Luar from Completed Service Error: " . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Gagal menghapus sparepart luar.',
-            'error' => $e->getMessage()
-        ], 500);
+            return response()->json([
+                'success' => true,
+                'message' => 'Sparepart luar berhasil dihapus dan komisi dihitung ulang.'
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Detail sparepart luar tidak ditemukan.',
+            ], 404);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Delete Part Luar from Completed Service Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menghapus sparepart luar.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
-}
 
 
     /**
@@ -1861,106 +1932,106 @@ private function getLaciBalance($kategoriLaciId)
      * When status becomes 'Selesai', commission is calculated.
      */
     public function updateServiceStatus(Request $request, $id)
-{
-    try {
-        $validator = Validator::make($request->all(), [
-            'status_services' => 'required|string|in:Selesai,Proses,Antri',
-            'id_teknisi' => 'nullable|exists:users,id',
-        ]);
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'status_services' => 'required|string|in:Selesai,Proses,Antri',
+                'id_teknisi' => 'nullable|exists:users,id',
+            ]);
 
-        if ($validator->fails()) {
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $service = modelServices::findOrFail($id);
+            $oldStatus = $service->status_services;
+            $newStatus = $request->status_services;
+            $newTechnicianId = $request->id_teknisi;
+
+            DB::beginTransaction();
+
+            $service->update([
+                'status_services' => $newStatus,
+                'id_teknisi' => $newTechnicianId,
+                'tgl_service' => Carbon::now()->format('Y-m-d H:i:s'),
+            ]);
+
+            // Komisi: Hitung atau revert berdasarkan perubahan status
+            if ($newStatus === 'Selesai' && $oldStatus !== 'Selesai') {
+                $this->performCommissionRecalculation($id);
+            } elseif ($newStatus !== 'Selesai' && $oldStatus === 'Selesai') {
+                $profitPresentase = ProfitPresentase::where('kode_service', $id)->first();
+                if ($profitPresentase) {
+                    $teknisi = UserDetail::where('kode_user', $profitPresentase->kode_user)->first();
+                    if ($teknisi) {
+                        $teknisi->update([
+                            'saldo' => $teknisi->saldo - $profitPresentase->profit
+                        ]);
+                    }
+                    $profitPresentase->delete();
+                    Log::info("Komisi dibatalkan untuk Service ID: $id karena status berubah dari Selesai.");
+                }
+            }
+
+            // Kirim WhatsApp jika selesai
+            $whatsappStatus = 'Pesan WhatsApp tidak dikirim.';
+            if ($newStatus === 'Selesai' && !empty($service->no_telp)) {
+                $whatsAppService = app(WhatsAppService::class);
+                if (!$whatsAppService->isValidPhoneNumber($service->no_telp)) {
+                    $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak valid';
+                } else {
+                    try {
+                        $waResult = $whatsAppService->sendServiceCompletionNotification([
+                            'nomor_services' => $service->kode_service,
+                            'nama_barang' => $service->type_unit,
+                            'no_hp' => $service->no_telp,
+                        ]);
+                        $whatsappStatus = $waResult['status']
+                            ? 'Pesan WhatsApp berhasil dikirim'
+                            : 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
+                    } catch (\Exception $waException) {
+                        Log::error("Gagal kirim WA untuk Service ID {$id}: " . $waException->getMessage());
+                        $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
+                    }
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Status service berhasil diperbarui ke '{$newStatus}'.",
+                'data' => [
+                    'service_id' => $id,
+                    'status' => $newStatus,
+                    'technician_id' => $newTechnicianId,
+                    'whatsapp_notification' => $whatsappStatus
+                ],
+            ], 200);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            DB::rollBack();
             return response()->json([
                 'success' => false,
-                'message' => 'Validation error',
-                'errors' => $validator->errors()
-            ], 422);
+                'message' => 'Service tidak ditemukan.',
+            ], 404);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Gagal update status service untuk ID {$id}: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memperbarui status service.',
+                'error' => $e->getMessage(),
+            ], 500);
         }
-
-        $service = modelServices::findOrFail($id);
-        $oldStatus = $service->status_services;
-        $newStatus = $request->status_services;
-        $newTechnicianId = $request->id_teknisi;
-
-        DB::beginTransaction();
-
-        $service->update([
-            'status_services' => $newStatus,
-            'id_teknisi' => $newTechnicianId,
-            'tgl_service' => Carbon::now()->format('Y-m-d H:i:s'),
-        ]);
-
-        // Komisi: Hitung atau revert berdasarkan perubahan status
-        if ($newStatus === 'Selesai' && $oldStatus !== 'Selesai') {
-            $this->performCommissionRecalculation($id);
-        } elseif ($newStatus !== 'Selesai' && $oldStatus === 'Selesai') {
-            $profitPresentase = ProfitPresentase::where('kode_service', $id)->first();
-            if ($profitPresentase) {
-                $teknisi = UserDetail::where('kode_user', $profitPresentase->kode_user)->first();
-                if ($teknisi) {
-                    $teknisi->update([
-                        'saldo' => $teknisi->saldo - $profitPresentase->profit
-                    ]);
-                }
-                $profitPresentase->delete();
-                Log::info("Komisi dibatalkan untuk Service ID: $id karena status berubah dari Selesai.");
-            }
-        }
-
-        // Kirim WhatsApp jika selesai
-        $whatsappStatus = 'Pesan WhatsApp tidak dikirim.';
-        if ($newStatus === 'Selesai' && !empty($service->no_telp)) {
-            $whatsAppService = app(WhatsAppService::class);
-            if (!$whatsAppService->isValidPhoneNumber($service->no_telp)) {
-                $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak valid';
-            } else {
-                try {
-                    $waResult = $whatsAppService->sendServiceCompletionNotification([
-                        'nomor_services' => $service->kode_service,
-                        'nama_barang' => $service->type_unit,
-                        'no_hp' => $service->no_telp,
-                    ]);
-                    $whatsappStatus = $waResult['status']
-                        ? 'Pesan WhatsApp berhasil dikirim'
-                        : 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
-                } catch (\Exception $waException) {
-                    Log::error("Gagal kirim WA untuk Service ID {$id}: " . $waException->getMessage());
-                    $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
-                }
-            }
-        }
-
-        DB::commit();
-
-        return response()->json([
-            'success' => true,
-            'message' => "Status service berhasil diperbarui ke '{$newStatus}'.",
-            'data' => [
-                'service_id' => $id,
-                'status' => $newStatus,
-                'technician_id' => $newTechnicianId,
-                'whatsapp_notification' => $whatsappStatus
-            ],
-        ], 200);
-
-    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-        DB::rollBack();
-        return response()->json([
-            'success' => false,
-            'message' => 'Service tidak ditemukan.',
-        ], 404);
-    } catch (\Exception $e) {
-        DB::rollBack();
-        Log::error("Gagal update status service untuk ID {$id}: " . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Gagal memperbarui status service.',
-            'error' => $e->getMessage(),
-        ], 500);
     }
-}
 
 
-public function revertServiceToQueue($id)
+    public function revertServiceToQueue($id)
     {
         DB::beginTransaction();
         try {
@@ -2085,7 +2156,7 @@ public function revertServiceToQueue($id)
         }
     }
 
-   public function getGaransiService($kode_service)
+    public function getGaransiService($kode_service)
     {
         try {
             \Log::info('Get Warranty Request', [

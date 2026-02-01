@@ -19,11 +19,17 @@ use App\Models\Sevices;
 use App\Models\Hutang;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Traits\ProfitCalculationTrait;
+use App\Services\FinancialService;
 
 class LaporanController extends Controller
 {
-    use ProfitCalculationTrait;
+    protected $financialService;
+
+    public function __construct(FinancialService $financialService)
+    {
+        $this->financialService = $financialService;
+    }
+
     public function view_laporan(Request $request)
     {
         $page = "Laporan";
@@ -34,7 +40,7 @@ class LaporanController extends Controller
             $tgl_akhir = $request->tgl_akhir;
 
             // 1. MENGGUNAKAN MESIN PERHITUNGAN LABA TERPUSAT (TETAP)
-            $labaResult = $this->calculateNetProfit($kode_owner, $tgl_awal, $tgl_akhir);
+            $labaResult = $this->financialService->calculateNetProfit($kode_owner, $tgl_awal, $tgl_akhir);
 
             // 2. MENGAMBIL KEMBALI SEMUA DATA DETAIL UNTUK TABEL RINCIAN
             // Service

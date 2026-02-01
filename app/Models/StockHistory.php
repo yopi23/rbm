@@ -19,6 +19,7 @@ class StockHistory extends Model
         'stock_after',
         'notes',
         'user_input',
+        'shift_id',
     ];
 
     public function sparepart()

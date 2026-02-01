@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\TokoSetting;
+use App\Services\ThermalPrinterService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB; // Tambahkan ini
@@ -26,6 +27,9 @@ class TokoSettingController extends Controller
         if ($settings->logo_url) {
             $settings->logo_url = Storage::url($settings->logo_url);
         }
+        if ($settings->logo_thermal_url) {
+            $settings->logo_thermal_url = Storage::url($settings->logo_thermal_url);
+        }
 
         return response()->json(['success' => true, 'data' => $settings]);
     }
@@ -43,6 +47,7 @@ class TokoSettingController extends Controller
             'nota_footer_line1' => 'nullable|string',
             'nota_footer_line2' => 'nullable|string',
             'logo' => 'nullable|image|mimes:jpeg,png,jpg|max:1024', // Max 1MB
+            'print_logo_on_receipt' => 'nullable|boolean',
         ]);
 
         $data = $request->except('logo');
@@ -58,6 +63,16 @@ class TokoSettingController extends Controller
             // Simpan logo baru
             $logoPath = $request->file('logo')->store('public/logos');
             $data['logo_url'] = str_replace('public/', '', $logoPath);
+
+            // Generate Thermal Logo
+            try {
+                $thermalPath = ThermalPrinterService::generateThermalLogo($data['logo_url']);
+                if ($thermalPath) {
+                    $data['logo_thermal_url'] = $thermalPath;
+                }
+            } catch (\Exception $e) {
+                 \Illuminate\Support\Facades\Log::error("Thermal logo gen error API: " . $e->getMessage());
+            }
         }
 
         $settings = TokoSetting::updateOrCreate(

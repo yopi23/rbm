@@ -34,4 +34,12 @@ class Hutang extends Model
         // Hutang.kode_nota -> Pembelian.kode_pembelian
         return $this->belongsTo(\App\Models\Pembelian::class, 'kode_nota', 'kode_pembelian');
     }
+
+    /**
+     * Relasi ke buku besar kas (polimorfik).
+     */
+    public function kas()
+    {
+        return $this->morphOne(KasPerusahaan::class, 'sourceable');
+    }
 }

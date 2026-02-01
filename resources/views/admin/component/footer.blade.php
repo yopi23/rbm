@@ -47,6 +47,8 @@
   <script src="{{ asset('admin/plugins/select2/js/select2.full.min.js') }}"></script>
   <!-- SweetAlert2 -->
   <script src="{{ asset('admin/plugins/sweetalert2/sweetalert2.min.js') }}"></script>
+  <!-- Toastr -->
+  <script src="{{ asset('admin/plugins/toastr/toastr.min.js') }}"></script>
   <!-- AdminLTE App -->
   <script src="{{ asset('admin/dist/js/adminlte.js') }}"></script>
   <!-- AdminLTE dashboard demo (This is only for demo purposes) -->

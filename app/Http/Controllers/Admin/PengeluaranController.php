@@ -86,12 +86,20 @@ class PengeluaranController extends Controller
 
         DB::beginTransaction();
         try {
+            // Get Active Shift
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(Auth::id());
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+
             $pengeluaran = PengeluaranToko::create([
                 'tanggal_pengeluaran' => $request->tanggal_pengeluaran,
                 'nama_pengeluaran' => $request->nama_pengeluaran,
                 'jumlah_pengeluaran' => $request->jumlah_pengeluaran,
                 'catatan_pengeluaran' => $request->catatan_pengeluaran,
-                'kode_owner' => $this->getThisUser()->id_upline
+                'kode_owner' => $this->getThisUser()->id_upline,
+                'shift_id' => $shiftId,
             ]);
             $this->catatKas(
                 $pengeluaran, 0, $pengeluaran->jumlah_pengeluaran,
@@ -299,6 +307,13 @@ class PengeluaranController extends Controller
 
         DB::beginTransaction();
         try {
+            // Get Active Shift
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(Auth::id());
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+
             $validatedData['kategori'] = 'Lainnya'; // Default kategori
             if ($request->filled('beban_operasional_id')) {
                 // Ambil nama kategori dari master beban
@@ -307,6 +322,7 @@ class PengeluaranController extends Controller
 
             $validatedData['kode_owner'] = $this->getThisUser()->id_upline;
             $validatedData['kode_pegawai'] = $this->getThisUser()->kode_user;
+            $validatedData['shift_id'] = $shiftId;
 
             $pengeluaran = PengeluaranOperasional::create($validatedData);
 

@@ -20,6 +20,7 @@ class Pembelian extends Model
         'status_pembayaran',
         'tgl_jatuh_tempo',
         'item_kategori',
+        'shift_id',
     ];
 
     public function detailPembelians()

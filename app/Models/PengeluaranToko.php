@@ -14,6 +14,7 @@ class PengeluaranToko extends Model
         'catatan_pengeluaran',
         'jumlah_pengeluaran',
         'kode_owner',
+        'shift_id',
     ];
     public function kas()
     {

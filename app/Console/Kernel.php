@@ -18,7 +18,13 @@ class Kernel extends ConsoleKernel
         // $schedule->command('inspire')->hourly();
         $schedule->command('subscriptions:expire')->daily();
         $schedule->command('app:proses-tutup-buku-harian')->dailyAt('23:55');
-        $schedule->command('app:hitung-penyusutan-bulanan')->monthly();
+        
+        // Auto Close Shifts (Runs with Auto Checkout)
+        $schedule->command('shift:auto-close')->dailyAt('17:00');
+        
+        // Financial & Asset Management
+        $schedule->command('assets:calculate-depreciation')->dailyAt('00:01');
+        $schedule->command('app:alokasi-beban-harian')->dailyAt('00:05');
     }
 
     /**

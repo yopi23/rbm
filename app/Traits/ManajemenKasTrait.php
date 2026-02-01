@@ -3,8 +3,10 @@
 namespace App\Traits;
 
 use App\Models\KasPerusahaan;
+use App\Models\Shift;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 trait ManajemenKasTrait
 {
@@ -38,14 +40,32 @@ trait ManajemenKasTrait
             // Hitung saldo baru
             $saldoBaru = $saldoTerakhir + $debit - $kredit;
 
+            // Deteksi Shift Aktif
+            // Prioritaskan Shift Aktif dari User yang sedang login/melakukan aksi
+            $shiftId = null;
+            $currentUser = Auth::id();
+            
+            if ($currentUser) {
+                $activeShift = Shift::getActiveShift($currentUser);
+                if ($activeShift) {
+                    $shiftId = $activeShift->id;
+                }
+            }
+
+            // Jika tidak ada shift aktif (misal sistem/cron), baru gunakan shift dari model sumber
+            if (!$shiftId) {
+                $shiftId = $sumberModel->shift_id ?? null;
+            }
+
             // Siapkan data untuk entri kas baru
             $dataKas = [
                 'kode_owner'      => $ownerId,
-                'tanggal'         => now(),
+                'tanggal'         => $tanggal ?? now(),
                 'deskripsi'       => $deskripsi,
                 'debit'           => $debit,
                 'kredit'          => $kredit,
                 'saldo'           => $saldoBaru,
+                'shift_id'        => $shiftId,
             ];
 
             // Simpan entri kas dan tautkan ke model sumbernya via relasi polimorfik.

@@ -15,11 +15,13 @@ class WorkSchedule extends Model
         'start_time',
         'end_time',
         'is_working_day',
+        'is_pic',
         'created_by'
     ];
 
     protected $casts = [
         'is_working_day' => 'boolean',
+        'is_pic' => 'boolean',
         'start_time' => 'datetime:H:i:s',
         'end_time' => 'datetime:H:i:s',
     ];

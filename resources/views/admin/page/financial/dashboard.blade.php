@@ -1,172 +1,158 @@
 <div class="container-fluid pt-3">
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title">Laporan Harian (Berdasarkan Jam Tutup Buku)</h3>
+            <h3 class="card-title">Laporan Harian & Overview Keuangan</h3>
         </div>
         <div class="card-body">
-            <form action="{{ route('financial.index') }}" method="GET" class="form-inline">
+            <form action="{{ route('financial.index') }}" method="GET" class="form-inline mb-3">
                 <div class="form-group mr-3">
-                    <label for="date" class="mr-2">Pilih Tanggal Laporan:</label>
+                    <label for="date" class="mr-2">Pilih Tanggal:</label>
                     <input type="date" name="date" id="date" class="form-control"
                         value="{{ $filterDate }}">
                 </div>
                 <button type="submit" class="btn btn-primary">Tampilkan</button>
             </form>
-            <div class="mt-2">
+            <div>
                 <small class="text-muted">
-                    Jam tutup buku saat ini: <strong>{{ $closingTimeFormatted }}</strong>.
-                    <a href="{{ route('settings.index') }}">Ubah Pengaturan</a>
+                    Data di bawah ini berdasarkan perhitungan akrual (pendapatan & beban diakui saat terjadi) dan posisi keuangan per tanggal {{ \Carbon\Carbon::parse($filterDate)->format('d/m/Y') }}.
+                    Jam tutup buku: <strong>{{ $closingTimeFormatted }}</strong>.
                 </small>
             </div>
         </div>
     </div>
 
-    <div class="card">
-        <div class="card-header bg-dark">
-            <h3 class="card-title">Total Estimasi Kekayaan Perusahaan</h3>
+    {{-- STATS OVERVIEW --}}
+    <h4 class="mb-3">Financial Overview</h4>
+    <div class="row">
+        {{-- 1. Pendapatan Total --}}
+        <div class="col-lg-3 col-6">
+            <div class="small-box bg-success">
+                <div class="inner">
+                    <h3>Rp {{ number_format($stats['totalRevenue'], 0, ',', '.') }}</h3>
+                    <p>Pendapatan Total (Revenue)</p>
+                </div>
+                <div class="icon">
+                    <i class="fas fa-chart-line"></i>
+                </div>
+                <a href="#" class="small-box-footer">Omset Penjualan + Servis <i class="fas fa-info-circle"></i></a>
+            </div>
         </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-lg-4 col-6">
-                    <div class="small-box bg-primary">
-                        <div class="inner">
-                            <h3>Rp {{ number_format($kekayaanStats['saldoKas'], 0, ',', '.') }}</h3>
-                            <p>Modal Uang (Saldo Kas)</p>
-                        </div>
-                        <div class="icon"><i class="fas fa-money-bill-wave"></i></div>
-                    </div>
+
+        {{-- 2. Nilai Inventory --}}
+        <div class="col-lg-3 col-6">
+            <div class="small-box bg-warning">
+                <div class="inner">
+                    <h3>Rp {{ number_format($stats['inventoryValue'], 0, ',', '.') }}</h3>
+                    <p>Nilai Inventory (Aset)</p>
                 </div>
-                <div class="col-lg-4 col-6">
-                    <div class="small-box bg-purple">
-                        <div class="inner">
-                            <h3>Rp {{ number_format($kekayaanStats['totalNilaiBarang'], 0, ',', '.') }}</h3>
-                            <p>Modal Barang (Nilai Stok)</p>
-                        </div>
-                        <div class="icon"><i class="fas fa-boxes"></i></div>
-                    </div>
+                <div class="icon">
+                    <i class="fas fa-boxes"></i>
                 </div>
-                <div class="col-lg-4 col-6">
-                    <div class="small-box bg-secondary">
-                        <div class="inner">
-                            <h3>Rp {{ number_format($kekayaanStats['totalNilaiAset'], 0, ',', '.') }}</h3>
-                            <p>Modal Aset Tetap</p>
-                        </div>
-                        <div class="icon"><i class="fas fa-building"></i></div>
-                    </div>
-                </div>
+                <a href="{{ route('stok_sparepart') }}" class="small-box-footer">Lihat Stok <i class="fas fa-arrow-circle-right"></i></a>
             </div>
-            <div class="alert alert-success text-center">
-                <h4>Total Kekayaan: <strong>Rp
-                        {{ number_format($kekayaanStats['totalKekayaan'], 0, ',', '.') }}</strong></h4>
+        </div>
+
+        {{-- 3. Saldo Kas --}}
+        <div class="col-lg-3 col-6">
+            <div class="small-box {{ $stats['saldoKas'] >= 0 ? 'bg-info' : 'bg-danger' }}">
+                <div class="inner">
+                    <h3>Rp {{ number_format($stats['saldoKas'], 0, ',', '.') }}</h3>
+                    <p>Saldo Kas Tersedia</p>
+                </div>
+                <div class="icon">
+                    <i class="fas fa-wallet"></i>
+                </div>
+                <a href="{{ route('financial.transactions') }}" class="small-box-footer">Lihat Buku Besar <i class="fas fa-arrow-circle-right"></i></a>
             </div>
-            <small class="text-muted">
-                *Nilai kekayaan adalah estimasi berdasarkan: Saldo kas terakhir + Total harga beli semua stok barang +
-                Total harga perolehan semua aset tetap.
-            </small>
+        </div>
+
+        {{-- 4. Total Beban --}}
+        <div class="col-lg-3 col-6">
+            <div class="small-box bg-danger">
+                <div class="inner">
+                    <h3>Rp {{ number_format($stats['totalExpenseDisplay'], 0, ',', '.') }}</h3>
+                    <p>Total Beban</p>
+                </div>
+                <div class="icon">
+                    <i class="fas fa-arrow-down"></i>
+                </div>
+                <span class="small-box-footer">Ops: {{ number_format($stats['operatingExpenses'], 0, ',', '.') }} + Susut: {{ number_format($stats['depreciation'], 0, ',', '.') }}</span>
+            </div>
+        </div>
+
+        {{-- 5. Modal Disetor --}}
+        <div class="col-lg-4 col-6">
+            <div class="small-box bg-teal">
+                <div class="inner">
+                    <h3>Rp {{ number_format($stats['paidInCapital'], 0, ',', '.') }}</h3>
+                    <p>Modal Disetor (Bersih)</p>
+                </div>
+                <div class="icon">
+                    <i class="fas fa-landmark"></i>
+                </div>
+                <a href="{{ route('modal.index') }}" class="small-box-footer">Lihat Riwayat Modal <i class="fas fa-arrow-circle-right"></i></a>
+            </div>
+        </div>
+
+        {{-- 6. Laba Bersih --}}
+        <div class="col-lg-4 col-6">
+            <div class="small-box {{ $stats['netProfit'] >= 0 ? 'bg-primary' : 'bg-orange' }}">
+                <div class="inner">
+                    <h3>Rp {{ number_format($stats['netProfit'], 0, ',', '.') }}</h3>
+                    <p>Laba Bersih Operasional</p>
+                </div>
+                <div class="icon">
+                    <i class="fas fa-balance-scale"></i>
+                </div>
+                <span class="small-box-footer">Revenue - Total Beban</span>
+            </div>
+        </div>
+
+        {{-- 7. Total Asset --}}
+        <div class="col-lg-4 col-12">
+            <div class="small-box bg-indigo">
+                <div class="inner">
+                    <h3>Rp {{ number_format($stats['totalAsset'], 0, ',', '.') }}</h3>
+                    <p>Total Aset</p>
+                </div>
+                <div class="icon">
+                    <i class="fas fa-building"></i>
+                </div>
+                <span class="small-box-footer">Kas + Inventory + Aset Tetap ({{ number_format($stats['asetTetap'], 0, ',', '.') }})</span>
+            </div>
         </div>
     </div>
 
-    {{-- RINGKASAN OPERASIONAL HARIAN --}}
-    <h4 class="mt-4 mb-2">Ringkasan Operasional Hari Ini</h4>
-    <div class="row">
-        <div class="col-12 col-sm-6 col-md-4">
-            <div class="info-box bg-success">
-                <span class="info-box-icon"><i class="fas fa-arrow-down"></i></span>
-                <div class="info-box-content">
-                    <span class="info-box-text">Pemasukan Operasional</span>
-                    <span class="info-box-number">Rp
-                        {{ number_format($stats['totalIncome'], 0, ',', '.') }}</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-md-4">
-            <div class="info-box bg-danger">
-                <span class="info-box-icon"><i class="fas fa-arrow-up"></i></span>
-                <div class="info-box-content">
-                    <span class="info-box-text">Pengeluaran Variabel</span>
-                    <span class="info-box-number">Rp
-                        {{ number_format($stats['totalExpense'], 0, ',', '.') }}</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-md-4">
-            <div class="info-box {{ $stats['netProfit'] >= 0 ? 'bg-info' : 'bg-warning' }}">
-                <span class="info-box-icon"><i class="fas fa-chart-line"></i></span>
-                <div class="info-box-content">
-                    <span class="info-box-text">Laba Kotor Operasional</span>
-                    <span class="info-box-number">Rp
-                        {{ number_format($stats['netProfit'], 0, ',', '.') }}</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <h4 class="mt-4 mb-2">Rincian Arus Kas Keluar Non-Operasional Hari Ini</h4>
-    <div class="row">
-        <div class="col-12 col-sm-6 col-md-3">
-            <div class="info-box bg-warning">
-                <span class="info-box-icon"><i class="fas fa-file-invoice-dollar"></i></span>
-                <div class="info-box-content">
-                    <span class="info-box-text">Pembayaran Beban Tetap</span>
-                    <span class="info-box-number">Rp
-                        {{ number_format($stats['totalFixedExpense'], 0, ',', '.') }}</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-md-3">
-            <div class="info-box bg-teal">
-                <span class="info-box-icon"><i class="fas fa-users"></i></span>
-                <div class="info-box-content">
-                    <span class="info-box-text">Penarikan Saldo Karyawan</span>
-                    <span class="info-box-number">Rp
-                        {{ number_format($stats['totalEmployeeWithdrawals'], 0, ',', '.') }}</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-md-3">
-            <div class="info-box bg-lightblue">
-                <span class="info-box-icon"><i class="fas fa-shopping-cart"></i></span>
-                <div class="info-box-content">
-                    <span class="info-box-text">Pembelian Stok</span>
-                    <span class="info-box-number">Rp
-                        {{ number_format($stats['totalStockPurchase'], 0, ',', '.') }}</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-md-3">
-            <div class="info-box bg-maroon">
-                <span class="info-box-icon"><i class="fas fa-user-tie"></i></span>
-                <div class="info-box-content">
-                    <span class="info-box-text">Prive Owner</span>
-                    <span class="info-box-number">Rp
-                        {{ number_format($stats['totalOwnerWithdrawals'], 0, ',', '.') }}</span>
-                </div>
-            </div>
-        </div>
-    </div>
     <div class="row mb-3 mt-4">
         <div class="col-12">
-            <a href="{{ route('modal.index') }}" class="btn btn-dark my-2"><i class="fas fa-landmark mr-1"></i>
-                Manajemen Modal</a>
-            <a href="{{ route('hutang.index') }}" class="btn btn-danger my-2"><i
-                    class="fas fa-file-invoice-dollar mr-1"></i>
-                Manajemen Hutang</a>
-            <a href="{{ route('distribusi.index') }}" class="btn btn-info my-2"><i
-                    class="fas fa-chart-pie mr-1"></i>
-                Distribusi Laba</a>
-            <a href="{{ route('financial.transactions') }}" class="btn btn-primary my-2"><i
-                    class="fas fa-book mr-1"></i>
-                Lihat Buku Besar</a>
-            <a href="{{ route('financial.developmentReport') }}" class="btn btn-success my-2"><i
-                    class="fas fa-chart-bar mr-1"></i>
-                Laporan Perkembangan</a>
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Menu Cepat Keuangan</h3>
+                </div>
+                <div class="card-body">
+                    <a href="{{ route('modal.index') }}" class="btn btn-dark m-1"><i class="fas fa-landmark mr-1"></i>
+                        Manajemen Modal</a>
+                    <a href="{{ route('hutang.index') }}" class="btn btn-danger m-1"><i
+                            class="fas fa-file-invoice-dollar mr-1"></i>
+                        Manajemen Hutang</a>
+                    <a href="{{ route('distribusi.index') }}" class="btn btn-info m-1"><i
+                            class="fas fa-chart-pie mr-1"></i>
+                        Distribusi Laba</a>
+                    <a href="{{ route('financial.transactions') }}" class="btn btn-primary m-1"><i
+                            class="fas fa-book mr-1"></i>
+                        Lihat Buku Besar</a>
+                    <a href="{{ route('financial.developmentReport') }}" class="btn btn-success m-1"><i
+                            class="fas fa-chart-bar mr-1"></i>
+                        Laporan Perkembangan</a>
 
-            <a href="{{ route('financial.cashFlowReport') }}" class="btn btn-info my-2"><i
-                    class="fas fa-exchange-alt mr-1"></i>
-                Laporan Arus Kas</a>
-            <a href="{{ route('financial.balanceSheetReport') }}" class="btn btn-dark my-2"><i
-                    class="fas fa-balance-scale mr-1"></i>
-                Laporan Neraca</a>
+                    <a href="{{ route('financial.cashFlowReport') }}" class="btn btn-info m-1"><i
+                            class="fas fa-exchange-alt mr-1"></i>
+                        Laporan Arus Kas</a>
+                    <a href="{{ route('financial.balanceSheetReport') }}" class="btn btn-dark m-1"><i
+                            class="fas fa-balance-scale mr-1"></i>
+                        Laporan Neraca</a>
+                </div>
+            </div>
         </div>
     </div>
 

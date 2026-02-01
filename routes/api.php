@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\HutangApiController;
 use App\Http\Controllers\Api\PembelianApiController;
 use App\Http\Controllers\Api\QrisController;
 use App\Http\Controllers\Api\AttendanceController;
+use App\Http\Controllers\Api\ShiftApiController;
 use Illuminate\Support\Facades\Broadcast;
 
 /*
@@ -152,9 +153,9 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::post('/allocation/withdraw', [FinancialReportApiController::class, 'processAllocationWithdrawal']);
 
     // Admin/Employee Attendance & Payroll related
-    Route::post('/attendance/scan', [Api\AttendanceController::class, 'scanQrCode']); // Assuming attendance controller in Api folder
-    Route::post('/attendance/request-leave', [Api\AttendanceController::class, 'requestLeave']);
-    Route::get('/attendance/status', [Api\AttendanceController::class, 'getStatus']);
+    Route::post('/attendance/scan', [AttendanceController::class, 'scanQrCode']); // Assuming attendance controller in Api folder
+    Route::post('/attendance/request-leave', [AttendanceController::class, 'requestLeave']);
+    Route::get('/attendance/status', [AttendanceController::class, 'getStatus']);
     Route::get('/employees/list', [EmployeeManagementController::class, 'getEmployeeList']);
     Route::post('/attendance/manual-checkin', [EmployeeManagementController::class, 'manualCheckIn']);
     Route::post('/attendance/manual-checkout', [EmployeeManagementController::class, 'manualCheckOut']);
@@ -247,6 +248,7 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::get('/sales-history', [SalesApiController::class, 'getSalesHistory']);
     Route::post('/sales', [SalesApiController::class, 'createSale']);
     Route::post('/updateSale', [SalesApiController::class, 'updateSaleStatus']);
+    Route::get('/pemasukan', [SalesApiController::class, 'listPemasukanLainApi']);
     Route::post('/pemasukan', [SalesApiController::class, 'createPemasukkanLainApi']);
     Route::get('/sales/{id}/detail', [SalesApiController::class, 'getSaleDetail']);
     Route::put('/sales/{id}/update', [SalesApiController::class, 'updateSale']);
@@ -286,6 +288,11 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::put('/service-notes/{id}', [SparepartApiController::class, 'updateCatatanService']);
     Route::delete('/service-notes/{id}', [SparepartApiController::class, 'deleteCatatanService']);
     Route::get('/service-notes/{service_id}', [SparepartApiController::class, 'getCatatanService']);
+
+    // Shift Management
+    Route::get('/shift/status', [ShiftApiController::class, 'status']);
+    Route::post('/shift/open', [ShiftApiController::class, 'open']);
+    Route::post('/shift/close', [ShiftApiController::class, 'close']);
 
     // Financial & Reports
     Route::get('/pengeluaran-kategori', [PengeluaranApiController::class, 'getKategoriPengeluaran']);

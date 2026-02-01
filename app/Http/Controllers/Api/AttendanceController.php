@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Models\User;
 use App\Models\QrCodeAttendance;
 use App\Models\WorkSchedule;
 use App\Models\Violation;
 use App\Models\UserDetail;
+use App\Models\Shift;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +25,8 @@ class AttendanceController extends Controller
         $request->validate([
             'token' => 'required|string',
             'location' => 'nullable|string',
+            'open_shift' => 'nullable|boolean',
+            'modal_awal' => 'required_if:open_shift,true|numeric|min:0',
         ]);
 
         // Find the QR code
@@ -76,10 +80,14 @@ class AttendanceController extends Controller
             $lateMinutes = 0;
             if ($schedule && $schedule->is_working_day) {
                 $checkInTime = Carbon::now();
-                $scheduleStartTime = Carbon::parse($today->format('Y-m-d') . ' ' . $schedule->start_time);
+                $scheduleTime = Carbon::parse($schedule->start_time);
+                $scheduleStartTime = Carbon::create(
+                    $today->year, $today->month, $today->day,
+                    $scheduleTime->hour, $scheduleTime->minute, 0
+                );
 
                 if ($checkInTime->gt($scheduleStartTime)) {
-                    $lateMinutes = $checkInTime->diffInMinutes($scheduleStartTime);
+                    $lateMinutes = (int) $checkInTime->diffInMinutes($scheduleStartTime, true);
                 }
             }
 
@@ -111,13 +119,52 @@ class AttendanceController extends Controller
                 ]);
             }
 
+            // Handle Auto Open Shift
+            $shiftData = null;
+            $shiftMessage = '';
+
+            if ($request->open_shift && $request->modal_awal !== null) {
+                // Check for active shift
+                $activeShift = Shift::getActiveShift($userId);
+
+                if ($activeShift) {
+                    $shiftData = $activeShift;
+                    $shiftMessage = 'Shift sudah aktif sebelumnya.';
+                } else {
+                     // Determine Owner ID
+                    $ownerId = null;
+                    $user = Auth::user();
+                    if ($user) {
+                        if ($user->userDetail && $user->userDetail->jabatan == '1') {
+                            $ownerId = $user->id;
+                        } else {
+                            $ownerId = $user->userDetail ? $user->userDetail->id_upline : null;
+                        }
+                    }
+
+                    // Create Shift
+                    $activeShift = Shift::create([
+                        'kode_owner' => $ownerId,
+                        'user_id' => $userId,
+                        'start_time' => now(),
+                        'modal_awal' => $request->modal_awal,
+                        'status' => 'open',
+                    ]);
+
+                    $shiftData = $activeShift;
+                    $shiftMessage = 'Shift baru berhasil dibuka.';
+                }
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Check in berhasil',
+                'message' => 'Check in berhasil' . ($shiftMessage ? " & $shiftMessage" : ''),
                 'data' => [
                     'attendance' => $attendance,
                     'is_late' => $lateMinutes > 0,
-                    'late_minutes' => $lateMinutes
+                    'late_minutes' => $lateMinutes,
+                    'shift' => $shiftData,
+                    'is_pic' => $schedule ? (bool)$schedule->is_pic : false
                 ]
             ]);
         }
@@ -334,6 +381,8 @@ class AttendanceController extends Controller
                 'longitude' => 'required|numeric',
                 'type' => 'required|in:check_in,check_out',
                 'live_embedding' => 'required|string',
+                'open_shift' => 'nullable|boolean',
+                'modal_awal' => 'required_if:open_shift,true|numeric|min:0',
             ]);
 
             $userId = $request->user_id;
@@ -512,7 +561,7 @@ class AttendanceController extends Controller
 
                 if ($checkInTime->gt($scheduledTime)) {
                     $isLate = true;
-                    $lateMinutes = $checkInTime->diffInMinutes($scheduledTime);
+                    $lateMinutes = (int) $checkInTime->diffInMinutes($scheduledTime, true);
                 }
 
                 if ($attendance) {
@@ -548,9 +597,50 @@ class AttendanceController extends Controller
                     ]);
                 }
 
+                // Handle Auto Open Shift
+                $shiftData = null;
+                $shiftMessage = '';
+
+                if ($request->open_shift && $request->modal_awal !== null) {
+                    // Check for active shift
+                    $activeShift = Shift::getActiveShift($userId);
+
+                    if ($activeShift) {
+                        $shiftData = $activeShift;
+                        $shiftMessage = 'Shift sudah aktif sebelumnya.';
+                    } else {
+                        // Determine Owner ID
+                        $ownerId = null;
+                        $user = User::find($userId);
+                        if ($user) {
+                            if ($user->userDetail && $user->userDetail->jabatan == '1') {
+                                $ownerId = $user->id;
+                            } else {
+                                $ownerId = $user->userDetail ? $user->userDetail->id_upline : null;
+                            }
+                        }
+
+                        // Create Shift
+                        $activeShift = Shift::create([
+                            'kode_owner' => $ownerId,
+                            'user_id' => $userId,
+                            'start_time' => now(),
+                            'modal_awal' => $request->modal_awal,
+                            'status' => 'open',
+                        ]);
+
+                        $shiftData = $activeShift;
+                        $shiftMessage = 'Shift baru berhasil dibuka.';
+                    }
+                }
+
                 $message = $isLate
                     ? "Check-in berhasil! ⚠️ Terlambat $lateMinutes menit"
                     : 'Check-in berhasil! ✓ Selamat bekerja';
+
+                if ($shiftMessage) {
+                    $message .= " & $shiftMessage";
+                }
             } else {
                 if (!$attendance || !$attendance->check_in) {
                     return response()->json([
@@ -585,6 +675,8 @@ class AttendanceController extends Controller
                     'late_minutes' => $lateMinutes,
                     'similarity' => round($similarity * 100, 2) . '%',
                     'embedding_updated' => true,
+                    'shift' => isset($shiftData) ? $shiftData : null,
+                    'is_pic' => $schedule ? (bool)$schedule->is_pic : false
                 ]
             ]);
         } catch (\Exception $e) {

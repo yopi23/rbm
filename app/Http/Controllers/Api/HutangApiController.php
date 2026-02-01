@@ -62,8 +62,9 @@ class HutangApiController extends Controller
             }
 
             // 1. Catat pengeluaran di kas perusahaan
+            // Menggunakan $hutang sebagai source agar terdata sebagai "Pembayaran Hutang" di laporan
             $this->catatKas(
-                $hutang->pembelian, // Sumbernya dari pembelian asli
+                $hutang, 
                 0,
                 $hutang->total_hutang,
                 'Pembayaran Hutang #' . $hutang->kode_nota,

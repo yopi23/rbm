@@ -63,7 +63,7 @@ class ProductSearchService
             // KONDISI 1 (ATAU): Semua keyword ada di NAMA SPAREPART
             $q->orWhere(function ($nameQuery) use ($keywords) {
                 foreach ($keywords as $keyword) {
-                    $pattern = '[[:<:]]' . preg_quote($keyword, '/') . '[[:>:]]';
+                    $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
                     $nameQuery->whereHas('sparepart', function ($subQ) use ($pattern) {
                         $subQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'REGEXP', $pattern);
                     });
@@ -73,7 +73,7 @@ class ProductSearchService
             // KONDISI 2 (ATAU): Semua keyword ada di NILAI ATRIBUT
             $q->orWhere(function ($attributeQuery) use ($keywords) {
                 foreach ($keywords as $keyword) {
-                    $pattern = '[[:<:]]' . preg_quote($keyword, '/') . '[[:>:]]';
+                    $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
                     $attributeQuery->whereHas('attributeValues', function ($subQ) use ($pattern) {
                         $subQ->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
                     });

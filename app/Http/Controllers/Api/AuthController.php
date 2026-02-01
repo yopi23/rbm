@@ -9,7 +9,9 @@ use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\SalarySetting;
+use App\Models\WorkSchedule;
 use Illuminate\Support\Facades\Validator;
+use Carbon\Carbon;
 
 class AuthController extends Controller
 {
@@ -24,8 +26,8 @@ class AuthController extends Controller
             ]);
 
             // Cek versi aplikasi terlebih dahulu
-            // $clientVersion = '2025.08.19';
-            $clientVersion = $request->input('version');
+            $clientVersion = '2025.10.29';
+            // $clientVersion = $request->input('version');
             $minVersion = '2025.10.29'; // versi minimum yang diizinkan
 
             if (version_compare($clientVersion, $minVersion, '<')) {
@@ -74,6 +76,14 @@ class AuthController extends Controller
 
             $token = $user->createToken('auth_token')->plainTextToken;
 
+            // Check for PIC status
+            $today = Carbon::today();
+            $schedule = WorkSchedule::where('user_id', $user->id)
+                ->where('day_of_week', $today->format('l'))
+                ->first();
+
+            $isPic = $schedule ? (bool)$schedule->is_pic : false;
+
 
             return response()->json([
                 'status' => 'success',
@@ -82,6 +92,7 @@ class AuthController extends Controller
                 'token_type' => 'Bearer',
                 'user' => $user,
                 'subscription_active' => $user->hasActiveSubscription(),
+                'is_pic' => $isPic,
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -95,8 +106,8 @@ class AuthController extends Controller
     {
         try {
             // Ambil versi dari request
-            // $clientVersion = '2025.08.19';
-            $clientVersion = $request->input('version');
+            $clientVersion = '2025.10.29';
+            // $clientVersion = $request->input('version');
             $minVersion = '2025.10.29'; // versi minimum yang diizinkan
 
             // Cek versi aplikasi terlebih dahulu, terlepas dari token
@@ -122,11 +133,20 @@ class AuthController extends Controller
             }
 
             if ($user) {
+                // Check for PIC status
+                $today = Carbon::today();
+                $schedule = WorkSchedule::where('user_id', $user->id)
+                    ->where('day_of_week', $today->format('l'))
+                    ->first();
+
+                $isPic = $schedule ? (bool)$schedule->is_pic : false;
+
                 return response()->json([
                     'status' => 'success',
                     'message' => 'Token is valid.',
                     'user' => $user->load('userDetail'),
                     'subscription_active' => $user->hasActiveSubscription(),
+                    'is_pic' => $isPic,
                 ], 200);
             }
 

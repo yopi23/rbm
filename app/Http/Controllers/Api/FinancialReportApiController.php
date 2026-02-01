@@ -23,9 +23,15 @@ use App\Models\DistribusiLaba;
 use App\Models\AlokasiLaba;
 use App\Models\Aset;
 use App\Models\BebanOperasional;
+use App\Models\KasPerusahaan;
+use App\Models\Sparepart;
+use App\Models\Handphone;
+use App\Models\Pembelian; // Added
+use App\Models\Hutang; // Added
 use App\Models\PengeluaranOperasional as PengeluaranOperasionalModel;
 use App\Traits\KategoriLaciTrait;
 use App\Traits\ManajemenKasTrait;
+use App\Services\FinancialService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -38,8 +44,17 @@ class FinancialReportApiController extends Controller
 {
     use KategoriLaciTrait;
     use ManajemenKasTrait;
+
+    protected $financialService;
+
+    public function __construct(FinancialService $financialService)
+    {
+        $this->financialService = $financialService;
+    }
+
     /**
      * Get comprehensive financial report
+     * REFACTORED: Now uses FinancialService for consistent logic with Admin Panel
      */
     public function getFinancialReport(Request $request)
     {
@@ -54,149 +69,38 @@ class FinancialReportApiController extends Controller
             $kode_owner = $this->getThisUser()->id_upline;
 
             // ==============================================
-            // CASH FLOW CALCULATION
+            // 1. PROFIT ANALYSIS (ACCRUAL BASIS) - Using FinancialService
             // ==============================================
-
-            $totalCashInService = 0;
-            $totalCashInDP = 0;
-            $totalCashInSales = 0;
-            $totalCashInOther = 0;
-
-            $totalCashOutParts = 0;
-            $totalCashOutStore = 0;
-            $totalCashOutOperational = 0;
-            $totalCashOutWithdrawal = 0;
+            // This ensures logic matches the Admin Dashboard & POSY reference
+            $profitData = $this->financialService->calculateNetProfit($kode_owner, $tgl_awal, $tgl_akhir);
 
             // ==============================================
-            // PROFIT CALCULATION (Yang Benar)
+            // 2. CASH FLOW CALCULATION (CASH BASIS)
             // ==============================================
-
-            $totalServiceProfit = 0;
-            $totalSalesProfit = 0;
-            $totalPartTokoProfit = 0; // BARU: Profit dari penjualan part internal
-
-            // NEW: Hitung total part toko yang belum dibayar fisik
-            $totalPartTokoNotPaidPhysically = 0;
-
-            // 1. ANALISIS SERVICE PROFIT
-            $serviceData = Sevices::where('kode_owner', $kode_owner)
+            // Still calculated manually because FinancialService is for Profit (Accrual), not Cash Flow.
+            
+            // Cash In
+            $totalCashInService = Sevices::where('kode_owner', $kode_owner)
                 ->where('status_services', 'Diambil')
                 ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->get();
-
-            foreach ($serviceData as $service) {
-                // Cash In dari service
-                $serviceCashIn = $service->total_biaya - $service->dp;
-                $totalCashInService += $serviceCashIn;
-
-                // Hitung PENGELUARAN PARTS untuk service (harga jual, bukan modal)
-                $totalPartsExpense = 0;
-
-                // Parts dari toko - gunakan HARGA JUAL sebagai pengeluaran service
-                $partsToko = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
-                    ->where('detail_part_services.kode_services', $service->id)
-                    ->select(
-                        'spareparts.harga_beli',
-                        'detail_part_services.qty_part',
-                        'detail_part_services.detail_harga_part_service'
-                    )
-                    ->get();
-
-                foreach ($partsToko as $part) {
-                    // Untuk SERVICE: pengeluaran = harga jual part
-                    $partExpense = $part->detail_harga_part_service * $part->qty_part;
-                    $totalPartsExpense += $partExpense;
-
-                    // Untuk PENJUALAN INTERNAL: hitung profit part toko
-                    $partModal = $part->harga_beli * $part->qty_part;
-                    $partProfit = $partExpense - $partModal;
-                    $totalPartTokoProfit += $partProfit;
-
-                    // NEW: Tambahkan ke total part toko yang belum dibayar fisik
-                    $totalPartTokoNotPaidPhysically += $partExpense;
-                }
-
-                // Parts dari luar - tetap gunakan harga penuh
-                $partsLuar = DetailPartLuarService::where('kode_services', $service->id)->get();
-                foreach ($partsLuar as $part) {
-                    $totalPartsExpense += ($part->harga_part * $part->qty_part);
-                }
-
-                // SERVICE PROFIT = Total Biaya Service - Total Pengeluaran Parts
-                $serviceProfit = $service->total_biaya - $totalPartsExpense;
-                $totalServiceProfit += $serviceProfit;
-
-                // Debug log untuk service yang rugi
-                if ($serviceProfit < 0) {
-                    Log::warning('Service Rugi Detected', [
-                        'kode_service' => $service->kode_service,
-                        'total_biaya' => $service->total_biaya,
-                        'total_parts_expense' => $totalPartsExpense,
-                        'profit_loss' => $serviceProfit
-                    ]);
-                }
-            }
-
-            // 2. DP SERVICE (Cash In)
-            $serviceDpData = Sevices::where('kode_owner', $kode_owner)
+                ->sum(DB::raw('total_biaya - dp'));
+                
+            $totalCashInDP = Sevices::where('kode_owner', $kode_owner)
                 ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->get();
+                ->sum('dp');
 
-            foreach ($serviceDpData as $service) {
-                $totalCashInDP += $service->dp;
-            }
+            $totalCashInSales = Penjualan::where('kode_owner', $kode_owner)
+                ->where('status_penjualan', '1')
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                ->sum('total_penjualan');
 
-            // 3. SALES PROFIT CALCULATION (Penjualan Eksternal)
-            $salesData = DetailSparepartPenjualan::join('penjualans', 'detail_sparepart_penjualans.kode_penjualan', '=', 'penjualans.id')
-                ->where('penjualans.kode_owner', $kode_owner)
-                ->where('penjualans.status_penjualan', '1')
-                ->whereBetween('penjualans.created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->get();
-
-            foreach ($salesData as $item) {
-                $salesAmount = $item->detail_harga_jual * $item->qty_sparepart;
-                $salesModal = $item->detail_harga_modal * $item->qty_sparepart;
-
-                $totalCashInSales += $salesAmount;
-                $totalSalesProfit += ($salesAmount - $salesModal);
-            }
-
-            // Sales Barang
-            $salesBarangData = DetailBarangPenjualan::join('penjualans', 'detail_barang_penjualans.kode_penjualan', '=', 'penjualans.id')
-                ->where('penjualans.kode_owner', $kode_owner)
-                ->where('penjualans.status_penjualan', '1')
-                ->whereBetween('penjualans.created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->get();
-
-            foreach ($salesBarangData as $item) {
-                $salesAmount = $item->detail_harga_jual * $item->qty_barang;
-                $salesModal = $item->detail_harga_beli * $item->qty_barang;
-
-                $totalCashInSales += $salesAmount;
-                $totalSalesProfit += ($salesAmount - $salesModal);
-            }
-
-            // 4. PEMASUKKAN LAIN
             $totalCashInOther = PemasukkanLain::where('kode_owner', $kode_owner)
                 ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
                 ->sum('jumlah_pemasukkan');
 
-            // 5. CASH OUT - PARTS (untuk cash flow menggunakan harga jual)
-            $totalCashOutPartsToko = DetailPartServices::join('sevices', 'detail_part_services.kode_services', '=', 'sevices.id')
-                ->where('sevices.kode_owner', $kode_owner)
-                ->where('sevices.status_services', 'Diambil')
-                ->whereBetween('sevices.updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('detail_part_services.detail_harga_part_service');
+            $totalCashIn = $totalCashInService + $totalCashInDP + $totalCashInSales + $totalCashInOther;
 
-            $totalCashOutPartsLuar = DetailPartLuarService::join('sevices', 'detail_part_luar_services.kode_services', '=', 'sevices.id')
-                ->where('sevices.kode_owner', $kode_owner)
-                ->where('sevices.status_services', 'Diambil')
-                ->whereBetween('sevices.updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum(DB::raw('detail_part_luar_services.harga_part * detail_part_luar_services.qty_part'));
-
-            $totalCashOutParts = $totalCashOutPartsToko + $totalCashOutPartsLuar;
-
-            // 6. CASH OUT - LAINNYA
+            // Cash Out
             $totalCashOutStore = PengeluaranToko::where('kode_owner', $kode_owner)
                 ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
                 ->sum('jumlah_pengeluaran');
@@ -209,132 +113,120 @@ class FinancialReportApiController extends Controller
                 ->where('status_penarikan', '1')
                 ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
                 ->sum('jumlah_penarikan');
+            
+            // NEW: Pembelian Stok (Tunai)
+            // Status pembayaran 'Lunas' berarti bayar tunai/transfer saat pembelian
+            // updated_at digunakan karena mencerminkan waktu finalize
+            $totalPembelianTunai = Pembelian::where('kode_owner', $kode_owner)
+                ->where('status', 'selesai')
+                ->where('metode_pembayaran', '!=', 'Hutang')
+                ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                ->sum('total_harga');
 
-            // ==============================================
-            // FINAL CALCULATIONS
-            // ==============================================
+            // NEW: Pembayaran Hutang
+            // Hutang yang statusnya 'Lunas' dan dibayar dalam periode ini
+            $totalBayarHutang = Hutang::where('kode_owner', $kode_owner)
+                ->where('status', 'Lunas')
+                ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                ->sum('total_hutang');
+            
+            // Parts cash out approximation (This logic might overlap with Pembelian if not careful, 
+            // but usually this tracks "COGS Cash Flow" if stock wasn't tracked. 
+            // Since we now track Stock Purchase as Cash Out, do we remove this?
+            // NO. The user previously had this. 
+            // WAIT. If we count "Pembelian Stok" as cash out, and "Part Cost" as cash out, we are double counting?
+            // "Pembelian Stok" is when we BUY from supplier.
+            // "Part Cost" in Service is when we SELL/USE the part. This is NOT a cash outflow at that moment (it was outflow when bought).
+            // SO, for CASH FLOW report, "Part Cost" should NOT be here if we are tracking "Pembelian".
+            // HOWEVER, previous logic used "Part Cost" as a proxy for expense because "Pembelian" wasn't tracked.
+            // DECISION: To be accurate for CASH FLOW, we should use 'Pembelian' (money out) and remove 'Part Cost' (inventory usage).
+            // BUT, to avoid confusing the user with a sudden drop in expenses if they don't do 'Pembelian' correctly yet,
+            // I will KEEP 'Part Cost' BUT label it clearly or maybe better:
+            // "Arus Kas" should be real money out. Real money out is Pembelian. Usage of part is Inventory -> COGS (Profit/Loss).
+            // Let's replace "Part Cost" with "Pembelian" & "Bayar Hutang" for the CASH OUT section.
+            // But wait, "Part Luar" (bought specifically for service) IS a cash out at that moment usually.
+            
+            // Let's refine:
+            // Part Toko: Bought via Pembelian (Stock). Cash out happens at Pembelian. Usage is not cash out.
+            // Part Luar: Bought ad-hoc. Usually cash out immediately.
+            
+            // So:
+            // Cash Out = Pengeluaran Toko + Ops + Penarikan + Pembelian Stok + Bayar Hutang + Part Luar (Direct Purchase).
+            // Part Toko usage should NOT be in Cash Flow (it's in Profit/Loss as COGS).
+            
+            $totalCashOutPartsLuar = DetailPartLuarService::join('sevices', 'detail_part_luar_services.kode_services', '=', 'sevices.id')
+                ->where('sevices.kode_owner', $kode_owner)
+                ->where('sevices.status_services', 'Diambil')
+                ->whereBetween('sevices.updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                ->sum(DB::raw('detail_part_luar_services.harga_part * detail_part_luar_services.qty_part'));
+            
+            // Total Cash Out Updated
+            $totalCashOut = $totalCashOutStore + 
+                           $totalCashOutOperational + 
+                           $totalCashOutWithdrawal + 
+                           $totalPembelianTunai + 
+                           $totalBayarHutang + 
+                           $totalCashOutPartsLuar;
 
-            // CASH FLOW
-            $totalCashIn = $totalCashInService + $totalCashInDP + $totalCashInSales + $totalCashInOther;
-            $totalCashOut = $totalCashOutParts + $totalCashOutStore + $totalCashOutOperational + $totalCashOutWithdrawal;
             $netCashFlow = $totalCashIn - $totalCashOut;
+            $uangRealDiLaci = $totalCashIn - $totalCashOutWithdrawal; // Withdrawal is taken from laci usually
 
-            // NEW: UANG REAL DI LACI = Saldo Kas - Part Toko yang belum dibayar fisik
-            $uangRealDiLaci = $totalCashIn - $totalCashOutWithdrawal;
-
-            // PROFIT ANALYSIS
-            // Total profit penjualan = penjualan eksternal + penjualan internal (part toko)
-            $totalPenjualanProfit = $totalSalesProfit + $totalPartTokoProfit;
-
-            $totalGrossProfit = $totalServiceProfit + $totalPenjualanProfit ;
-            $totalOperatingExpenses = $totalCashOutStore + $totalCashOutOperational;
-
-            $netBusinessProfit = $totalGrossProfit ;
-
-            // Hitung statistik part toko
-            $totalPartTokoSales = DetailPartServices::join('sevices', 'detail_part_services.kode_services', '=', 'sevices.id')
-                ->where('sevices.kode_owner', $kode_owner)
-                ->where('sevices.status_services', 'Diambil')
-                ->whereBetween('sevices.updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('detail_part_services.detail_harga_part_service');
-
-            $totalPartTokoModal = DetailPartServices::join('sevices', 'detail_part_services.kode_services', '=', 'sevices.id')
-                ->join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
-                ->where('sevices.kode_owner', $kode_owner)
-                ->where('sevices.status_services', 'Diambil')
-                ->whereBetween('sevices.updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum(DB::raw('spareparts.harga_beli * detail_part_services.qty_part'));
-
-            $persentaseMarginPartToko = $totalPartTokoSales > 0 ?
-                ($totalPartTokoProfit / $totalPartTokoSales) * 100 : 0;
-
-            // Hitung jumlah service yang rugi (dengan perhitungan yang benar)
-            $serviceRugiCount = Sevices::where('kode_owner', $kode_owner)
+             // 3. Service Stats
+            $serviceStats = Sevices::where('kode_owner', $kode_owner)
                 ->where('status_services', 'Diambil')
                 ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->get()
-                ->filter(function($service) {
-                    $totalPartsExpense = 0;
-
-                    // Hitung pengeluaran parts (harga jual)
-                    $partsToko = DetailPartServices::where('kode_services', $service->id)->get();
-                    foreach ($partsToko as $part) {
-                        $totalPartsExpense += $part->detail_harga_part_service;
-                    }
-
-                    $partsLuar = DetailPartLuarService::where('kode_services', $service->id)->get();
-                    foreach ($partsLuar as $part) {
-                        $totalPartsExpense += ($part->harga_part * $part->qty_part);
-                    }
-
-                    return ($service->total_biaya - $totalPartsExpense) < 0;
-                })->count();
-
-            // Response data
+                ->selectRaw('COUNT(*) as total, SUM(CASE WHEN total_biaya < 0 THEN 1 ELSE 0 END) as rugi_count')
+                ->first();
+            
+            // Response data structure mapping
             $reportData = [
                 // CASH FLOW
                 'total_pendapatan' => $totalCashIn,
                 'total_pengeluaran' => $totalCashOut,
                 'saldo_kas' => $netCashFlow,
-
-                // NEW: UANG REAL DI LACI
                 'uang_real_di_laci' => $uangRealDiLaci,
-                'part_toko_belum_dibayar' => $totalPartTokoNotPaidPhysically,
+                'part_toko_belum_dibayar' => 0,
 
                 // CASH FLOW DETAIL
                 'total_pendapatan_service' => $totalCashInService,
                 'dp_service' => $totalCashInDP,
                 'total_penjualan' => $totalCashInSales,
                 'total_pemasukkan_lain' => $totalCashInOther,
-                'total_part_service' => $totalCashOutParts,
+                
+                // Expenses Breakdown
                 'total_pengeluaran_toko' => $totalCashOutStore,
                 'total_pengeluaran_operasional' => $totalCashOutOperational,
                 'total_penarikan' => $totalCashOutWithdrawal,
+                'total_pembelian_tunai' => $totalPembelianTunai, // NEW
+                'total_bayar_hutang' => $totalBayarHutang, // NEW
+                'total_part_luar' => $totalCashOutPartsLuar, // NEW (Replacing total_part_service mix)
+                
+                // Legacy field for compatibility (optional, maybe keep it but 0 or accurate?)
+                // 'total_part_service' => $totalCashOutPartsLuar, 
 
-                // PROFIT ANALYSIS (YANG BENAR)
-                'laba_service' => $totalServiceProfit,
-                'laba_penjualan' => $totalPenjualanProfit, // Eksternal + Internal (part toko)
-                'laba_penjualan_eksternal' => $totalSalesProfit, // Penjualan biasa
-                'laba_penjualan_internal' => $totalPartTokoProfit, // Part toko ke service
-                'total_laba_kotor' => $totalGrossProfit,
-                'total_beban_operasional' => $totalOperatingExpenses,
-                'laba_bersih_bisnis' => $netBusinessProfit,
-
-                // ANALISIS PART TOKO (PENJUALAN INTERNAL)
-                'analisis_part_toko' => [
-                    'total_penjualan_part_toko' => $totalPartTokoSales,
-                    'total_modal_part_toko' => $totalPartTokoModal,
-                    'total_margin_part_toko' => $totalPartTokoProfit,
-                    'persentase_margin_part_toko' => $persentaseMarginPartToko,
-                ],
+                // PROFIT ANALYSIS (FROM TRAIT - ACCURATE)
+                'laba_service' => 0, // Combined in laba_kotor now
+                'laba_penjualan' => 0, // Combined in laba_kotor now
+                'total_laba_kotor' => $profitData['laba_kotor'],
+                'total_beban_operasional' => $profitData['total_beban'],
+                'laba_bersih_bisnis' => $profitData['laba_bersih'],
+                'detail_beban' => $profitData['detail_beban'],
 
                 // ANALISIS TAMBAHAN
-                'service_rugi_count' => $serviceRugiCount,
-                'service_profit_count' => $serviceData->count() - $serviceRugiCount,
-                'average_service_profit' => $serviceData->count() > 0 ? $totalServiceProfit / $serviceData->count() : 0,
-
+                'service_rugi_count' => $serviceStats->rugi_count ?? 0,
+                'service_profit_count' => ($serviceStats->total ?? 0) - ($serviceStats->rugi_count ?? 0),
+                'analisis_part_toko' => [], // Deprecated
+                
                 // BACKWARD COMPATIBILITY
-                'laba_bersih' => $netCashFlow,
+                'laba_bersih' => $profitData['laba_bersih'], 
 
                 // META
                 'periode' => [
                     'tgl_awal' => $tgl_awal,
                     'tgl_akhir' => $tgl_akhir,
-                    'jumlah_hari' => Carbon::parse($tgl_awal)->diffInDays(Carbon::parse($tgl_akhir)) + 1
+                    'jumlah_hari' => $profitData['jumlah_hari_periode']
                 ]
             ];
-
-            Log::info('Financial Report with Real Cash Calculation', [
-                'user_id' => auth()->user()->id,
-                'total_service_profit' => $totalServiceProfit,
-                'total_sales_profit_external' => $totalSalesProfit,
-                'total_sales_profit_internal' => $totalPartTokoProfit,
-                'service_rugi_count' => $serviceRugiCount,
-                'net_cash_flow' => $netCashFlow,
-                'uang_real_di_laci' => $uangRealDiLaci,
-                'part_toko_belum_dibayar' => $totalPartTokoNotPaidPhysically,
-                'net_business_profit' => $netBusinessProfit
-            ]);
 
             return response()->json([
                 'success' => true,
@@ -345,16 +237,115 @@ class FinancialReportApiController extends Controller
         } catch (\Exception $e) {
             Log::error('Financial Report Error', [
                 'user_id' => auth()->user()->id ?? null,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'error' => $e->getMessage()
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Get financial summary for dashboard
+     * REFACTORED: Uses the same logic as Admin Dashboard (POSY style)
+     */
+    public function getFinancialSummary(Request $request)
+    {
+        try {
+            $kode_owner = $this->getThisUser()->id_upline;
+            $today = Carbon::today()->format('Y-m-d');
+            
+            $stats = $this->_getDashboardStats($kode_owner, $today);
+
+            // Add extra info for mobile dashboard
+            $stats['recent_completed_services'] = Sevices::where('kode_owner', $kode_owner)
+                ->where('status_services', 'Diambil')
+                ->orderBy('updated_at', 'desc')
+                ->take(5)
+                ->select('kode_service', 'nama_pelanggan', 'total_biaya', 'updated_at')
+                ->get();
+
+            $stats['pending_services_count'] = Sevices::where('kode_owner', $kode_owner)
+                ->whereIn('status_services', ['Antri', 'Proses'])
+                ->count();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Ringkasan keuangan berhasil diambil',
+                'data' => $stats
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Private helper to calculate dashboard stats (Revenue, Assets, Capital, Profit)
+     * Matches Admin\FinancialController logic exactly.
+     */
+    private function _getDashboardStats(int $ownerId, string $date): array
+    {
+        // 1. Profit Summary (Operational)
+        $labaResult = $this->calculateNetProfit($ownerId, $date, $date);
+        
+        $totalRevenue = $labaResult['laba_kotor'] + ($labaResult['detail_beban']['HPP (Modal Pokok Penjualan)'] ?? 0);
+        
+        $operatingExpenses = ($labaResult['detail_beban']['Biaya Operasional Insidental'] ?? 0) 
+                             + ($labaResult['detail_beban']['Biaya Komisi Teknisi'] ?? 0)
+                             + ($labaResult['detail_beban']['Beban Tetap Periodik'] ?? 0);
+                             
+        $depreciation = $labaResult['detail_beban']['Beban Penyusutan Aset'] ?? 0;
+        $netProfit = $labaResult['laba_bersih'];
+
+        // 2. Inventory Value (ASSET)
+        $nilaiSparepart = Sparepart::where('kode_owner', $ownerId)->sum(DB::raw('stok_sparepart * harga_beli'));
+        $nilaiHandphone = Handphone::where('kode_owner', $ownerId)->sum(DB::raw('stok_barang * harga_beli_barang'));
+        $inventoryValue = $nilaiSparepart + $nilaiHandphone;
+
+        // 3. Saldo Kas (ASSET) - Source of Truth: KasPerusahaan Ledger
+        $endDate = Carbon::parse($date)->endOfDay();
+        $saldoKas = KasPerusahaan::where('kode_owner', $ownerId)
+            ->where('tanggal', '<=', $endDate)
+            ->orderBy('tanggal', 'desc')->orderBy('id', 'desc')
+            ->first()->saldo ?? 0;
+
+        // 4. Modal Disetor (Paid In Capital)
+        $capitalIn = \App\Models\TransaksiModal::where('kode_owner', $ownerId)
+            ->whereIn('jenis_transaksi', ['setoran_awal', 'tambahan_modal'])
+            ->where('tanggal', '<=', $endDate)
+            ->sum('jumlah');
+
+        $capitalOut = \App\Models\TransaksiModal::where('kode_owner', $ownerId)
+            ->where('jenis_transaksi', 'penarikan_modal')
+            ->where('tanggal', '<=', $endDate)
+            ->sum('jumlah');
+            
+        $paidInCapital = $capitalIn - $capitalOut;
+
+        // 5. Total Asset
+        $asetTetap = Aset::where('kode_owner', $ownerId)
+             ->where('tanggal_perolehan', '<=', $endDate)
+             ->sum('nilai_perolehan');
+             
+        $totalAsset = $saldoKas + $inventoryValue + $asetTetap;
+
+        return [
+            'revenue' => $totalRevenue,
+            'expense' => $operatingExpenses + $depreciation,
+            'net_profit' => $netProfit,
+            'total_asset' => $totalAsset,
+            'paid_in_capital' => $paidInCapital,
+            'cash_balance' => $saldoKas,
+            'inventory_value' => $inventoryValue,
+            'fixed_assets' => $asetTetap,
+            'generated_at' => Carbon::now()->toISOString()
+        ];
     }
 
     /**
@@ -513,7 +504,7 @@ class FinancialReportApiController extends Controller
             $request->validate([
                 'tgl_awal' => 'required|date',
                 'tgl_akhir' => 'required|date|after_or_equal:tgl_awal',
-                'type' => 'required|in:service,penjualan,pemasukkan_lain,pengeluaran,penarikan,part_service,pengeluaran_toko,pengeluaran_operasional'
+                'type' => 'required|in:service,penjualan,pemasukkan_lain,pengeluaran,penarikan,part_service,pengeluaran_toko,pengeluaran_operasional,pembelian_tunai,pembayaran_hutang'
             ]);
 
             $tgl_awal = $request->tgl_awal;
@@ -569,6 +560,38 @@ class FinancialReportApiController extends Controller
                         ->map(function ($item) {
                             $item->type = 'Pengeluaran Operasional';
                             return $item;
+                        });
+                    break;
+
+                case 'pembelian_tunai':
+                     $data = Pembelian::where('kode_owner', $kode_owner)
+                        ->where('status', 'selesai')
+                        ->where('metode_pembayaran', '!=', 'Hutang')
+                        ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                        ->select('kode_pembelian as judul', 'supplier as catatan', 'total_harga as jumlah', 'updated_at as created_at')
+                        ->orderBy('updated_at', 'desc')
+                        ->get()
+                        ->map(function ($item) {
+                            $item->type = 'Pembelian Tunai';
+                            return $item;
+                        });
+                    break;
+                
+                case 'pembayaran_hutang':
+                     $data = Hutang::where('kode_owner', $kode_owner)
+                        ->where('status', 'Lunas')
+                        ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                        ->with('supplier')
+                        ->orderBy('updated_at', 'desc')
+                        ->get()
+                        ->map(function ($item) {
+                            return [
+                                'judul' => 'Bayar Hutang #' . $item->kode_nota,
+                                'catatan' => 'Supplier: ' . ($item->supplier->nama_supplier ?? '-'),
+                                'jumlah' => $item->total_hutang,
+                                'created_at' => $item->updated_at,
+                                'type' => 'Pembayaran Hutang'
+                            ];
                         });
                     break;
 
@@ -831,20 +854,16 @@ class FinancialReportApiController extends Controller
                     ->sum('jumlah_pemasukkan');
 
                 // Pengeluaran harian
-                $partExpense = DetailPartServices::join('sevices', 'detail_part_services.kode_services', '=', 'sevices.id')
-                    ->where('sevices.kode_owner', $kode_owner)
-                    ->where('sevices.status_services', 'Diambil')
-                    ->whereDate('sevices.updated_at', $dateStr)
-                    ->sum('detail_part_services.detail_harga_part_service');
-
+                // Part Luar Only for Cash Flow
                 $partLuarExpense = DetailPartLuarService::join('sevices', 'detail_part_luar_services.kode_services', '=', 'sevices.id')
                     ->where('sevices.kode_owner', $kode_owner)
                     ->where('sevices.status_services', 'Diambil')
                     ->whereDate('sevices.updated_at', $dateStr)
                     ->sum(DB::raw('detail_part_luar_services.harga_part * detail_part_luar_services.qty_part'));
 
-                $totalPartExpense = $partExpense + $partLuarExpense;
-
+                // Part Toko removed from cash flow daily, but if we want to keep backward compat, maybe not?
+                // No, let's align with getFinancialReport.
+                
                 $storeExpense = PengeluaranToko::where('kode_owner', $kode_owner)
                     ->whereDate('created_at', $dateStr)
                     ->sum('jumlah_pengeluaran');
@@ -857,10 +876,23 @@ class FinancialReportApiController extends Controller
                     ->where('status_penarikan', '1')
                     ->whereDate('created_at', $dateStr)
                     ->sum('jumlah_penarikan');
+                
+                // NEW: Pembelian Tunai
+                $purchaseExpense = Pembelian::where('kode_owner', $kode_owner)
+                    ->where('status', 'selesai')
+                    ->where('metode_pembayaran', '!=', 'Hutang')
+                    ->whereDate('updated_at', $dateStr)
+                    ->sum('total_harga');
+
+                // NEW: Bayar Hutang
+                $debtPaymentExpense = Hutang::where('kode_owner', $kode_owner)
+                    ->where('status', 'Lunas')
+                    ->whereDate('updated_at', $dateStr)
+                    ->sum('total_hutang');
 
                 $totalIncome = $serviceIncome + $dpIncome + $salesIncome + $otherIncome;
-                $totalExpense = $totalPartExpense + $storeExpense + $operationalExpense + $withdrawalExpense;
-                $netProfit = $totalIncome - $totalExpense;
+                $totalExpense = $partLuarExpense + $storeExpense + $operationalExpense + $withdrawalExpense + $purchaseExpense + $debtPaymentExpense;
+                $netProfit = $totalIncome - $totalExpense; // This is actually Net Cash Flow
 
                 // Hitung jumlah transaksi
                 $serviceCount = Sevices::where('kode_owner', $kode_owner)
@@ -885,13 +917,15 @@ class FinancialReportApiController extends Controller
                         'total' => (float) $totalIncome
                     ],
                     'expense' => [
-                        'parts' => (float) $totalPartExpense,
+                        'parts_luar' => (float) $partLuarExpense, // Renamed from parts
                         'store' => (float) $storeExpense,
                         'operational' => (float) $operationalExpense,
                         'withdrawal' => (float) $withdrawalExpense,
+                        'purchase' => (float) $purchaseExpense, // New
+                        'debt_payment' => (float) $debtPaymentExpense, // New
                         'total' => (float) $totalExpense
                     ],
-                    'net_profit' => (float) $netProfit,
+                    'net_profit' => (float) $netProfit, // Net Cash Flow
                     'transaction_count' => [
                         'service' => $serviceCount,
                         'sales' => $salesCount
@@ -944,154 +978,6 @@ class FinancialReportApiController extends Controller
                 'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
         }
-    }
-
-    /**
-     * Get financial summary for dashboard
-     */
-    public function getFinancialSummary(Request $request)
-    {
-        try {
-            $kode_owner = $this->getThisUser()->id_upline;
-            $today = Carbon::today();
-            $thisMonth = Carbon::now()->startOfMonth();
-            $thisYear = Carbon::now()->startOfYear();
-
-            // Summary hari ini
-            $todaySummary = $this->calculatePeriodSummary($kode_owner, $today, $today);
-
-            // Summary bulan ini
-            $monthSummary = $this->calculatePeriodSummary($kode_owner, $thisMonth, $today);
-
-            // Summary tahun ini
-            $yearSummary = $this->calculatePeriodSummary($kode_owner, $thisYear, $today);
-
-            // Top 5 service terbaru yang selesai
-            $recentCompletedServices = Sevices::where('kode_owner', $kode_owner)
-                ->where('status_services', 'Diambil')
-                ->orderBy('updated_at', 'desc')
-                ->take(5)
-                ->select('kode_service', 'nama_pelanggan', 'total_biaya', 'updated_at')
-                ->get();
-
-            // Pending services count
-            $pendingServicesCount = Sevices::where('kode_owner', $kode_owner)
-                ->whereIn('status_services', ['Antri', 'Proses'])
-                ->count();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Ringkasan keuangan berhasil diambil',
-                'data' => [
-                    'today' => $todaySummary,
-                    'this_month' => $monthSummary,
-                    'this_year' => $yearSummary,
-                    'recent_completed_services' => $recentCompletedServices,
-                    'pending_services_count' => $pendingServicesCount,
-                    'generated_at' => Carbon::now()->toISOString()
-                ]
-            ], 200);
-
-        } catch (\Exception $e) {
-            Log::error('Financial Summary Error', [
-                'user_id' => auth()->user()->id ?? null,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
-        }
-    }
-
-    /**
-     * Helper method to calculate period summary
-     */
-    private function calculatePeriodSummary($kode_owner, $startDate, $endDate)
-    {
-        $startDateStr = $startDate->format('Y-m-d') . ' 00:00:00';
-        $endDateStr = $endDate->format('Y-m-d') . ' 23:59:59';
-
-        // Pendapatan
-        $serviceIncome = Sevices::where('kode_owner', $kode_owner)
-            ->where('status_services', 'Diambil')
-            ->whereBetween('updated_at', [$startDateStr, $endDateStr])
-            ->sum(DB::raw('total_biaya - dp'));
-
-        $dpIncome = Sevices::where('kode_owner', $kode_owner)
-            ->whereBetween('created_at', [$startDateStr, $endDateStr])
-            ->sum('dp');
-
-        $salesIncome = Penjualan::where('kode_owner', $kode_owner)
-            ->where('status_penjualan', '1')
-            ->whereBetween('created_at', [$startDateStr, $endDateStr])
-            ->sum('total_penjualan');
-
-        $otherIncome = PemasukkanLain::where('kode_owner', $kode_owner)
-            ->whereBetween('created_at', [$startDateStr, $endDateStr])
-            ->sum('jumlah_pemasukkan');
-
-        // Pengeluaran
-        $partExpense = DetailPartServices::join('sevices', 'detail_part_services.kode_services', '=', 'sevices.id')
-            ->where('sevices.kode_owner', $kode_owner)
-            ->where('sevices.status_services', 'Diambil')
-            ->whereBetween('sevices.updated_at', [$startDateStr, $endDateStr])
-            ->sum('detail_part_services.detail_harga_part_service');
-
-        $partLuarExpense = DetailPartLuarService::join('sevices', 'detail_part_luar_services.kode_services', '=', 'sevices.id')
-            ->where('sevices.kode_owner', $kode_owner)
-            ->where('sevices.status_services', 'Diambil')
-            ->whereBetween('sevices.updated_at', [$startDateStr, $endDateStr])
-            ->sum(DB::raw('detail_part_luar_services.harga_part * detail_part_luar_services.qty_part'));
-
-        $storeExpense = PengeluaranToko::where('kode_owner', $kode_owner)
-            ->whereBetween('created_at', [$startDateStr, $endDateStr])
-            ->sum('jumlah_pengeluaran');
-
-        $operationalExpense = PengeluaranOperasional::where('kode_owner', $kode_owner)
-            ->whereBetween('created_at', [$startDateStr, $endDateStr])
-            ->sum('jml_pengeluaran');
-
-        $withdrawalExpense = Penarikan::where('kode_owner', $kode_owner)
-            ->where('status_penarikan', '1')
-            ->whereBetween('created_at', [$startDateStr, $endDateStr])
-            ->sum('jumlah_penarikan');
-
-        $totalIncome = $serviceIncome + $dpIncome + $salesIncome + $otherIncome;
-        $totalExpense = $partExpense + $partLuarExpense + $storeExpense + $operationalExpense + $withdrawalExpense;
-        $netProfit = $totalIncome - $totalExpense;
-
-        // Hitung jumlah transaksi
-        $serviceCount = Sevices::where('kode_owner', $kode_owner)
-            ->where('status_services', 'Diambil')
-            ->whereBetween('updated_at', [$startDateStr, $endDateStr])
-            ->count();
-
-        $salesCount = Penjualan::where('kode_owner', $kode_owner)
-            ->where('status_penjualan', '1')
-            ->whereBetween('created_at', [$startDateStr, $endDateStr])
-            ->count();
-
-        return [
-            'total_income' => (float) $totalIncome,
-            'total_expense' => (float) $totalExpense,
-            'net_profit' => (float) $netProfit,
-            'service_income' => (float) $serviceIncome,
-            'dp_income' => (float) $dpIncome,
-            'sales_income' => (float) $salesIncome,
-            'other_income' => (float) $otherIncome,
-            'part_expense' => (float) ($partExpense + $partLuarExpense),
-            'store_expense' => (float) $storeExpense,
-            'operational_expense' => (float) $operationalExpense,
-            'withdrawal_expense' => (float) $withdrawalExpense,
-            'transaction_count' => [
-                'service' => $serviceCount,
-                'sales' => $salesCount
-            ]
-        ];
     }
 
     /**
@@ -1605,55 +1491,6 @@ class FinancialReportApiController extends Controller
             ->get();
     }
 
-    // private function calculateDeviceComparison($period1Data, $period2Data)
-    // {
-    //     $comparison = [];
-
-    //     // Create lookup for period2 data
-    //     $period2Lookup = [];
-    //     foreach ($period2Data as $item) {
-    //         $period2Lookup[$item->type_unit] = $item;
-    //     }
-
-    //     // Calculate comparisons
-    //     foreach ($period1Data as $item1) {
-    //         $deviceType = $item1->type_unit;
-    //         $item2 = $period2Lookup[$deviceType] ?? null;
-
-    //         $comparison[$deviceType] = [
-    //             'device_type' => $deviceType,
-    //             'period1' => [
-    //                 'services' => $item1->total_services,
-    //                 'revenue' => $item1->total_revenue,
-    //                 'avg_revenue' => round($item1->avg_revenue, 2)
-    //             ],
-    //             'period2' => [
-    //                 'services' => $item2 ? $item2->total_services : 0,
-    //                 'revenue' => $item2 ? $item2->total_revenue : 0,
-    //                 'avg_revenue' => $item2 ? round($item2->avg_revenue, 2) : 0
-    //             ]
-    //         ];
-
-    //         // Calculate percentage changes
-    //         $comparison[$deviceType]['changes'] = [
-    //             'services_change' => $this->calculatePercentageChange(
-    //                 $item2 ? $item2->total_services : 0,
-    //                 $item1->total_services
-    //             ),
-    //             'revenue_change' => $this->calculatePercentageChange(
-    //                 $item2 ? $item2->total_revenue : 0,
-    //                 $item1->total_revenue
-    //             ),
-    //             'avg_revenue_change' => $this->calculatePercentageChange(
-    //                 $item2 ? $item2->avg_revenue : 0,
-    //                 $item1->avg_revenue
-    //             )
-    //         ];
-    //     }
-
-    //     return array_values($comparison);
-    // }
-
     private function calculateDeviceComparison($period1Data, $period2Data)
     {
         $comparison = [];
@@ -1680,23 +1517,21 @@ class FinancialReportApiController extends Controller
                     'services' => $item2 ? $item2->total_services : 0,
                     'revenue' => $item2 ? $item2->total_revenue : 0,
                     'avg_revenue' => $item2 ? round($item2->avg_revenue, 2) : 0
+                ],
+                'changes' => [
+                    'services_change' => $this->calculatePercentageChange(
+                        $item1->total_services,
+                        $item2 ? $item2->total_services : 0
+                    ),
+                    'revenue_change' => $this->calculatePercentageChange(
+                        $item1->total_revenue,
+                        $item2 ? $item2->total_revenue : 0
+                    ),
+                    'avg_revenue_change' => $this->calculatePercentageChange(
+                        $item1->avg_revenue,
+                        $item2 ? $item2->avg_revenue : 0
+                    )
                 ]
-            ];
-
-            // Calculate percentage changes
-            $comparison[$deviceType]['changes'] = [
-                'services_change' => $this->calculatePercentageChange(
-                    $item1->total_services,
-                    $item2 ? $item2->total_services : 0
-                ),
-                'revenue_change' => $this->calculatePercentageChange(
-                    $item1->total_revenue,
-                    $item2 ? $item2->total_revenue : 0
-                ),
-                'avg_revenue_change' => $this->calculatePercentageChange(
-                    $item1->avg_revenue,
-                    $item2 ? $item2->avg_revenue : 0
-                )
             ];
         }
 
@@ -1978,6 +1813,7 @@ class FinancialReportApiController extends Controller
                     'sevices.no_wa_pelanggan',
                     'sevices.tgl_service as completed_at', // Use tgl_service
                     'users.name as technician_name',
+                    'users.id as technician_id',
                     DB::raw('DATEDIFF(NOW(), sevices.tgl_service) as days_since_completion') // Use tgl_service
                 ])
                 ->orderByDesc('days_since_completion')
@@ -2485,7 +2321,8 @@ class FinancialReportApiController extends Controller
             }
 
             // 2. Hitung Laba Bersih
-            $labaResult = $this->_calculateNetProfit($kode_owner, $tgl_awal, $tgl_akhir);
+            // Use Service method
+            $labaResult = $this->financialService->calculateNetProfit($kode_owner, $tgl_awal, $tgl_akhir);
             $labaBersih = $labaResult['laba_bersih'];
 
             // 3. Siapkan data response
@@ -2506,7 +2343,7 @@ class FinancialReportApiController extends Controller
                     'status_distribusi' => $statusDistribusi,
                     'tanggal_distribusi' => $tanggalDistribusi,
                     'laba_kotor' => $labaResult['laba_kotor'],
-                    'beban_details' => $labaResult['beban'],
+                    'beban_details' => $labaResult['detail_beban'], // Adjusted key from Trait
                     'laba_bersih' => $labaBersih,
                     'is_distributable' => $labaBersih > 0,
                     'potensi_alokasi' => $potensiAlokasi,
@@ -2546,7 +2383,8 @@ class FinancialReportApiController extends Controller
 
 
             // 2. Hitung Laba Bersih
-            $labaResult = $this->_calculateNetProfit($kode_owner, $request->tgl_awal, $request->tgl_akhir);
+            // Use Service method
+            $labaResult = $this->financialService->calculateNetProfit($kode_owner, $request->tgl_awal, $request->tgl_akhir);
             $labaBersih = $labaResult['laba_bersih'];
 
             if ($labaBersih <= 0) {
@@ -2600,91 +2438,6 @@ class FinancialReportApiController extends Controller
             return response()->json(['success' => false, 'message' => 'Terjadi kesalahan: ' . $e->getMessage()], 500);
         }
     }
-
-    // 👇 FUNGSI PRIVATE HELPER UNTUK MENGHITUNG LABA BERSIH (Adaptasi dari DistribusiLabaController)
-    private function _calculateNetProfit($kode_owner, $tanggalMulai, $tanggalSelesai)
-{
-    $startRange = Carbon::parse($tanggalMulai)->startOfDay();
-    $endRange = Carbon::parse($tanggalSelesai)->endOfDay();
-
-    // A.1 & A.2: Perhitungan Pendapatan (Sudah Benar)
-    $totalPendapatanPenjualan = Penjualan::where('kode_owner', $kode_owner)
-        ->where('status_penjualan', '1')->whereBetween('updated_at', [$startRange, $endRange])->sum('total_penjualan');
-    $totalPendapatanService = Sevices::where('kode_owner', $kode_owner)
-        ->where('status_services', 'Diambil')->whereBetween('updated_at', [$startRange, $endRange])->sum('total_biaya');
-    $totalPendapatan = $totalPendapatanPenjualan + $totalPendapatanService;
-
-    // B.1 & B.2: Perhitungan HPP (Sudah Benar)
-    $penjualanIds = Penjualan::where('kode_owner', $kode_owner)->where('status_penjualan', '1')
-        ->whereBetween('updated_at', [$startRange, $endRange])->pluck('id');
-    $hppSparepartJual = DetailSparepartPenjualan::whereIn('kode_penjualan', $penjualanIds)->sum(DB::raw('detail_harga_modal * qty_sparepart'));
-    $hppBarangJual = DetailBarangPenjualan::whereIn('kode_penjualan', $penjualanIds)->sum(DB::raw('detail_harga_modal * qty_barang'));
-    $serviceIdsDiambil = Sevices::where('kode_owner', $kode_owner)->where('status_services', 'Diambil')
-        ->whereBetween('updated_at', [$startRange, $endRange])->pluck('id');
-    $hppPartTokoService = DetailPartServices::whereIn('kode_services', $serviceIdsDiambil)->sum(DB::raw('detail_modal_part_service * qty_part'));
-    $hppPartLuarService = DetailPartLuarService::whereIn('kode_services', $serviceIdsDiambil)->sum(DB::raw('harga_part * qty_part'));
-    $totalHpp = $hppSparepartJual + $hppBarangJual + $hppPartTokoService + $hppPartLuarService;
-
-    // C. Hitung Laba Kotor (Sudah Benar)
-    $labaKotor = $totalPendapatan - $totalHpp;
-
-
-    // D.1 & D.2: Biaya Variabel (Sudah Benar)
-    $biayaOperasionalInsidental = PengeluaranToko::where('kode_owner', $kode_owner)
-        ->whereBetween('tanggal_pengeluaran', [$startRange, $endRange])
-        ->sum('jumlah_pengeluaran');
-    $serviceIdsSelesai = Sevices::where('kode_owner', $kode_owner)->whereIn('status_services', ['Selesai', 'Diambil'])
-        ->whereBetween('tgl_service', [$startRange, $endRange])->pluck('id');
-    $biayaKomisi = ProfitPresentase::whereIn('kode_service', $serviceIdsSelesai)->sum('profit');
-
-
-    // ======================================================================
-    //          燥 BLOK PERHITUNGAN BEBAN TETAP YANG DIPERBARUI 燥
-    // ======================================================================
-    $jumlahHariPeriode = $startRange->diffInDays($endRange) + 1;
-
-    // 🌟 PENAMBAHAN: PERHITUNGAN BEBAN GAJI TETAP 🌟
-    $userIds = \App\Models\UserDetail::where('id_upline', $kode_owner)->pluck('kode_user');
-    $totalGajiTetapBulanan = \App\Models\SalarySetting::whereIn('user_id', $userIds)
-        ->where('compensation_type', 'fixed')
-        ->sum('basic_salary');
-    $bebanGajiHarian = ($startRange->daysInMonth > 0) ? $totalGajiTetapBulanan / $startRange->daysInMonth : 0;
-    $bebanGajiTetapPeriodik = $bebanGajiHarian * $jumlahHariPeriode;
-
-    // E.1 Beban dari Aset Tetap (Penyusutan) - Sudah Benar
-    $totalPenyusutanBulanan = Aset::where('kode_owner', $kode_owner)->sum(DB::raw('(nilai_perolehan - nilai_residu) / masa_manfaat_bulan'));
-    $bebanPenyusutanHarian = ($startRange->daysInMonth > 0) ? $totalPenyusutanBulanan / $startRange->daysInMonth : 0;
-    $bebanPenyusutanPeriodik = $bebanPenyusutanHarian * $jumlahHariPeriode;
-
-    // E.2 Beban dari Operasional Tetap (Bulanan & Tahunan) - Logika Baru
-    $totalBebanBulanan = BebanOperasional::where('kode_owner', $kode_owner)
-        ->where('periode', 'bulanan')->sum('nominal');
-    $totalBebanTahunan = BebanOperasional::where('kode_owner', $kode_owner)
-        ->where('periode', 'tahunan')->sum('nominal');
-
-    $bebanHarianDariBulanan = ($startRange->daysInMonth > 0) ? $totalBebanBulanan / $startRange->daysInMonth : 0;
-    $bebanHarianDariTahunan = ($startRange->daysInYear > 0) ? $totalBebanTahunan / $startRange->daysInYear : 0;
-
-    $totalBebanTetapHarian = $bebanHarianDariBulanan + $bebanHarianDariTahunan;
-    $bebanTetapPeriodik = $totalBebanTetapHarian * $jumlahHariPeriode;
-    // ======================================================================
-
-    // F. Hitung Laba Bersih Final
-    $labaBersih = $labaKotor - $biayaOperasionalInsidental - $biayaKomisi - $bebanPenyusutanPeriodik - $bebanTetapPeriodik;
-
-    return [
-        'laba_bersih' => $labaBersih,
-        'laba_kotor' => $labaKotor,
-        'beban' => [
-            'HPP (Modal Pokok Penjualan)' => $totalHpp,
-            'Biaya Operasional Insidental' => $biayaOperasionalInsidental,
-            'Biaya Komisi Teknisi' => $biayaKomisi,
-            'Beban Gaji Tetap' => $bebanGajiTetapPeriodik,
-            'Beban Penyusutan Aset' => $bebanPenyusutanPeriodik,
-            'Beban Tetap Periodik' => $bebanTetapPeriodik, // Menggunakan nama variabel yang sudah ada
-        ]
-    ];
-}
 
     public function getAllocationBalances(Request $request)
     {

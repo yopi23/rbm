@@ -32,6 +32,7 @@ class Sevices extends Model
         'claimed_from_service_id',
         'status_services',
         'kode_owner',
+        'shift_id',
     ];
 
     public function teknisi()

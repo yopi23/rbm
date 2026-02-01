@@ -23,7 +23,9 @@ use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\Penarikan;
 use App\Models\Laci;
+use App\Models\Shift; // Import Shift
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth; // Import Auth
 use Illuminate\Support\Facades\Http;
 use App\Traits\KategoriLaciTrait;
 use App\Traits\ManajemenKasTrait;
@@ -315,6 +317,14 @@ class DashboardController extends Controller
             if ($existingService) {
                 return redirect()->back()->with('error', 'Kode Service sudah ada, pilih kode yang berbeda.');
             }
+
+            // Get Active Shift
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(Auth::id());
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+
             $create = modelServices::create([
                 'kode_service' => $request->kode_service,
                 'tgl_service' => $request->tgl_service,
@@ -325,7 +335,8 @@ class DashboardController extends Controller
                 'total_biaya' => $request->biaya_servis,
                 'dp' => $request->dp,
                 'status_services' => 'Antri',
-                'kode_owner' => $this->getThisUser()->id_upline
+                'kode_owner' => $this->getThisUser()->id_upline,
+                'shift_id' => $shiftId,
             ]);
 
             if ($create) {
@@ -364,10 +375,23 @@ class DashboardController extends Controller
                                 'qty_part' => $request['qty_kode_sparepart'][$i],
                                 'user_input' => auth()->user()->id,
                             ]);
-                            $stok_baru = $update_sparepart->stok_sparepart - $request['qty_kode_sparepart'][$i];
+                            $stok_awal = $update_sparepart->stok_sparepart;
+                            $stok_baru = $stok_awal - $request['qty_kode_sparepart'][$i];
                             $update_sparepart->update([
                                 'stok_sparepart' => $stok_baru,
                             ]);
+
+                            // Log Stock History
+                            $this->logStockChange(
+                                $update_sparepart->id,
+                                -$request['qty_kode_sparepart'][$i], // Negative because used
+                                'service_use_initial',
+                                $data_service->id,
+                                'Part Service Initial: ' . $data_service->kode_service,
+                                auth()->user()->id,
+                                $stok_awal,
+                                $stok_baru
+                            );
                         }
                     }
                 }
@@ -689,6 +713,7 @@ class DashboardController extends Controller
                 'tipe_sandi' => $request->tipe_sandi,
                 'isi_sandi' => $request->isi_sandi,
                 'data_unit' => $request->data_unit,
+                'shift_id' => $shiftId,
             ]);
 
             // --- 5. Proses Spare Part (jika ada) ---

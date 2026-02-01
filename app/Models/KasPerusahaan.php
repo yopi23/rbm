@@ -22,6 +22,7 @@ class KasPerusahaan extends Model
         'debit',
         'kredit',
         'saldo',
+        'shift_id',
     ];
 
     /**
@@ -39,5 +40,10 @@ class KasPerusahaan extends Model
     public function owner()
     {
         return $this->belongsTo(User::class, 'kode_owner', 'id');
+    }
+
+    public function shift()
+    {
+        return $this->belongsTo(Shift::class);
     }
 }

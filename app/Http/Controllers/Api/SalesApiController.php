@@ -115,7 +115,8 @@ public function searchSuggestions(Request $request)
             $q->where(function ($nameQuery) use ($keywords, $normalizedNameColumn) {
                 foreach ($keywords as $keyword) {
                     // [[:<:]] dan [[:>:]] adalah penanda batas kata (whole word) di MySQL
-                    $pattern = '[[:<:]]' . preg_quote($keyword, '/') . '[[:>:]]';
+                    // FIX: MySQL 8.0.4+ uses \\b
+                    $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
                     $nameQuery->where($normalizedNameColumn, 'REGEXP', $pattern);
                 }
             });
@@ -123,7 +124,7 @@ public function searchSuggestions(Request $request)
             // KONDISI 2 (ATAU): SEMUA keyword ada di `attribute value`
             $q->orWhereHas('variants.attributeValues', function ($attrQuery) use ($keywords) {
                 foreach ($keywords as $keyword) {
-                    $pattern = '[[:<:]]' . preg_quote($keyword, '/') . '[[:>:]]';
+                    $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
                     $attrQuery->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
                 }
             });
@@ -332,7 +333,8 @@ public function search(Request $request)
             $q->where(function ($nameQuery) use ($keywords, $normalizedNameColumn) {
                 foreach ($keywords as $keyword) {
                     // [[:<:]] dan [[:>:]] adalah penanda batas kata di MySQL REGEXP
-                    $pattern = '[[:<:]]' . $keyword . '[[:>:]]';
+                    // FIX: MySQL 8.0.4+ uses \\b
+                    $pattern = '\\b' . $keyword . '\\b';
                     $nameQuery->where($normalizedNameColumn, 'REGEXP', $pattern);
                 }
             });
@@ -340,7 +342,7 @@ public function search(Request $request)
             // KONDISI 2 (ATAU): SEMUA keyword harus ada sebagai KATA UTUH di `attribute value`
             $q->orWhereHas('variants.attributeValues', function ($attrQuery) use ($keywords) {
                 foreach ($keywords as $keyword) {
-                    $pattern = '[[:<:]]' . $keyword . '[[:>:]]';
+                    $pattern = '\\b' . $keyword . '\\b';
                     $attrQuery->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
                 }
             });
@@ -923,6 +925,39 @@ public function search(Request $request)
                 'message' => 'Terjadi kesalahan saat menambahkan pemasukkan',
                 'error' => $e->getMessage(),
                 'data' => $request->all(),
+            ], 500);
+        }
+    }
+
+    public function listPemasukanLainApi(Request $request)
+    {
+        try {
+            $startDate = $request->query('start_date');
+            $endDate = $request->query('end_date');
+            $limit = $request->query('limit', 50);
+
+            $query = PemasukkanLain::where('kode_owner', $this->getThisUser()->id_upline);
+
+            if ($startDate && $endDate) {
+                $query->whereBetween('tgl_pemasukkan', [$startDate, $endDate]);
+            } elseif ($startDate) {
+                $query->where('tgl_pemasukkan', '>=', $startDate);
+            }
+
+            $pemasukan = $query->orderBy('tgl_pemasukkan', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->paginate($limit);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'List pemasukan berhasil diambil',
+                'data' => $pemasukan
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil data pemasukan',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

@@ -69,7 +69,7 @@ class ModalController extends Controller
             }
             if ($request->keterangan) $deskripsi .= ' - ' . $request->keterangan;
 
-            // $this->catatKas($modal, $debit, $kredit, $deskripsi, $request->tanggal);
+           $this->catatKas($modal, $debit, $kredit, $deskripsi, $request->tanggal);
             DB::commit();
             return redirect()->route('modal.index')->with('success', 'Transaksi modal berhasil dicatat.');
         } catch (\Exception $e) {
@@ -108,6 +108,19 @@ class ModalController extends Controller
             // Update juga entri kas terkait
             if ($transaksi->kas) {
                 $transaksi->kas->update(['tanggal' => $request->tanggal]);
+            } else {
+                // Jika belum ada di kas (misal data lama), buatkan sekarang
+                $debit = 0; $kredit = 0;
+                if (in_array($transaksi->jenis_transaksi, ['setoran_awal', 'tambahan_modal'])) {
+                    $debit = $transaksi->jumlah;
+                    $deskripsi = $transaksi->jenis_transaksi == 'setoran_awal' ? 'Setoran Modal Awal' : 'Tambahan Modal Usaha';
+                } else { // penarikan_modal
+                    $kredit = $transaksi->jumlah;
+                    $deskripsi = 'Penarikan Modal (Prive)';
+                }
+                if ($transaksi->keterangan) $deskripsi .= ' - ' . $transaksi->keterangan;
+
+                $this->catatKas($transaksi, $debit, $kredit, $deskripsi, $request->tanggal);
             }
 
             DB::commit();

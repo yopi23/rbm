@@ -10,17 +10,20 @@ use App\Models\Garansi;
 use App\Models\Handphone;
 use App\Models\Penjualan;
 use App\Models\Sparepart;
+use App\Models\Shift;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Redis;
 use App\Traits\KategoriLaciTrait;
 use App\Traits\ManajemenKasTrait;
+use App\Traits\StockHistoryTrait; // Added
 use PDO;
 
 class PenjualanController extends Controller
 {
     use KategoriLaciTrait;
     use ManajemenKasTrait;
+    use StockHistoryTrait; // Added
     //
     public function view_penjualan(Request $request)
     {
@@ -30,6 +33,13 @@ class PenjualanController extends Controller
         $data = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '=', '0']])->get()->first();
         $count = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline]])->get()->count();
         if (!$data) {
+            // Get Active Shift
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(auth()->user()->id);
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+
             $kode = 'TRX' . date('Ymd') . auth()->user()->id . $count;
             $create = Penjualan::create([
                 'kode_penjualan' => $kode,
@@ -40,6 +50,7 @@ class PenjualanController extends Controller
                 'total_penjualan' => '0',
                 'user_input' => auth()->user()->id,
                 'status_penjualan' => '0',
+                'shift_id' => $shiftId,
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
             ]);
@@ -128,10 +139,24 @@ class PenjualanController extends Controller
             ]);
             if ($cek) {
                 $update = Sparepart::findOrFail($request->kode_sparepart);
-                $stok_baru = $update->stok_sparepart - $request->qty_sparepart;
+                $stok_awal = $update->stok_sparepart;
+                $stok_baru = $stok_awal - $request->qty_sparepart;
                 $update->update([
                     'stok_sparepart' => $stok_baru,
                 ]);
+
+                // Log Stock History
+                $this->logStockChange(
+                    $update->id,
+                    -$request->qty_sparepart, // Negative because sold
+                    'sales_add_qty',
+                    $request->kode_penjualan,
+                    'Penjualan Tambah Qty: ' . $request->kode_penjualan,
+                    auth()->user()->id,
+                    $stok_awal,
+                    $stok_baru
+                );
+
                 return redirect()->back();
             }
         } else {
@@ -152,10 +177,24 @@ class PenjualanController extends Controller
                 'updated_at' => Carbon::now(),
             ]);
             if ($create) {
-                $stok_baru = $update->stok_sparepart - $request->qty_sparepart;
+                $stok_awal = $update->stok_sparepart;
+                $stok_baru = $stok_awal - $request->qty_sparepart;
                 $update->update([
                     'stok_sparepart' => $stok_baru,
                 ]);
+
+                // Log Stock History
+                $this->logStockChange(
+                    $update->id,
+                    -$request->qty_sparepart, // Negative because sold
+                    'sales_new_item',
+                    $request->kode_penjualan,
+                    'Penjualan Item Baru: ' . $request->kode_penjualan,
+                    auth()->user()->id,
+                    $stok_awal,
+                    $stok_baru
+                );
+
                 return redirect()->back();
             }
         }
@@ -163,13 +202,28 @@ class PenjualanController extends Controller
     public function delete_detail_sparepart(Request $request, $id)
     {
         $data = DetailSparepartPenjualan::findOrFail($id);
-        $data->delete();
         if ($data) {
             $update = Sparepart::findOrFail($data->kode_sparepart);
-            $stok_baru = $update->stok_sparepart + $data->qty_sparepart;
+            $stok_awal = $update->stok_sparepart;
+            $stok_baru = $stok_awal + $data->qty_sparepart;
             $update->update([
                 'stok_sparepart' => $stok_baru,
             ]);
+
+            // Log Stock History
+            $this->logStockChange(
+                $update->id,
+                $data->qty_sparepart, // Positive because restored
+                'sales_cancel_item',
+                $data->kode_penjualan,
+                'Batal Penjualan Item: ' . $data->kode_penjualan,
+                auth()->user()->id,
+                $stok_awal,
+                $stok_baru
+            );
+        }
+        $data->delete();
+        if ($data) {
             return redirect()->back();
         }
     }

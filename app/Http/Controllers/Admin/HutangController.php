@@ -47,7 +47,7 @@ class HutangController extends Controller
 
             // 1. Catat pengeluaran di kas perusahaan SAAT HUTANG DIBAYAR
             $this->catatKas(
-                $pembelian, // Sumbernya tetap dari pembelian asli
+                $hutang, // Updated: Gunakan model Hutang agar konsisten dengan API & Laporan
                 0,
                 $hutang->total_hutang,
                 'Pembayaran Hutang #' . $hutang->kode_nota,

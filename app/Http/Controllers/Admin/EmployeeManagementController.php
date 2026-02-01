@@ -2229,6 +2229,7 @@ public function getThisUser()
             'schedules.*.start_time' => 'required|date_format:H:i',
             'schedules.*.end_time' => 'required|date_format:H:i|after:schedules.*.start_time',
             'schedules.*.is_working_day' => 'required|boolean',
+            'schedules.*.is_pic' => 'nullable|boolean',
         ]);
 
         try {
@@ -2245,6 +2246,7 @@ public function getThisUser()
                     'start_time' => $schedule['start_time'],
                     'end_time' => $schedule['end_time'],
                     'is_working_day' => $schedule['is_working_day'],
+                    'is_pic' => isset($schedule['is_pic']) ? $schedule['is_pic'] : false,
                     'created_by' => auth()->id(),
                 ]);
             }
@@ -2273,6 +2275,7 @@ public function getThisUser()
                     'start_time' => $schedule->start_time ? \Carbon\Carbon::parse($schedule->start_time)->format('H:i') : null,
                     'end_time' => $schedule->end_time ? \Carbon\Carbon::parse($schedule->end_time)->format('H:i') : null,
                     'is_working_day' => (bool) $schedule->is_working_day,
+                    'is_pic' => (bool) $schedule->is_pic,
                     'created_at' => $schedule->created_at,
                     'updated_at' => $schedule->updated_at
                 ];

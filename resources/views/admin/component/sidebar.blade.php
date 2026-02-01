@@ -381,7 +381,16 @@
                              </a>
                          </li>
 
-                         <li class="nav-header">TRANSAKSI</li>
+                         <li class="nav-item">
+                            <a href="{{ route('shift.index') }}" class="nav-link {{ request()->routeIs('shift.*') ? 'active' : '' }}">
+                                <i class="nav-icon fas fa-clock"></i>
+                                <p>
+                                    Manajemen Shift
+                                </p>
+                            </a>
+                        </li>
+
+                        <li class="nav-header">TRANSAKSI</li>
                      @endif
                      <li class="nav-item @yield('maintodo')">
                          <a href="#" class="nav-link @yield('droptodo')">
@@ -392,12 +401,18 @@
                              </p>
                          </a>
                          <ul class="nav nav-treeview">
-                             <li class="nav-item">
-                                 <a href="{{ route('all_service') }}" class="nav-link">
-                                     <i class="far fa-circle nav-icon"></i>
-                                     <p>Semua Service</p>
-                                 </a>
-                             </li>
+                            <li class="nav-item">
+                                <a href="{{ route('service_board.index') }}" class="nav-link {{ request()->routeIs('service_board.*') ? 'active' : '' }}">
+                                    <i class="far fa-circle nav-icon"></i>
+                                    <p>Service Board</p>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('all_service') }}" class="nav-link">
+                                    <i class="far fa-circle nav-icon"></i>
+                                    <p>Semua Service</p>
+                                </a>
+                            </li>
                              <li class="nav-item">
                                  <a href="{{ route('todolist') }}" class="nav-link @yield('todolist')">
                                      <i class="far fa-circle nav-icon"></i>
@@ -487,6 +502,15 @@
                                  </p>
                              </a>
 
+                             <ul class="nav nav-treeview">
+                                 <li class="nav-item">
+                                     <a href="{{ route('toko-settings.index') }}"
+                                         class="nav-link @yield('toko-settings.index')">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Toko</p>
+                                     </a>
+                                 </li>
+                             </ul>
                              <ul class="nav nav-treeview">
                                  <li class="nav-item">
                                      <a href="{{ route('price-settings.index') }}"

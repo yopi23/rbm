@@ -98,6 +98,7 @@
                                 <th>Jam Masuk</th>
                                 <th>Jam Pulang</th>
                                 <th>Hari Kerja</th>
+                                <th>Penanggung Jawab</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -135,6 +136,13 @@
                                             </option>
                                         </select>
                                     </td>
+                                    <td class="text-center">
+                                        <div class="custom-control custom-checkbox">
+                                            <input type="checkbox" class="custom-control-input is_pic_{{ $dayEng }}" 
+                                                id="is_pic_{{ $dayEng }}" name="schedules[{{ $loop->index }}][is_pic]" value="1">
+                                            <label class="custom-control-label" for="is_pic_{{ $dayEng }}"></label>
+                                        </div>
+                                    </td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -154,8 +162,11 @@
         $('#user_id_schedule').val(userId);
 
         // Get existing schedule using AJAX
+        var url = "{{ route('admin.work-schedule.user', ':id') }}";
+        url = url.replace(':id', userId);
+
         $.ajax({
-            url: "{{ url('admin/schedule/get-user-schedule') }}/" + userId,
+            url: url,
             method: 'GET',
             success: function(response) {
                 if (response.schedules) {
@@ -169,6 +180,10 @@
                     $('.start_time_Sunday').val('08:00');
                     $('.end_time_Sunday').val('16:30');
                     $('.working_day_Sunday').val('0');
+                    
+                    // Reset Checkboxes
+                    $('.is_pic_Monday, .is_pic_Tuesday, .is_pic_Wednesday, .is_pic_Thursday, .is_pic_Friday, .is_pic_Saturday, .is_pic_Sunday')
+                        .prop('checked', false);
 
                     // Then update with actual values
                     response.schedules.forEach(function(schedule) {
@@ -178,11 +193,16 @@
                             5));
                         $('.working_day_' + schedule.day_of_week).val(schedule.is_working_day ?
                             '1' : '0');
+                        
+                        if (schedule.is_pic) {
+                            $('.is_pic_' + schedule.day_of_week).prop('checked', true);
+                        }
                     });
                 }
                 $('#modalEditSchedule').modal('show');
             },
-            error: function() {
+            error: function(xhr) {
+                console.log(xhr);
                 // If error, just show modal with default values
                 $('#modalEditSchedule').modal('show');
             }

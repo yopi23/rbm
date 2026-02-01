@@ -20,6 +20,7 @@ class Penjualan extends Model
         'total_penjualan',
         'user_input',
         'status_penjualan',
+        'shift_id',
         'created_at'
     ];
     public function detailBarang()

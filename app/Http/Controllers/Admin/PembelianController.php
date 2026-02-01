@@ -19,6 +19,7 @@ use App\Models\StockNotification;
 use App\Models\HargaKhusus;
 use App\Models\Hutang;
 use App\Models\ProductVariant;
+use App\Models\Shift; // Import Shift
 use App\Traits\ManajemenKasTrait;
 use Illuminate\Support\Facades\Validator;
 use App\Services\PriceCalculationService;
@@ -82,13 +83,21 @@ class PembelianController extends Controller
             $kode_pembelian .= '001';
         }
 
+        // Get Active Shift
+        $shiftId = null;
+        $activeShift = Shift::getActiveShift(Auth::id());
+        if ($activeShift) {
+            $shiftId = $activeShift->id;
+        }
+
         // Buat pembelian baru
         $pembelian = Pembelian::create([
             'kode_pembelian' => $kode_pembelian,
             'tanggal_pembelian' => date('Y-m-d'),
             'total_harga' => 0,
             'kode_owner' => $this->getOwnerId(),
-            'status' => 'draft', // Tambahkan status 'draft' untuk pembelian yang belum selesai
+            'status' => 'draft',
+            'shift_id' => $shiftId,
         ]);
 
         return redirect()->route('pembelian.edit', $pembelian->id);
@@ -220,7 +229,7 @@ class PembelianController extends Controller
                 $query->orWhere(function ($nameQuery) use ($keywords) {
                     foreach ($keywords as $keyword) {
                         // Pola REGEXP untuk kata utuh
-                        $pattern = '[[:<:]]' . preg_quote($keyword, '/') . '[[:>:]]';
+                        $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
                         $nameQuery->whereHas('sparepart', function ($subQ) use ($pattern) {
                             // Normalisasi kolom nama sparepart sebelum membandingkan
                             $subQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'REGEXP', $pattern);
@@ -231,7 +240,7 @@ class PembelianController extends Controller
                 // KONDISI 2 (ATAU): Semua keyword ada di NILAI ATRIBUT
                 $query->orWhere(function ($attributeQuery) use ($keywords) {
                     foreach ($keywords as $keyword) {
-                        $pattern = '[[:<:]]' . preg_quote($keyword, '/') . '[[:>:]]';
+                        $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
                         $attributeQuery->whereHas('attributeValues', function ($subQ) use ($pattern) {
                             $subQ->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
                         });
@@ -656,6 +665,18 @@ class PembelianController extends Controller
                     $sparepart->save();
                     $this->updateHargaKhusus($sparepart, $calculatedPrices);
 
+                    // Log stock change for NEW ITEM
+                    $this->logStockChange(
+                        $sparepart->id,
+                        $detail->jumlah,
+                        'purchase_stock',
+                        $pembelian->id,
+                        'Pembelian item baru: ' . $detail->nama_item,
+                        Auth::id(),
+                        0,
+                        $detail->jumlah
+                    );
+
                 } else {
                 // ===============================================
                 // PROSES UNTUK ITEM RESTOCK (UPDATE VARIAN LAMA)
@@ -714,6 +735,18 @@ class PembelianController extends Controller
                         $sparepart->harga_beli = $new_stock_cost;
                         $sparepart->harga_pasang = $calculatedPrices['default_service_fee'] ?? 0;
                         $sparepart->save();
+
+                        // Log stock change
+                        $this->logStockChange(
+                            $sparepart->id,
+                            $detail->jumlah,
+                            'purchase_stock',
+                            $pembelian->id,
+                            'Pembelian item: ' . $detail->nama_item,
+                            Auth::id(),
+                            $old_stock,
+                            $new_total_stock
+                        );
                     }
                 } else {
                     throw new \Exception('Varian produk untuk restock tidak ditemukan untuk item: "' . $detail->nama_item . '".');
@@ -823,28 +856,7 @@ public function getSubKategori($kategoriId)
     }
 }
 
-/**
- * Helper method untuk mencatat perubahan stok
- */
-private function logStockChange($sparepartId, $quantityChange, $referenceType, $referenceId, $notes = null, $userId, $stockBefore = 0, $stockAfter = null)
-{
-    // Jika stockAfter tidak disetel, hitung berdasarkan stockBefore + quantityChange
-    if ($stockAfter === null) {
-        $stockAfter = $stockBefore + $quantityChange;
-    }
-
-    // Buat log stock history
-    StockHistory::create([
-        'sparepart_id' => $sparepartId,
-        'quantity_change' => $quantityChange,
-        'reference_type' => $referenceType,
-        'reference_id' => $referenceId,
-        'stock_before' => $stockBefore,
-        'stock_after' => $stockAfter,
-        'notes' => $notes,
-        'user_input' => $userId,
-    ]);
-}
+    // Helper moved to StockHistoryTrait
 
 /**
  * Helper method untuk update notifikasi stok rendah

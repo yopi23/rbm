@@ -48,7 +48,14 @@ use App\Http\Controllers\Admin\PriceSettingController;
 use App\Http\Controllers\Admin\AttributeController;
 use App\Http\Controllers\Admin\AttributeValueController;
 use App\Http\Controllers\Admin\ReviewController;
+use App\Http\Controllers\Admin\ServiceBoardController;
+use App\Http\Controllers\Admin\ShiftController;
+use App\Http\Controllers\Admin\TokoSettingController;
 
+
+
+
+use App\Http\Controllers\PublicPageController;
 
 /*
 |--------------------------------------------------------------------------
@@ -60,6 +67,11 @@ use App\Http\Controllers\Admin\ReviewController;
 | contains the "web" middleware group. Now create something great!
 |
 */
+
+// Public Status Check
+Route::get('/cek/{slug}', [PublicPageController::class, 'index'])->name('cek.index');
+Route::post('/cek/{slug}/service', [PublicPageController::class, 'checkService'])->name('cek.service');
+Route::post('/cek/{slug}/garansi', [PublicPageController::class, 'checkGaransi'])->name('cek.garansi');
 
 //Front
 Route::get('/register', [AuthController::class, 'register'])->name('register');
@@ -299,6 +311,51 @@ Route::group(['middleware' => ['auth']], function () {
     Route::get('/opname_sparepart', [SparePartController::class, 'view_opname'])->name('opname_sparepart');
     Route::put('opname_sparepart/{id}/ubah_stok', [SparePartController::class, 'opname_ubah_stok'])->name('opname_sparepart_ubah_stok');
     Route::get('opname_sparepart/cetak', [PDFController::class, 'opname_sparepart'])->name('cetak_opname');
+
+
+    // Shift Routes
+    Route::get('/shift', [ShiftController::class, 'index'])->name('shift.index');
+    Route::get('/shift/create', [ShiftController::class, 'create'])->name('shift.create');
+    Route::post('/shift/store', [ShiftController::class, 'store'])->name('shift.store');
+    Route::get('/shift/{id}', [ShiftController::class, 'show'])->name('shift.show');
+    Route::get('/shift/{id}/close', [ShiftController::class, 'close'])->name('shift.close');
+    Route::put('/shift/{id}/update', [ShiftController::class, 'update'])->name('shift.update');
+
+    // Toko Settings Routes
+    Route::get('/toko-settings', [TokoSettingController::class, 'index'])->name('toko-settings.index');
+    Route::put('/toko-settings/update', [TokoSettingController::class, 'update'])->name('toko-settings.update');
+    Route::get('/toko-settings/generate-slug', [TokoSettingController::class, 'generateSlug'])->name('toko-settings.generate-slug');
+
+    // Inventory Management Routes
+    Route::get('/inventory/dashboard', [StockManagementController::class, 'dashboard'])->name('admin.inventory.home');
+    Route::get('/inventory/restock-report', [StockManagementController::class, 'restockReport'])->name('admin.inventory.restock-report');
+    Route::get('/inventory/bestsellers', [StockManagementController::class, 'bestSellersReport'])->name('admin.inventory.bestsellers');
+
+    // Stock Opname Routes
+    Route::get('/stock-opname', [StockOpnameController::class, 'index'])->name('stock-opname.index');
+    Route::get('/stock-opname/create', [StockOpnameController::class, 'create'])->name('stock-opname.create');
+    Route::post('/stock-opname', [StockOpnameController::class, 'store'])->name('stock-opname.store');
+    Route::get('/stock-opname/{id}', [StockOpnameController::class, 'show'])->name('stock-opname.show');
+    Route::post('/stock-opname/{id}/start', [StockOpnameController::class, 'startProcess'])->name('stock-opname.start');
+    Route::get('/stock-opname/{id}/check-items', [StockOpnameController::class, 'checkItems'])->name('stock-opname.check-items');
+    Route::post('/stock-opname/{periodId}/items/{detailId}/check', [StockOpnameController::class, 'saveItemCheck'])->name('stock-opname.save-check');
+    Route::get('/stock-opname/{periodId}/items/{detailId}/adjust', [StockOpnameController::class, 'adjustmentForm'])->name('stock-opname.adjustment-form');
+    Route::post('/stock-opname/{periodId}/items/{detailId}/adjust', [StockOpnameController::class, 'saveAdjustment'])->name('stock-opname.save-adjustment');
+    Route::post('/stock-opname/{id}/complete', [StockOpnameController::class, 'completePeriod'])->name('stock-opname.complete');
+    Route::post('/stock-opname/{id}/cancel', [StockOpnameController::class, 'cancelPeriod'])->name('stock-opname.cancel');
+    Route::get('/stock-opname/{id}/report', [StockOpnameController::class, 'report'])->name('stock-opname.report');
+
+    // Review Routes
+    Route::get('/review', [ReviewController::class, 'index'])->name('review.index');
+    Route::get('/review/{sparepart}/migration-data', [ReviewController::class, 'getMigrationData'])->name('review.migration-data');
+    Route::post('/review/{sparepart}/migrate', [ReviewController::class, 'migrateSingle'])->name('review.migrate-single');
+    Route::post('/review/migrate-bulk', [ReviewController::class, 'migrateBulk'])->name('review.migrate-bulk');
+    Route::post('/review/migrate-bulk-attributes', [ReviewController::class, 'migrateBulkWithAttributes'])->name('review.migrate-bulk-attributes');
+    Route::get('/review/{sparepart}/preview', [ReviewController::class, 'previewMigration'])->name('review.preview');
+    Route::post('/review/migrate-all', [ReviewController::class, 'migrateAll'])->name('review.migrate-all');
+    Route::get('/review/status', [ReviewController::class, 'checkMigrationStatus'])->name('review.status');
+    Route::post('/review/{sparepart}/rollback', [ReviewController::class, 'rollbackMigration'])->name('review.rollback');
+
 
     //Repair Controller
     Route::get('/all_service', [ServiceController::class, 'view_all'])->name('all_service');
@@ -688,9 +745,9 @@ Route::post('/monthly-report/generate', [EmployeeManagementController::class, 'g
         Route::get('hp/cross-table', [HpController::class, 'cross'])->name('admin.tg.cross-table');
 
         // Reference Data Routes (Brand, Screen Size, Camera Position)
-        Route::resource('brands', 'admin\BrandController');
-        Route::resource('screen-sizes', 'admin\ScreenSizeController');
-        Route::resource('camera-positions', 'admin\CameraPositionController');
+        // Route::resource('brands', 'admin\BrandController');
+        // Route::resource('screen-sizes', 'admin\ScreenSizeController');
+        // Route::resource('camera-positions', 'admin\CameraPositionController');
 
 
     });
@@ -808,3 +865,25 @@ Route::prefix('admin/cron')->group(function () {
     Route::get('/status', [AttendanceCronController::class, 'status'])
         ->name('admin.cron.status');
 });
+
+// Service Board Routes
+Route::prefix('admin/service-board')->middleware(['auth'])->group(function () {
+    Route::get('/', [ServiceBoardController::class, 'index'])->name('service_board.index');
+    Route::get('/create', [ServiceBoardController::class, 'create'])->name('service_board.create');
+    Route::post('/store', [ServiceBoardController::class, 'store'])->name('service_board.store');
+    Route::post('/update-status', [ServiceBoardController::class, 'updateStatus'])->name('service_board.update_status');
+    
+    // AJAX & Actions
+    Route::get('/details/{id}', [ServiceBoardController::class, 'getServiceDetails'])->name('service_board.details');
+    Route::get('/print-data/{id}/{type?}', [ServiceBoardController::class, 'getPrintData'])->name('service_board.print_data');
+    Route::get('/search-sparepart', [ServiceBoardController::class, 'searchSparepartJson'])->name('service_board.search_sparepart');
+    Route::post('/add-sparepart-toko', [ServiceBoardController::class, 'addSparepartToko'])->name('service_board.add_sparepart_toko');
+    Route::post('/delete-sparepart-toko/{id}', [ServiceBoardController::class, 'deleteSparepartToko'])->name('service_board.delete_sparepart_toko');
+    Route::post('/add-sparepart-luar', [ServiceBoardController::class, 'addSparepartLuar'])->name('service_board.add_sparepart_luar');
+    Route::post('/delete-sparepart-luar/{id}', [ServiceBoardController::class, 'deleteSparepartLuar'])->name('service_board.delete_sparepart_luar');
+    
+    // Edit & WA
+    Route::post('/update-details', [ServiceBoardController::class, 'updateServiceDetails'])->name('service_board.update_details');
+    Route::post('/send-whatsapp/{id}', [ServiceBoardController::class, 'sendWhatsappNotification'])->name('service_board.send_whatsapp');
+});
+

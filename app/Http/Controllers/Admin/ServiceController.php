@@ -14,6 +14,7 @@ use App\Models\Sevices as modelServices;
 use App\Models\Sparepart;
 use App\Models\User;
 use App\Models\UserDetail;
+use App\Models\KasPerusahaan; // Added
 use App\Services\WhatsAppService;
 use Milon\Barcode\Facades\DNS1DFacade;
 use Illuminate\Support\Facades\DB;
@@ -22,8 +23,13 @@ use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use PDO;
 
+use App\Traits\StockHistoryTrait;
+use App\Traits\ManajemenKasTrait; // Added
+
 class ServiceController extends Controller
 {
+    use StockHistoryTrait;
+    use ManajemenKasTrait; // Added
     public function getTable($thead = '<th>No</th><th>Aksi</th>', $tbody = '')
     {
         $result = '<div class="table-responsive"><table class="table" id="dataTable">';
@@ -257,11 +263,33 @@ class ServiceController extends Controller
             ]);
             if ($update) {
                 $update_sparepart = Sparepart::findOrFail($update->kode_sparepart);
-                $stok_awal = $update_sparepart->stok_sparepart + $cek->qty_part;
-                $stok_baru = $stok_awal - $qty_baru;
+                
+                // Logic Existing:
+                // $stok_awal_logic = $update_sparepart->stok_sparepart + $cek->qty_part; // Logic lama untuk restore stock virtual
+                // $stok_baru = $stok_awal_logic - $qty_baru;
+
+                // Simplified Logic:
+                // We are adding $request->qty_part to the usage.
+                // So we deduct $request->qty_part from current stock.
+                $current_db_stock = $update_sparepart->stok_sparepart;
+                $stok_baru = $current_db_stock - $request->qty_part;
+
                 $update_sparepart->update([
                     'stok_sparepart' => $stok_baru,
                 ]);
+
+                // Log Stock History
+                $this->logStockChange(
+                    $update_sparepart->id,
+                    -$request->qty_part, // Negative because used
+                    'service_add_qty',
+                    $request->kode_services,
+                    'Service Tambah Part Qty: ' . $request->kode_services,
+                    auth()->user()->id,
+                    $current_db_stock,
+                    $stok_baru
+                );
+
                 return redirect()->back();
             }
         } else {
@@ -425,14 +453,50 @@ class ServiceController extends Controller
             'id_teknisi' => $id_teknisi
         ]);
         if ($update) {
+            // Check for 'Diambil' status to record payment
+            if ($request->status_services == 'Diambil') {
+                // Calculate remaining balance to be paid
+                // We check existing payments in KasPerusahaan to avoid double counting or overcharging
+                // assuming table_source is 'sevices' (from model's getTable())
+                $alreadyPaid = KasPerusahaan::where('table_source', 'sevices')
+                    ->where('id_source', $id)
+                    ->sum('debit');
+
+                // Total biaya might have been updated, so we trust $update->total_biaya
+                $sisa_bayar = $update->total_biaya - $alreadyPaid;
+
+                if ($sisa_bayar > 0) {
+                    $this->catatKas(
+                        $update,
+                        $sisa_bayar,
+                        0,
+                        'Pelunasan Service #' . $update->kode_service . ' - ' . $update->nama_pelanggan,
+                        now()
+                    );
+                }
+            }
+
             if ($request->status_services == 'Cancel') {
                 $data = DetailPartServices::where([['kode_services', '=', $id]])->get();
                 foreach ($data as $i) {
                     $update_sparepart = Sparepart::findOrFail($i->kode_sparepart);
-                    $newstok = $update_sparepart->stok_sparepart + $i['qty_part'];
+                    $stok_awal = $update_sparepart->stok_sparepart;
+                    $newstok = $stok_awal + $i['qty_part'];
                     $update_sparepart->update([
                         'stok_sparepart' => $newstok
                     ]);
+
+                    // Log Stock History
+                    $this->logStockChange(
+                        $update_sparepart->id,
+                        $i['qty_part'], // Positive because restored
+                        'service_cancel',
+                        $id,
+                        'Service Cancelled: ' . $update->kode_service,
+                        auth()->user()->id,
+                        $stok_awal,
+                        $newstok
+                    );
                 }
             }
 
