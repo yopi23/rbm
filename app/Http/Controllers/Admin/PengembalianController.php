@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Pengambilan;
+use App\Models\Shift;
 use Illuminate\Http\Request;
 use App\Models\Sevices as modelServices;
 use App\Traits\KategoriLaciTrait;
@@ -22,6 +23,13 @@ class PengembalianController extends Controller
         $count = Pengambilan::where([['kode_owner', '=', $this->getThisUser()->id_upline]])->get()->count();
 
         if (!$data) {
+            // Get Active Shift
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(auth()->user()->id);
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+
             $kode_pengambilan = 'PNG' . date('Ymd') . auth()->user()->id . $count;
             $create = Pengambilan::create([
                 'kode_pengambilan' => $kode_pengambilan,
@@ -31,6 +39,7 @@ class PengembalianController extends Controller
                 'user_input' => auth()->user()->id,
                 'status_pengambilan' => '0',
                 'kode_owner' => $this->getThisUser()->id_upline,
+                'shift_id' => $shiftId,
             ]);
             if ($create) {
                 $data = Pengambilan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline], ['status_pengambilan', '=', '0']])->get()->first();
@@ -44,11 +53,20 @@ class PengembalianController extends Controller
     public function update(Request $request, $id)
     {
         $update = Pengambilan::findOrFail($id);
+
+        // Get Active Shift for finalization
+        $shiftId = $update->shift_id; // Default to existing
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if ($activeShift) {
+            $shiftId = $activeShift->id;
+        }
+
         $update->update([
             'nama_pengambilan' => $request->nama_pengambilan,
             'tgl_pengambilan' => $request->tgl_pengambilan,
             'total_bayar' => $request->total_bayar,
             'status_pengambilan' => '1',
+            'shift_id' => $shiftId,
         ]);
         // laci
         // Misalnya, ambil kategori dari request

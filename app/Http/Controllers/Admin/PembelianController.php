@@ -23,6 +23,8 @@ use App\Models\Shift; // Import Shift
 use App\Traits\ManajemenKasTrait;
 use Illuminate\Support\Facades\Validator;
 use App\Services\PriceCalculationService;
+use App\Models\AttributeValue;
+use App\Scopes\ActiveScope;
 
 class PembelianController extends Controller
 {
@@ -215,10 +217,12 @@ class PembelianController extends Controller
         $variants = ProductVariant::query()
             // Filter berdasarkan owner
             ->whereHas('sparepart', function ($q) use ($ownerId) {
-                $q->where('kode_owner', $ownerId);
+                $q->withoutGlobalScope(ActiveScope::class)->where('kode_owner', $ownerId);
             })
             // Eager loading untuk relasi (ini sudah benar)
-            ->with(['sparepart', 'attributeValues.attribute'])
+            ->with(['sparepart' => function($q) {
+                $q->withoutGlobalScope(ActiveScope::class);
+            }, 'attributeValues.attribute'])
 
             // =================================================================
             // ✅ PERBAIKAN LOGIKA PENCARIAN AKURAT DI SINI
@@ -232,7 +236,7 @@ class PembelianController extends Controller
                         $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
                         $nameQuery->whereHas('sparepart', function ($subQ) use ($pattern) {
                             // Normalisasi kolom nama sparepart sebelum membandingkan
-                            $subQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'REGEXP', $pattern);
+                            $subQ->withoutGlobalScope(ActiveScope::class)->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'REGEXP', $pattern);
                         });
                     }
                 });
@@ -284,18 +288,18 @@ class PembelianController extends Controller
      */
     private function searchSpareparts($searchTerm)
 {
-    try {
-        // Baris ini tetap sama, mencoba mengambil data dari API terlebih dahulu
-        $response = Http::get('/spareparts/search', [
-            'search' => $searchTerm
-        ]);
+    // try {
+    //     // Baris ini tetap sama, mencoba mengambil data dari API terlebih dahulu
+    //     $response = Http::get('/spareparts/search', [
+    //         'search' => $searchTerm
+    //     ]);
 
-        if ($response->successful() && $response->json('status') === 'success') {
-            return $response->json('data');
-        }
-    } catch (\Exception $e) {
-        // Jika API gagal, blok ini akan dieksekusi
-    }
+    //     if ($response->successful() && $response->json('status') === 'success') {
+    //         return $response->json('data');
+    //     }
+    // } catch (\Exception $e) {
+    //     // Jika API gagal, blok ini akan dieksekusi
+    // }
 
     // Fallback ke query database langsung jika API gagal atau tidak berhasil
     $keywords = array_filter(explode(' ', strtolower(trim($searchTerm))));
@@ -760,6 +764,12 @@ class PembelianController extends Controller
             $pembelian->supplier = $supplier->nama_supplier;
             $pembelian->status = 'selesai';
             $pembelian->metode_pembayaran = $metodePembayaran;
+
+            // Update Shift ID to current active shift
+            $activeShift = Shift::getActiveShift(Auth::id());
+            if ($activeShift) {
+                $pembelian->shift_id = $activeShift->id;
+            }
 
             if ($metodePembayaran == 'Hutang') {
                 $pembelian->status_pembayaran = 'Belum Lunas';

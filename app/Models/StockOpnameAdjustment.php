@@ -16,6 +16,7 @@ class StockOpnameAdjustment extends Model
         'alasan_adjustment',
         'user_input',
         'kode_owner',
+        'shift_id',
     ];
 
     // Relasi dengan detail opname

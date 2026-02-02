@@ -14,5 +14,6 @@ class PemasukkanLain extends Model
         'catatan_pemasukkan',
         'jumlah_pemasukkan',
         'kode_owner',
+        'shift_id'
     ];
 }

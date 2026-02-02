@@ -68,7 +68,7 @@ class ShiftApiController extends Controller
         if ($activeShift) {
             return response()->json([
                 'success' => false,
-                'message' => 'You already have an active shift.',
+                'message' => 'Store already has an active shift.',
                 'data' => $this->formatShiftData($activeShift)
             ], 400);
         }

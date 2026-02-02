@@ -8,6 +8,7 @@ use App\Models\PresentaseUser;
 use App\Models\ProfitPresentase;
 use App\Models\User;
 use App\Models\UserDetail;
+use App\Models\Shift;
 use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
@@ -142,6 +143,7 @@ class UserController extends Controller
             'catatan_penarikan' => $request->catatan_penarikan != null ? $request->catatan_penarikan : '-',
             'status_penarikan' => '1',
             'dari_saldo' => $user->saldo,
+            'shift_id' => Shift::getActiveShift(auth()->user()->id)->id ?? null,
         ]);
         if ($create) {
             $data = Penarikan::where([['kode_penarikan', '=', $kode]])->get()->first();
@@ -158,10 +160,10 @@ class UserController extends Controller
             ]);
 
             $this->catatKas(
-                $penarikan,                                  // Model sumber
+                $create,                                     // Model sumber
                 0,                                           // Debit
                 $jumlahPenarikan,                            // Kredit (uang keluar dari kas perusahaan)
-                'Penarikan Saldo Teknisi: ' . $pegawaiDetail->fullname, // Deskripsi
+                'Penarikan Saldo Teknisi: ' . $pegawais->fullname, // Deskripsi
                 now()                                        // Tanggal
             );
 

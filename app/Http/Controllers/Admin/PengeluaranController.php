@@ -8,6 +8,7 @@ use App\Models\PengeluaranToko;
 use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\BebanOperasional;
+use App\Models\Shift;
 use Illuminate\Http\Request;
 use App\Traits\KategoriLaciTrait;
 use App\Traits\ManajemenKasTrait; // 1. Impor Trait

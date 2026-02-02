@@ -15,6 +15,7 @@ use App\Models\Sparepart;
 use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\SalarySetting;
+use App\Models\Shift;
 use App\Models\SubKategoriSparepart;
 use App\Models\KategoriSparepart;
 use App\Services\WhatsAppService;
@@ -2228,6 +2229,13 @@ class ServiceApiController extends Controller
             }
 
             // 3. Buat Service Klaim Baru (kode ini tetap sama)
+            // Get Active Shift ID
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(auth()->user()->id);
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+
             $newService = \App\Models\Sevices::create([
                 'kode_service' => $this->generateKodeService(),
                 'tgl_service' => now(),
@@ -2240,6 +2248,7 @@ class ServiceApiController extends Controller
                 'status_services' => 'Antri',
                 'kode_owner' => $this->getThisUser()->id_upline,
                 'claimed_from_service_id' => $originalService->id,
+                'shift_id' => $shiftId,
                 'created_at' => now(),
                 'updated_at' => now()
             ]);

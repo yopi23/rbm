@@ -16,6 +16,7 @@ class Pengambilan extends Model
         'kode_owner',
         'user_input',
         'status_pengambilan',
+        'shift_id',
     ];
     public function kas()
     {

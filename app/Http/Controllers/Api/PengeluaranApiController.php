@@ -185,12 +185,19 @@ class PengeluaranApiController extends Controller
                 'id_kategorilaci' => 'nullable|integer'
             ]);
 
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(auth()->user()->id);
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+
             $pengeluaran = PengeluaranToko::create([
                 'tanggal_pengeluaran' => $request->tanggal_pengeluaran,
                 'nama_pengeluaran' => $request->nama_pengeluaran,
                 'jumlah_pengeluaran' => $request->jumlah_pengeluaran,
                 'catatan_pengeluaran' => $request->catatan_pengeluaran,
-                'kode_owner' => $this->getThisUser()->id_upline
+                'kode_owner' => $this->getThisUser()->id_upline,
+                'shift_id' => $shiftId
             ]);
             $this->catatKas(
                     $pengeluaran, 0, $pengeluaran->jumlah_pengeluaran,
@@ -484,6 +491,14 @@ class PengeluaranApiController extends Controller
             $validatedData['kode_owner'] = $this->getThisUser()->id_upline;
 
             $validatedData['kode_pegawai'] = $this->getThisUser()->kode_user;
+
+            // Get Active Shift ID
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(auth()->user()->id);
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+            $validatedData['shift_id'] = $shiftId;
 
             // LOG 2: Mencatat data final sebelum disimpan ke database
             Log::info('Data Siap Disimpan ke Database', ['data_to_create' => $validatedData]);

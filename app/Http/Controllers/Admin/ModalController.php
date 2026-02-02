@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\KasPerusahaan;
 use App\Models\TransaksiModal;
+use App\Models\Shift;
 use App\Traits\ManajemenKasTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -53,10 +54,18 @@ class ModalController extends Controller
         $ownerId = $this->getOwnerId();
         DB::beginTransaction();
         try {
+            // Get Active Shift
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(Auth::id());
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+
             $modal = TransaksiModal::create([
                 'tanggal' => $request->tanggal, 'kode_owner' => $ownerId,
                 'jenis_transaksi' => $request->jenis_transaksi,
                 'jumlah' => $request->jumlah, 'keterangan' => $request->keterangan,
+                'shift_id' => $shiftId,
             ]);
 
             $debit = 0; $kredit = 0;

@@ -89,6 +89,13 @@ class PenjualanController extends Controller
         $data = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline], ['status_penjualan', '=', '0']])->get()->first();
         $count = Penjualan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline]])->get()->count();
         if (!$data) {
+            // Get Active Shift
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(auth()->user()->id);
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+
             $kode = 'TRX' . date('Ymd') . auth()->user()->id . $count;
             $create = Penjualan::create([
                 'kode_penjualan' => $kode,
@@ -99,6 +106,7 @@ class PenjualanController extends Controller
                 'total_penjualan' => '0',
                 'user_input' => auth()->user()->id,
                 'status_penjualan' => '0',
+                'shift_id' => $shiftId,
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
             ]);
@@ -335,6 +343,13 @@ class PenjualanController extends Controller
         $data_update = [];
         if ($request->total_penjualan <= 0) return redirect()->route('penjualan')->with('error', 'Penjualan Tidak Boleh Kosong');
 
+        // Get Active Shift for finalization
+        $shiftId = $penjualan->shift_id; // Default to existing
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if ($activeShift) {
+            $shiftId = $activeShift->id;
+        }
+
         $isPaid = false;
         if ($request->simpan == 'bayar') {
             $isPaid = true;
@@ -346,6 +361,7 @@ class PenjualanController extends Controller
                 'status_penjualan' => '1',
                 'total_penjualan' => $request->total_penjualan,
                 'total_bayar' => $request->total_bayar,
+                'shift_id' => $shiftId,
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
             ];
@@ -372,6 +388,7 @@ class PenjualanController extends Controller
                 'status_penjualan' => '1',
                 'total_penjualan' => $request->total_penjualan,
                 'total_bayar' => $request->bayar,
+                'shift_id' => $shiftId,
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
             ];
@@ -394,6 +411,7 @@ class PenjualanController extends Controller
                 'status_penjualan' => '2',
                 'total_penjualan' => $request->total_penjualan,
                 'total_bayar' => $request->total_bayar,
+                'shift_id' => $shiftId,
                 'created_at' => Carbon::now(),
             ];
         }

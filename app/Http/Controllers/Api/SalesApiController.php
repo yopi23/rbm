@@ -499,6 +499,7 @@ public function search(Request $request)
                 ->join('spareparts as sp', 'dsp.kode_sparepart', '=', 'sp.id')
                 ->join('penjualans as p', 'dsp.kode_penjualan', '=', 'p.id')
                 ->where('sp.kode_owner', $this->getThisUser()->id_upline)
+                ->where('sp.is_active', true) // Filter produk aktif
                 ->where('p.created_at', '>=', now()->subDays(30)) // 30 hari terakhir
                 ->where('sp.stok_sparepart', '>', 0) // Yang masih ada stok
                 ->select([
@@ -646,6 +647,13 @@ public function search(Request $request)
         // Cek apakah transaksi hanya disimpan sebagai draft (status 2)
         $statusPenjualan = ($request->simpan == 'simpan') ? '2' : '1';
 
+        // Get Active Shift ID
+        $shiftId = null;
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if ($activeShift) {
+            $shiftId = $activeShift->id;
+        }
+
         // Buat data penjualan terlebih dahulu
         $sale = Penjualan::create([
             'kode_penjualan' => 'TRX' . date('Ymd') . auth()->user()->id . (Penjualan::count() + 1),
@@ -657,6 +665,7 @@ public function search(Request $request)
             'total_bayar' => 0,
             'user_input' => auth()->user()->id,
             'status_penjualan' => $statusPenjualan, // Bisa 1 (langsung bayar) atau 2 (draft)
+            'shift_id' => $shiftId,
             'created_at' => now(),
             'updated_at' => now(),
         ]);

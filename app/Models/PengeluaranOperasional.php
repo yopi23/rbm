@@ -17,6 +17,7 @@ class PengeluaranOperasional extends Model
         'jml_pengeluaran',
         'desc_pengeluaran',
         'kode_owner',
+        'shift_id',
     ];
 
     protected $casts = [

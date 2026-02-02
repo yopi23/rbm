@@ -19,6 +19,7 @@ class StockOpnameDetail extends Model
         'user_check',
         'checked_at',
         'kode_owner',
+        'shift_id',
     ];
 
     protected $casts = [

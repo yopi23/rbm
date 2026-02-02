@@ -19,5 +19,6 @@ class RestokSparepart extends Model
         'catatan_restok',
         'user_input',
         'kode_owner',
+        'shift_id',
     ];
 }

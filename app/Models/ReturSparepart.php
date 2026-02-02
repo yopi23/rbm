@@ -17,6 +17,6 @@ class ReturSparepart extends Model
         'catatan_retur',
         'user_input',
         'kode_owner',
-
+        'shift_id',
     ];
 }

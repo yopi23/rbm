@@ -119,6 +119,13 @@
                                                 rows="10" class="form-control">{{ isset($data) != null ? $data->desc_sparepart : '' }}</textarea>
                                         </div>
                                         <div class="form-group">
+                                            <label>Status</label>
+                                            <select name="is_active" id="is_active" class="form-control">
+                                                <option value="1" {{ !isset($data) || $data->is_active == 1 ? 'selected' : '' }}>Aktif</option>
+                                                <option value="0" {{ isset($data) && $data->is_active == 0 ? 'selected' : '' }}>Tidak Aktif</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
                                             <label>Stok Sparepart</label>
                                             <input type="text" name="stok_sparepart"
                                                 value="{{ isset($data) != null ? $data->stok_sparepart : '0' }}"

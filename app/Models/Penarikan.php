@@ -20,8 +20,9 @@ class Penarikan extends Model
         'catatan_penarikan',
         'status_penarikan',
         'dari_saldo',
-        'admin_withdrawal',  // Tambahan baru
-        'admin_id'          // Tambahan baru
+        'admin_withdrawal',
+        'admin_id',
+        'shift_id'
     ];
 
     protected $casts = [
@@ -85,4 +86,3 @@ class Penarikan extends Model
         return $this->morphOne(KasPerusahaan::class, 'sourceable');
     }
 }
-

@@ -15,5 +15,6 @@ class SparepartRusak extends Model
         'catatan_rusak',
         'user_input',
         'kode_owner',
+        'shift_id',
     ];
 }

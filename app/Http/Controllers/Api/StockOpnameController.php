@@ -10,6 +10,7 @@ use App\Models\Sparepart;
 use App\Models\KategoriSparepart ;
 use App\Models\Supplier ;
 use App\Models\StockHistory;
+use App\Models\Shift;
 use App\Models\User;
 use App\Models\ProductVariant;
 use App\Models\HargaKhusus;
@@ -950,6 +951,12 @@ class StockOpnameController extends Controller
 
                 // Catat di stock history
                 if (class_exists('App\Models\StockHistory')) {
+                    $shiftId = null;
+                    $activeShift = Shift::getActiveShift($user->id);
+                    if ($activeShift) {
+                        $shiftId = $activeShift->id;
+                    }
+
                     StockHistory::create([
                         'sparepart_id' => $sparepart->id,
                         'quantity_change' => $selisih,
@@ -959,6 +966,7 @@ class StockOpnameController extends Controller
                         'stock_after' => $newStock,
                         'notes' => 'Penyesuaian dari stock opname: ' . ($request->catatan ?? 'Tidak ada catatan'),
                         'user_input' => $user->id,
+                        'shift_id' => $shiftId,
                     ]);
                 }
             }

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Scopes\ActiveScope;
 
 class Handphone extends Model
 {
@@ -21,5 +22,16 @@ class Handphone extends Model
         'harga_jual_barang',
         'status_barang',
         'kode_owner',
+        'is_active',
     ];
+
+    /**
+     * The "booted" method of the model.
+     *
+     * @return void
+     */
+    protected static function booted()
+    {
+        static::addGlobalScope(new ActiveScope);
+    }
 }

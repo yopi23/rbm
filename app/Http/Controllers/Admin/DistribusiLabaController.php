@@ -10,6 +10,7 @@ use App\Models\DistribusiSetting;
 use App\Models\KasPerusahaan;
 use App\Models\Penarikan;
 use App\Models\AlokasiLaba;
+use App\Models\Shift;
 use App\Traits\ManajemenKasTrait;
 use App\Traits\OperationalDateTrait;
 use Illuminate\Http\Request;

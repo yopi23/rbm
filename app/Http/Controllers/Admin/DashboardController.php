@@ -277,7 +277,8 @@ class DashboardController extends Controller
                 'judul_pemasukan' => $request->judul_pemasukan,
                 'catatan_pemasukkan' => $request->catatan_pemasukan,
                 'jumlah_pemasukkan' => $request->jumlah_pemasukan,
-                'kode_owner' => $this->getThisUser()->id_upline
+                'kode_owner' => $this->getThisUser()->id_upline,
+                'shift_id' => Shift::getActiveShift(auth()->user()->id)->id ?? null,
             ]);
 
             // laci
@@ -696,6 +697,14 @@ class DashboardController extends Controller
             }
 
             // --- 4. Buat Data Service Utama ---
+            
+            // Get Active Shift
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(Auth::id());
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+
             $service = modelServices::create([
                 'kode_service' => $this->generateKodeService(),
                 'customer_id' => $customerId,

@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use App\Models\Hutang;
+use App\Models\Shift;
+use App\Scopes\ActiveScope;
 
 class PembelianApiController extends Controller
 {
@@ -85,12 +87,20 @@ class PembelianApiController extends Controller
                 $kode_pembelian .= '001';
             }
 
+            // Get Active Shift ID
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(auth()->user()->id);
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+
             $pembelian = Pembelian::create([
                 'kode_pembelian' => $kode_pembelian,
                 'tanggal_pembelian' => date('Y-m-d'),
                 'total_harga' => 0,
                 'kode_owner' => $this->getOwnerId(),
                 'status' => 'draft',
+                'shift_id' => $shiftId,
             ]);
 
             return response()->json([
@@ -542,6 +552,12 @@ $this->updateHargaKhusus($sparepart, $calculatedPrices);
             $pembelian->supplier = $supplier->nama_supplier;
             $pembelian->status = 'selesai';
             $pembelian->metode_pembayaran = $validated['metode_pembayaran'];
+
+            // Update Shift ID to current active shift
+            $activeShift = Shift::getActiveShift(auth()->user()->id);
+            if ($activeShift) {
+                $pembelian->shift_id = $activeShift->id;
+            }
 
             if ($validated['metode_pembayaran'] == 'Hutang') {
                 $pembelian->status_pembayaran = 'Belum Lunas';

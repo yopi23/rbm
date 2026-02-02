@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Aset;
+use App\Models\Shift;
 use App\Traits\ManajemenKasTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -46,6 +47,13 @@ class AsetController extends Controller
 
         DB::beginTransaction();
         try {
+            // Get Active Shift
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(Auth::id());
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+
             // 1. Simpan data aset baru
             $aset = Aset::create([
                 'kode_owner' => $this->getOwnerId(),
@@ -57,6 +65,7 @@ class AsetController extends Controller
                 'nilai_residu' => $request->nilai_residu ?? 0,
                 'nilai_buku' => $request->nilai_perolehan, // Nilai buku awal = nilai perolehan
                 'keterangan' => $request->keterangan,
+                'shift_id' => $shiftId,
             ]);
 
             // 2. Catat pembelian aset sebagai pengeluaran di buku besar

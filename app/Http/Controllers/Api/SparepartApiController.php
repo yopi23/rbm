@@ -76,7 +76,8 @@ class SparepartApiController extends Controller
                 // Query dengan LEFT JOIN harga_khususes
                 $queryBuilder = DB::table('spareparts')
                     ->leftJoin('harga_khususes', 'spareparts.id', '=', 'harga_khususes.id_sp')
-                    ->where('spareparts.kode_owner', '=', $this->getThisUser()->id_upline);
+                    ->where('spareparts.kode_owner', '=', $this->getThisUser()->id_upline)
+                    ->where('spareparts.is_active', true); // Filter produk aktif
 
                 // Filtering berdasarkan kata kunci
                 foreach ($keywords as $keyword) {

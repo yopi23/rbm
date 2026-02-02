@@ -54,7 +54,24 @@ class Shift extends Model
 
     public static function getActiveShift($userId)
     {
-        return self::where('user_id', $userId)
+        // Cari detail user untuk menentukan Owner/Store context
+        $userDetail = UserDetail::where('kode_user', $userId)->first();
+
+        if (!$userDetail) {
+            // Fallback jika detail tidak ditemukan (misal user baru/error data)
+            return self::where('user_id', $userId)
+                ->where('status', 'open')
+                ->latest()
+                ->first();
+        }
+
+        // Tentukan ID Owner (Store)
+        // Jika user adalah owner (jabatan 1), gunakan ID mereka sendiri.
+        // Jika pegawai, gunakan id_upline mereka.
+        $ownerId = ($userDetail->jabatan == '1') ? $userId : $userDetail->id_upline;
+
+        // Cari shift aktif untuk Owner/Store ini (Shared Shift)
+        return self::where('kode_owner', $ownerId)
             ->where('status', 'open')
             ->latest()
             ->first();

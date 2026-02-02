@@ -9,6 +9,7 @@ use App\Models\StockOpnameAdjustment;
 use App\Models\Sparepart;
 use App\Models\StockHistory;
 use App\Models\ProductVariant;
+use App\Models\Shift;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -240,6 +241,13 @@ class StockOpnameController extends Controller
             // Hitung selisih
             $selisih = $validated['stock_aktual'] - $detail->stock_tercatat;
 
+            // Get Active Shift
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(auth()->user()->id);
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+
             // Update detail
             $detail->stock_aktual = $validated['stock_aktual'];
             $detail->selisih = $selisih;
@@ -247,6 +255,7 @@ class StockOpnameController extends Controller
             $detail->catatan = $validated['catatan'];
             $detail->user_check = $this->getThisUser()->id;
             $detail->checked_at = now();
+            $detail->shift_id = $shiftId;
             $detail->save();
 
             // Update status periode jika semua item sudah diperiksa
@@ -652,6 +661,15 @@ class StockOpnameController extends Controller
             $stockAfter = $stockBefore + $quantityChange;
         }
 
+        // Get active shift
+        $shiftId = null;
+        if ($userId) {
+            $activeShift = Shift::getActiveShift($userId);
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+        }
+
         // Buat log stock history jika model ada
         if (class_exists('App\Models\StockHistory')) {
             StockHistory::create([
@@ -663,6 +681,7 @@ class StockOpnameController extends Controller
                 'stock_after' => $stockAfter,
                 'notes' => $notes,
                 'user_input' => $userId,
+                'shift_id' => $shiftId,
             ]);
         }
     }

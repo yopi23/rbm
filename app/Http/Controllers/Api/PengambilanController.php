@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Pengambilan;
 use App\Models\Sevices;
+use App\Models\Shift;
 use App\Models\kas_perusahaan;
 use App\Traits\KategoriLaciTrait;
 use App\Traits\ManajemenKasTrait;
@@ -84,6 +85,13 @@ class PengambilanController extends Controller
 
             $kode_pengambilan = 'PNG' . date('Ymd') . Auth::id() . $count;
 
+            // Get Active Shift
+            $shiftId = null;
+            $activeShift = Shift::getActiveShift(Auth::id());
+            if ($activeShift) {
+                $shiftId = $activeShift->id;
+            }
+
             // Insert ke table pengambilan
             $pengambilan = Pengambilan::create([
                 'kode_pengambilan' => $kode_pengambilan,
@@ -95,6 +103,7 @@ class PengambilanController extends Controller
                 'user_input' => Auth::id(),
                 'status_pengambilan' => '1',
                 'kode_owner' => $this->getThisUser()->id_upline,
+                'shift_id' => $shiftId,
             ]);
 
             // Update status services

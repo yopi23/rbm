@@ -20,6 +20,7 @@ class TransaksiModal extends Model
         'jenis_transaksi',
         'jumlah',
         'keterangan',
+        'shift_id',
     ];
 
     /**

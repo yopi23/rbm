@@ -54,6 +54,11 @@ class ShiftController extends Controller
             'modal_awal' => 'required|numeric|min:0',
         ]);
 
+        $activeShift = Shift::getActiveShift(Auth::id());
+        if ($activeShift) {
+            return redirect()->route('shift.show', $activeShift->id)->with('warning', 'Toko sudah memiliki shift yang aktif.');
+        }
+
         Shift::create([
             'kode_owner' => $this->getOwnerId(),
             'user_id' => Auth::id(),

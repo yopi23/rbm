@@ -9,6 +9,7 @@ use App\Models\DetailBarangPesanan;
 use App\Models\Handphone;
 use App\Models\KategoriHandphone;
 use App\Models\RestokBarang;
+use App\Scopes\ActiveScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Milon\Barcode\DNS1D;
@@ -46,7 +47,7 @@ class HandphoneController extends Controller
                     <th>Kondisi</th>
                     <th>Stok</th>
                     <th>Aksi</th>';
-        $data_barang = Handphone::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
+        $data_barang = Handphone::withoutGlobalScope(ActiveScope::class)->where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
         $tbody = '';
         $no = 1;
 
@@ -155,6 +156,7 @@ class HandphoneController extends Controller
                 'harga_beli_barang' => $request->harga_beli_barang,
                 'harga_jual_barang' => $request->harga_jual_barang,
                 'status_barang' => $request->status_barang,
+                'is_active' => $request->status_barang == '0' ? 1 : 0,
                 'kode_owner' => $this->getThisUser()->id_upline
             ]);
             if ($create) {
@@ -201,7 +203,7 @@ class HandphoneController extends Controller
     public function edit_produk(Request $request, $id)
     {
         $page = "Edit Produk";
-        $data = Handphone::findOrFail($id);
+        $data = Handphone::withoutGlobalScope(ActiveScope::class)->findOrFail($id);
         $kategori = KategoriHandphone::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
         return view('admin.forms.produk', compact(['page', 'data', 'kategori']));
     }
@@ -222,7 +224,7 @@ class HandphoneController extends Controller
             'harga_jual_barang' => ['required'],
         ]);
         if ($validate) {
-            $update = Handphone::findOrFail($id);
+            $update = Handphone::withoutGlobalScope(ActiveScope::class)->findOrFail($id);
             $file = $request->file('foto_barang');
             $foto = $file != null ? date('Ymdhis') . $file->getClientOriginalName() : $update->foto_barang;
             if ($file != null) {
@@ -238,6 +240,7 @@ class HandphoneController extends Controller
                 'harga_beli_barang' => $request->harga_beli_barang,
                 'harga_jual_barang' => $request->harga_jual_barang,
                 'status_barang' => $request->status_barang,
+                'is_active' => $request->status_barang == '0' ? 1 : 0,
             ]);
             if ($update) {
                 return redirect()->route('produk')
@@ -281,7 +284,7 @@ class HandphoneController extends Controller
     // Delete Functions
     public function delete_produk($id)
     {
-        $data = Handphone::findOrFail($id);
+        $data = Handphone::withoutGlobalScope(ActiveScope::class)->findOrFail($id);
         if ($data->foto_barang != '-') {
             File::delete(public_path('uploads/' . $data->foto_barang));
         }
@@ -313,7 +316,7 @@ class HandphoneController extends Controller
     public function view_stok(Request $request)
     {
         $page = "Stok Barang";
-        $data_barang = Handphone::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
+        $data_barang = Handphone::withoutGlobalScope(ActiveScope::class)->where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
         $view_barang = DetailBarangPenjualan::join('penjualans', 'detail_barang_penjualans.kode_penjualan', '=', 'penjualans.id')->where([['penjualans.status_penjualan', '=', '1']])->get();
         $barang_rusak = BarangRusak::join('handphones', 'barang_rusaks.kode_barang', '=', 'handphones.id')->where('barang_rusaks.kode_owner', '=', $this->getThisUser()->id_upline)->get(['barang_rusaks.*', 'handphones.*', 'barang_rusaks.id as id_rusak']);
         $restok_barang = RestokBarang::join('handphones', 'restok_barangs.kode_barang', '=', 'handphones.id')->where('restok_barangs.kode_owner', '=', $this->getThisUser()->id_upline)->get(['restok_barangs.*', 'handphones.*', 'restok_barangs.id as id_restok']);

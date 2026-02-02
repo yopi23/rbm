@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-
+use App\Scopes\ActiveScope;
 
 class Sparepart extends Model
 {
@@ -24,7 +24,18 @@ class Sparepart extends Model
         'harga_pasang',
         'kode_owner',
         'kode_spl',
+        'is_active',
     ];
+
+    /**
+     * The "booted" method of the model.
+     *
+     * @return void
+     */
+    protected static function booted()
+    {
+        static::addGlobalScope(new ActiveScope);
+    }
     // public function detailSparepart()
     // {
     //     return $this->hasMany(DetailSparepartPenjualan::class, 'kode_sparepart', 'id');

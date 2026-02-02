@@ -26,6 +26,7 @@ use App\Models\BebanOperasional;
 use App\Models\KasPerusahaan;
 use App\Models\Sparepart;
 use App\Models\Handphone;
+use App\Scopes\ActiveScope;
 use App\Models\Pembelian; // Added
 use App\Models\Hutang; // Added
 use App\Models\PengeluaranOperasional as PengeluaranOperasionalModel;
@@ -304,8 +305,8 @@ class FinancialReportApiController extends Controller
         $netProfit = $labaResult['laba_bersih'];
 
         // 2. Inventory Value (ASSET)
-        $nilaiSparepart = Sparepart::where('kode_owner', $ownerId)->sum(DB::raw('stok_sparepart * harga_beli'));
-        $nilaiHandphone = Handphone::where('kode_owner', $ownerId)->sum(DB::raw('stok_barang * harga_beli_barang'));
+        $nilaiSparepart = Sparepart::withoutGlobalScope(ActiveScope::class)->where('kode_owner', $ownerId)->sum(DB::raw('stok_sparepart * harga_beli'));
+        $nilaiHandphone = Handphone::withoutGlobalScope(ActiveScope::class)->where('kode_owner', $ownerId)->sum(DB::raw('stok_barang * harga_beli_barang'));
         $inventoryValue = $nilaiSparepart + $nilaiHandphone;
 
         // 3. Saldo Kas (ASSET) - Source of Truth: KasPerusahaan Ledger

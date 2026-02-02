@@ -22,7 +22,7 @@ class Aset extends Model
         'nilai_residu',       // Tambahkan ini
         'penyusutan_terakumulasi', // Tambahkan ini
         'nilai_buku',         // Tambahkan ini
-
+        'shift_id',
     ];
 
     /**

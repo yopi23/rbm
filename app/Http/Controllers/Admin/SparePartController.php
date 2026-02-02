@@ -8,6 +8,7 @@ use App\Models\DetailSparepartPenjualan;
 use App\Models\KategoriSparepart;
 use App\Models\RestokSparepart;
 use App\Models\ReturSparepart;
+use App\Models\Shift;
 use App\Models\Sparepart;
 use App\Models\Hutang;
 use App\Models\HargaKhusus;
@@ -21,6 +22,7 @@ use Milon\Barcode\Facades\DNS1DFacade;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Models\SubKategoriSparepart;
 use Illuminate\Support\Facades\DB;
+use App\Scopes\ActiveScope;
 
 class SparePartController extends Controller
 {
@@ -57,7 +59,7 @@ class SparePartController extends Controller
                     <th>Stok</th>
                     <th>Aksi</th>';
 
-        $sparepart_data = Sparepart::with(['subKategori'])->where('kode_owner', '=', $this->getThisUser()->id_upline)->latest('updated_at')->get();
+        $sparepart_data = Sparepart::withoutGlobalScope(ActiveScope::class)->with(['subKategori'])->where('kode_owner', '=', $this->getThisUser()->id_upline)->latest('updated_at')->get();
 
         // Buat body tabel dengan baris checkbox
         $tbody = '';
@@ -339,7 +341,8 @@ class SparePartController extends Controller
             'harga_beli' => $request->harga_beli,
             'harga_jual' => $request->harga_jual,
             'harga_pasang' => $request->harga_pasang,
-            'kode_owner' => $this->getThisUser()->id_upline
+            'kode_owner' => $this->getThisUser()->id_upline,
+            'is_active' => $request->is_active ?? 1
         ]);
 
         if ($create) {
@@ -376,7 +379,7 @@ class SparePartController extends Controller
     {
         $page = "Edit Sparepart";
         $kategori = KategoriSparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
-        $data = Sparepart::with('hargaKhusus')->findOrFail($id);
+        $data = Sparepart::withoutGlobalScope(ActiveScope::class)->with('hargaKhusus')->findOrFail($id);
 
         // Get subcategories for the selected category
         $sub_kategori = SubKategoriSparepart::where('kategori_id', $data->kode_kategori)
@@ -405,7 +408,7 @@ class SparePartController extends Controller
     ]);
 
     if ($validate) {
-        $update = Sparepart::findOrFail($id);
+        $update = Sparepart::withoutGlobalScope(ActiveScope::class)->findOrFail($id);
         $file = $request->file('foto_sparepart');
         $foto = $file != null ? date('Ymdhis') . $file->getClientOriginalName() : $update->foto_sparepart;
 
@@ -423,6 +426,7 @@ class SparePartController extends Controller
             'harga_beli' => $request->harga_beli,
             'harga_jual' => $request->harga_jual,
             'harga_pasang' => $request->harga_pasang,
+            'is_active' => $request->is_active ?? 1
         ]);
 
         if ($update) {
@@ -508,7 +512,7 @@ class SparePartController extends Controller
     //Delete Functions
     public function delete_sparepart($id)
     {
-        $data = Sparepart::findOrFail($id);
+        $data = Sparepart::withoutGlobalScope(ActiveScope::class)->findOrFail($id);
         $data->stockHistory()->delete();
          $data->stockNotifications()->delete();
 
@@ -547,7 +551,7 @@ class SparePartController extends Controller
             ->get();
 
         // Ambil data sparepart dengan filter
-        $data_sparepart = Sparepart::query();
+        $data_sparepart = Sparepart::withoutGlobalScope(ActiveScope::class);
 
         // Tambahkan filter kategori dan SPL
         if ($filter_kategori) {
@@ -626,7 +630,7 @@ class SparePartController extends Controller
 
 
         // Ambil nama barang dari tabel sparepart
-        $sparepart = Sparepart::find($request->id_barang);
+        $sparepart = Sparepart::withoutGlobalScope(ActiveScope::class)->find($request->id_barang);
         $nama_barang = $sparepart->nama_sparepart; // Ambil nama barang
         $beli_terakhir = $sparepart->harga_beli;
         $pasang_terakhir = $sparepart->harga_jual;
@@ -786,6 +790,14 @@ class SparePartController extends Controller
                     'error' => 'Jumlah Sparepart Yang Rusak Tidak Boleh Melebihi Stok Barang'
                 ]);
         }
+
+        // Get Active Shift
+        $shiftId = null;
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if ($activeShift) {
+            $shiftId = $activeShift->id;
+        }
+
         $create = SparepartRusak::create([
             'tgl_rusak_barang' => $request->tgl_rusak_barang,
             'kode_barang' => $request->kode_barang,
@@ -793,6 +805,7 @@ class SparePartController extends Controller
             'catatan_rusak' => $request->catatan_rusak != null ? $request->catatan_rusak : '-',
             'user_input' => auth()->user()->id,
             'kode_owner' => $request->kode_owner,
+            'shift_id' => $shiftId,
         ]);
         if ($create) {
             $stok_awal = $data_barang->stok_sparepart;
@@ -864,6 +877,14 @@ class SparePartController extends Controller
     {
         $data_restok = RestokSparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
         $kode_restok = 'RS' . date('Ymd') . $data_restok->count();
+
+        // Get Active Shift
+        $shiftId = null;
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if ($activeShift) {
+            $shiftId = $activeShift->id;
+        }
+
         $create = RestokSparepart::create([
             'kode_owner' => $request->kode_owner,
             'kode_restok' => $kode_restok,
@@ -874,6 +895,7 @@ class SparePartController extends Controller
             'status_restok' => $request->status_restok,
             'catatan_restok' => $request->catatan_restok != null ? $request->catatan_restok : '-',
             'user_input' => auth()->user()->id,
+            'shift_id' => $shiftId,
         ]);
         if ($create) {
             $update = Sparepart::findOrFail($request->kode_barang);
@@ -973,6 +995,13 @@ class SparePartController extends Controller
                 ]);
         }
 
+        // Get Active Shift
+        $shiftId = null;
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if ($activeShift) {
+            $shiftId = $activeShift->id;
+        }
+
         $create = ReturSparepart::create([
             'tgl_retur_barang' => $request->tgl_retur_barang  ?: today('Y-m-d'),
             'kode_barang' => $request->kode_barang,
@@ -981,6 +1010,7 @@ class SparePartController extends Controller
             'catatan_retur' => $request->catatan_retur ?: '-',
             'user_input' => auth()->user()->id,
             'kode_owner' => $request->kode_owner,
+            'shift_id' => $shiftId,
         ]);
         if ($create) {
             $stok_awal = $data_barang->stok_sparepart;
@@ -1012,6 +1042,14 @@ class SparePartController extends Controller
                     'error' => 'Jumlah Sparepart Yang Diretur Tidak Boleh Melebihi Stok Barang'
                 ]);
         }
+
+        // Get Active Shift
+        $shiftId = null;
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if ($activeShift) {
+            $shiftId = $activeShift->id;
+        }
+
         if ($request->jenis_retur == 'supplier') {
             $create = ReturSparepart::create([
                 'tgl_retur_barang' => $request->tgl_retur_barang  ?: now()->toDateString(),
@@ -1021,6 +1059,7 @@ class SparePartController extends Controller
                 'catatan_retur' => $request->catatan_retur ?: '-',
                 'user_input' => auth()->user()->id,
                 'kode_owner' => $this->getThisUser()->id_upline,
+                'shift_id' => $shiftId,
 
             ]);
             if ($create) {
