@@ -15,6 +15,7 @@ use App\Traits\KategoriLaciTrait;
 use Illuminate\Support\Facades\Log;
 use App\Traits\ManajemenKasTrait;
 use Illuminate\Support\Facades\DB;
+use App\Models\Shift;
 use Carbon\Carbon;
 
 class PengeluaranApiController extends Controller
@@ -187,9 +188,13 @@ class PengeluaranApiController extends Controller
 
             $shiftId = null;
             $activeShift = Shift::getActiveShift(auth()->user()->id);
-            if ($activeShift) {
-                $shiftId = $activeShift->id;
+            if (!$activeShift) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+                ], 403);
             }
+            $shiftId = $activeShift->id;
 
             $pengeluaran = PengeluaranToko::create([
                 'tanggal_pengeluaran' => $request->tanggal_pengeluaran,
@@ -248,6 +253,15 @@ class PengeluaranApiController extends Controller
      */
     public function updatePengeluaranToko(Request $request, $id): JsonResponse
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             $request->validate([
                 'tanggal_pengeluaran' => 'required|string',
@@ -334,6 +348,15 @@ class PengeluaranApiController extends Controller
      */
     public function deletePengeluaranToko($id): JsonResponse
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             $pengeluaran = PengeluaranToko::where('kode_owner', $this->getThisUser()->id_upline)
                                         ->findOrFail($id);
@@ -442,6 +465,14 @@ class PengeluaranApiController extends Controller
      */
     public function storePengeluaranOperasional(Request $request): JsonResponse
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         // LOG 1: Mencatat semua data yang masuk dari Flutter
         Log::info('API Store Pengeluaran Opex Dimulai', ['request_data' => $request->all()]);
 
@@ -495,9 +526,13 @@ class PengeluaranApiController extends Controller
             // Get Active Shift ID
             $shiftId = null;
             $activeShift = Shift::getActiveShift(auth()->user()->id);
-            if ($activeShift) {
-                $shiftId = $activeShift->id;
+            if (!$activeShift) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+                ], 403);
             }
+            $shiftId = $activeShift->id;
             $validatedData['shift_id'] = $shiftId;
 
             // LOG 2: Mencatat data final sebelum disimpan ke database
@@ -547,6 +582,15 @@ class PengeluaranApiController extends Controller
      */
     public function updatePengeluaranOperasional(Request $request, $id): JsonResponse
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             $validatedData = $request->validate([
                 'tgl_pengeluaran' => 'required|date',
@@ -633,6 +677,15 @@ class PengeluaranApiController extends Controller
      */
     public function deletePengeluaranOperasional($id): JsonResponse
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             $pengeluaran = PengeluaranOperasional::where('kode_owner', $this->getThisUser()->id_upline)
                                                 ->findOrFail($id);

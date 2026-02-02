@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use App\Models\SubKategoriSparepart;
 use App\Models\KategoriSparepart;
+use App\Models\Shift;
 use Carbon\Carbon; // Added for date handling
 use Illuminate\Validation\Rule;
 use App\Traits\ManajemenKasTrait;
@@ -660,6 +661,15 @@ class SparepartApiController extends Controller
 
     public function updateService(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             return \DB::transaction(function () use ($request, $id) {
                 $service = modelServices::findOrFail($id);
@@ -702,6 +712,11 @@ class SparepartApiController extends Controller
 
                 // 3. Update data service di database
                 $service->update($validatedData);
+
+                // 3.1. Recalculate Commission if total_biaya changed and service is completed
+                if ($request->has('total_biaya') && in_array(strtolower($service->status_services), ['selesai', 'diambil'])) {
+                    $this->performCommissionRecalculation($service->id);
+                }
 
                 // 4. LOGIKA CATAT DATA BARU
                 $newDp = $request->input('dp', 0);
@@ -802,6 +817,15 @@ class SparepartApiController extends Controller
      */
     public function recalculateCommission(Request $request, $serviceId) // Public method for API route
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         // Optional: Add authorization check here if this route should only be accessible by certain roles
         // For example: if ($this->getThisUser()->jabatan != 1) { /* return unauthorized */ }
         Log::info("API call to recalculateCommission for Service ID: $serviceId by User: " . auth()->user()->id);
@@ -1012,13 +1036,23 @@ class SparepartApiController extends Controller
             Log::info("Internal: Service ID {$serviceId} is a warranty claim. Commission set to 0.");
 
             // Hapus komisi lama jika ada (untuk mengembalikan saldo teknisi)
-            $oldProfit = ProfitPresentase::where('kode_service', $serviceId)->first();
-            if($oldProfit) {
-                $teknisi = UserDetail::where('kode_user', $oldProfit->kode_user)->first();
-                if($teknisi) {
-                    $teknisi->decrement('saldo', $oldProfit->profit);
+            $records = ProfitPresentase::where('kode_service', $serviceId)->orderBy('id')->get();
+            if ($records->count() > 0) {
+                $totalOld = $records->sum('profit');
+                $primary = $records->first();
+                $teknisi = $primary ? UserDetail::where('kode_user', $primary->kode_user)->first() : null;
+                if ($teknisi && $totalOld != 0) {
+                    $teknisi->decrement('saldo', $totalOld);
                 }
-                $oldProfit->delete();
+                if ($primary) {
+                    $primary->update([
+                        'profit' => 0,
+                        'profit_toko' => 0,
+                        'saldo' => $teknisi ? $teknisi->fresh()->saldo : $primary->saldo,
+                        'tgl_profit' => now(),
+                    ]);
+                    ProfitPresentase::where('kode_service', $serviceId)->where('id', '!=', $primary->id)->delete();
+                }
             }
 
             return [
@@ -1046,10 +1080,11 @@ class SparepartApiController extends Controller
                     }
 
                     // Hapus profit lama dari saldo teknisi (jika ada)
-                    $oldProfitPresentase = ProfitPresentase::where('kode_service', $serviceId)->first();
-                    if ($oldProfitPresentase) {
-                        $teknisi->decrement('saldo', $oldProfitPresentase->profit);
-                        Log::info("Internal: Old profit deducted: {$oldProfitPresentase->profit} from Technician ID: {$id_teknisi}");
+                    $oldProfitRecords = ProfitPresentase::where('kode_service', $serviceId)->orderBy('id')->get();
+                    $totalOld = $oldProfitRecords->sum('profit');
+                    if ($totalOld != 0) {
+                        $teknisi->decrement('saldo', $totalOld);
+                        Log::info("Internal: Old profits deducted total: {$totalOld} from Technician ID: {$id_teknisi}");
                     }
 
                     // Hitung ulang profit dari service (DENGAN GARANSI)
@@ -1076,17 +1111,28 @@ class SparepartApiController extends Controller
                         Log::info("Internal (Fixed): Profit generated for store: {$profit_untuk_toko} by Technician ID: {$id_teknisi}");
                     }
 
-                    // Simpan atau update profit
-                    $komisi = ProfitPresentase::updateOrCreate(
-                        ['kode_service' => $serviceId],
-                        [
-                            'tgl_profit'      => now(),
-                            'kode_presentase' => $presentaseSetting->id,
-                            'kode_user'       => $id_teknisi,
-                            'profit'          => $fix_profit_teknisi,
-                            'profit_toko'     => $profit_untuk_toko,
-                        ]
-                    );
+                        $komisi = null;
+                        if ($oldProfitRecords->isEmpty()) {
+                            $komisi = ProfitPresentase::create([
+                                'kode_service'    => $serviceId,
+                                'tgl_profit'      => now(),
+                                'kode_presentase' => $presentaseSetting->id,
+                                'kode_user'       => $id_teknisi,
+                                'profit'          => $fix_profit_teknisi,
+                                'profit_toko'     => $profit_untuk_toko,
+                            ]);
+                        } else {
+                            $primary = $oldProfitRecords->first();
+                            $primary->update([
+                                'tgl_profit'      => now(),
+                                'kode_presentase' => $presentaseSetting->id,
+                                'kode_user'       => $id_teknisi,
+                                'profit'          => $fix_profit_teknisi,
+                                'profit_toko'     => $profit_untuk_toko,
+                            ]);
+                            ProfitPresentase::where('kode_service', $serviceId)->where('id', '!=', $primary->id)->delete();
+                            $komisi = $primary;
+                        }
 
                     // Tambahkan profit baru (bisa positif atau negatif) ke saldo teknisi
                     $teknisi->increment('saldo', $fix_profit_teknisi);
@@ -1121,6 +1167,14 @@ class SparepartApiController extends Controller
     // Name this something like 'addOrUpdatePartTokoForCompletedService' for clarity, but sticking to your 'restoreSparepartTokoClean' mapping.
     public function addPartTokoToCompletedService(Request $request) // Renamed from restoreSparepartTokoClean for clarity on its purpose
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
 
         try {
             $validator = Validator::make($request->all(), [
@@ -1241,6 +1295,15 @@ class SparepartApiController extends Controller
     // This addresses the Flutter `_updateSparepartTokoQty` call.
     public function updatePartTokoQuantityForCompletedService(Request $request, $detailPartId) // Renamed from updateSparepartToko
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             $validator = Validator::make($request->all(), [
                 'qty_part' => 'required|integer|min:1'
@@ -1334,6 +1397,15 @@ class SparepartApiController extends Controller
     // NEW: Deletes a store part from a service.
     public function deletePartTokoFromCompletedService($detailPartId) // Renamed from deleteSparepartTokoClean
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             DB::beginTransaction();
 
@@ -1399,6 +1471,15 @@ class SparepartApiController extends Controller
     // NEW: Adds an external part to a service.
     public function addPartLuarToCompletedService(Request $request) // Renamed from storeSparepartLuar
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'kode_services' => 'required|exists:sevices,id',
             'nama_part' => 'required|string',
@@ -1457,6 +1538,15 @@ class SparepartApiController extends Controller
     // NEW: Updates an existing external part for a service.
     public function updatePartLuarForCompletedService(Request $request, $detailPartLuarId) // Renamed from updateSparepartLuar
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'nama_part' => 'required|string',
             'harga_part' => 'required|numeric|min:0',
@@ -1527,6 +1617,15 @@ class SparepartApiController extends Controller
     // NEW: Deletes an external part from a service.
     public function deletePartLuarFromCompletedService($detailPartLuarId) // Renamed from deleteSparepartLuar
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         DB::beginTransaction();
         try {
             $data = DetailPartLuarService::findOrFail($detailPartLuarId);
@@ -1581,6 +1680,15 @@ class SparepartApiController extends Controller
     // Generic function to add/update store parts (for uncompleted or initial assignment)
     public function storeSparepartToko(Request $request)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             $validator = Validator::make($request->all(), [
                 'kode_services' => 'required|exists:sevices,id',
@@ -1742,6 +1850,15 @@ class SparepartApiController extends Controller
     // Generic function to delete store parts (for uncompleted or general use)
     public function deletePartTokoFromService($detailPartId)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         DB::beginTransaction();
         try {
             $detailPart = DetailPartServices::findOrFail($detailPartId);
@@ -1799,6 +1916,15 @@ class SparepartApiController extends Controller
     // Store Sparepart Luar (GENERIC - untuk service yang belum selesai)
     public function storeSparepartLuar(Request $request)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         // Validasi input
         $request->validate([
             'kode_services' => 'required|string|exists:sevices,id', // Diubah ke exists:sevices,id
@@ -1847,6 +1973,15 @@ class SparepartApiController extends Controller
     // Update Sparepart Luar (GENERIC)
     public function updateSparepartLuar(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $request->validate([
             'nama_part' => 'required|string',
             'harga_part' => 'required|numeric|min:0',
@@ -1899,6 +2034,15 @@ class SparepartApiController extends Controller
     // Delete Sparepart Luar (GENERIC)
     public function deleteSparepartLuar($id)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         DB::beginTransaction(); // PERUBAHAN: Menggunakan transaksi database
         try {
             $data = DetailPartLuarService::findOrFail($id);
@@ -1934,6 +2078,15 @@ class SparepartApiController extends Controller
      */
     public function updateServiceStatus(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             $validator = Validator::make($request->all(), [
                 'status_services' => 'required|string|in:Selesai,Proses,Antri',
@@ -2105,6 +2258,15 @@ class SparepartApiController extends Controller
      */
     public function storeGaransiService(Request $request)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             $validator = Validator::make($request->all(), [
                 'kode_garansi' => 'required|string|exists:sevices,kode_service', // Ensure kode_garansi maps to an existing service
@@ -2220,6 +2382,15 @@ class SparepartApiController extends Controller
 
     public function updateGaransiService(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             \Log::info('Update Warranty Request', [
                 'warranty_id' => $id,
@@ -2285,6 +2456,15 @@ class SparepartApiController extends Controller
 
     public function deleteGaransiService($id)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             \Log::info('Delete Warranty Request', [
                 'warranty_id' => $id,
@@ -2368,6 +2548,15 @@ class SparepartApiController extends Controller
      */
     public function storeCatatanService(Request $request)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             $validator = Validator::make($request->all(), [
                 'tgl_catatan_service' => 'required|date',
@@ -2417,6 +2606,15 @@ class SparepartApiController extends Controller
 
     public function updateCatatanService(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             $validator = Validator::make($request->all(), [
                 'tgl_catatan_service' => 'required|date',
@@ -2477,6 +2675,15 @@ class SparepartApiController extends Controller
 
     public function deleteCatatanService($id)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             $data = DetailCatatanService::findOrFail($id);
 

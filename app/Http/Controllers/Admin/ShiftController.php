@@ -42,7 +42,15 @@ class ShiftController extends Controller
         $page = 'Buka Shift';
         $activeShift = Shift::getActiveShift(Auth::id());
         if ($activeShift) {
-            return redirect()->route('shift.show', $activeShift->id)->with('warning', 'Anda sudah memiliki shift yang aktif.');
+            $startTime = Carbon::parse($activeShift->start_time);
+            $warningMsg = 'Toko sudah memiliki shift yang aktif.';
+            
+            // Jika shift sudah berlangsung lebih dari 12 jam (kemungkinan lupa tutup)
+            if ($startTime->diffInHours(now()) > 12) {
+                $warningMsg = 'Shift sebelumnya (' . $startTime->format('d M H:i') . ') belum ditutup. Silakan tutup shift tersebut dahulu sebelum membuka shift baru.';
+            }
+
+            return redirect()->route('shift.show', $activeShift->id)->with('warning', $warningMsg);
         }
 
         return view('admin.page.shift.create', compact('page'));

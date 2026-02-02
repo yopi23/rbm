@@ -139,6 +139,12 @@ class PenjualanController extends Controller
     //Sparepart
     public function create_detail_sparepart(Request $request)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $cek = DetailSparepartPenjualan::where([['kode_penjualan', '=', $request->kode_penjualan], ['kode_sparepart', '=', $request->kode_sparepart]])->get()->first();
         if ($cek) {
             $qty_baru = $cek->qty_sparepart + $request->qty_sparepart;
@@ -209,6 +215,12 @@ class PenjualanController extends Controller
     }
     public function delete_detail_sparepart(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $data = DetailSparepartPenjualan::findOrFail($id);
         if ($data) {
             $update = Sparepart::findOrFail($data->kode_sparepart);
@@ -238,6 +250,12 @@ class PenjualanController extends Controller
     //Barang
     public function create_detail_barang(Request $request)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $cek = DetailBarangPenjualan::where([['kode_penjualan', '=', $request->kode_penjualan], ['kode_barang', '=', $request->kode_barang]])->get()->first();
         if ($cek) {
             $qty_baru = $cek->qty_barang + $request->qty_barang;
@@ -276,6 +294,12 @@ class PenjualanController extends Controller
     }
     public function delete_detail_barang(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $data = DetailBarangPenjualan::findOrFail($id);
         $data->delete();
         if ($data) {
@@ -291,6 +315,12 @@ class PenjualanController extends Controller
 
     public function store_garansi_penjualan(Request $request)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $create = Garansi::create([
             'type_garansi' => 'penjualan',
             'kode_garansi' => $request->kode_garansi,
@@ -314,6 +344,12 @@ class PenjualanController extends Controller
     }
     public function delete_garansi_penjualan(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $data = Garansi::findOrFail($id);
         $data->delete();
         if ($data) {
@@ -340,6 +376,13 @@ class PenjualanController extends Controller
     public function update(Request $request, $id)
     {
         $penjualan = Penjualan::findOrFail($id);
+
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $data_update = [];
         if ($request->total_penjualan <= 0) return redirect()->route('penjualan')->with('error', 'Penjualan Tidak Boleh Kosong');
 

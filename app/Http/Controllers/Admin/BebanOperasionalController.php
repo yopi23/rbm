@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\BebanOperasional;
+use App\Models\Shift;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
@@ -89,6 +90,12 @@ class BebanOperasionalController extends Controller
 
     public function update(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $request->validate([
             'nama_beban' => 'required|string|max:255',
             'periode' => 'required|in:bulanan,tahunan', // Validasi periode
@@ -105,6 +112,11 @@ class BebanOperasionalController extends Controller
      */
     public function destroy($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+
         $beban = BebanOperasional::where('kode_owner', $this->getOwnerId())->findOrFail($id);
         $beban->delete();
         return redirect()->route('beban.index')->with('success', 'Data beban berhasil dihapus.');

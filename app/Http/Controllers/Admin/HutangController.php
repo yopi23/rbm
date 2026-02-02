@@ -3,6 +3,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Hutang;
 use App\Models\Pembelian;
+use App\Models\Shift;
 use App\Traits\ManajemenKasTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -40,6 +41,12 @@ class HutangController extends Controller
 
     public function bayar(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         DB::beginTransaction();
         try {
             $hutang = Hutang::findOrFail($id);

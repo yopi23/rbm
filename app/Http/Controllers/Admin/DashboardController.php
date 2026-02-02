@@ -638,6 +638,15 @@ class DashboardController extends Controller
 
     public function create_service_api(Request $request)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         // --- 1. Validasi Input ---
         $validator = Validator::make($request->all(), [
             'customer_id' => ['nullable', 'integer', 'exists:customer_tables,id'],

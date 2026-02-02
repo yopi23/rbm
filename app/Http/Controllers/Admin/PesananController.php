@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DetailBarangPesanan;
 use App\Models\DetailSparepartPesanan;
 use App\Models\Pesanan;
+use App\Models\Shift;
 use Illuminate\Http\Request;
 
 class PesananController extends Controller
@@ -25,6 +26,12 @@ class PesananController extends Controller
         return view('admin.forms.pesanan',compact(['page','data','sparepart','barang']));
     }
     public function update(Request $request,$id){
+        // Get Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $update = Pesanan::findOrFail($id);
         $update->update([
             'status_pesanan' => $request->status_pesanan,

@@ -75,6 +75,11 @@ class DistribusiLabaController extends Controller
 
     public function storeSetting(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $request->validate([
             'persentase.owner' => 'required|numeric|min:0|max:100',
             'persentase.investor' => 'required|numeric|min:0|max:100',
@@ -416,6 +421,11 @@ class DistribusiLabaController extends Controller
      */
     public function prosesPencairan(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $request->validate([
             'role' => 'required|string',
             'jumlah' => 'required|numeric|min:1',

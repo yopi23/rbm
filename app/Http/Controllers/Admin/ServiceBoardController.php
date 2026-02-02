@@ -75,6 +75,12 @@ class ServiceBoardController extends Controller
 
     public function store(Request $request)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $request->validate([
             'nama_pelanggan' => 'required|string|max:255',
             'no_telp' => 'required|string|max:20',
@@ -113,6 +119,15 @@ class ServiceBoardController extends Controller
 
     public function updateStatus(Request $request)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $request->validate([
             'id' => 'required|exists:sevices,id',
             'status' => 'required|string',
@@ -198,6 +213,15 @@ class ServiceBoardController extends Controller
 
     public function addSparepartToko(Request $request)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $request->validate([
             'kode_services' => 'required|exists:sevices,id', // Note: input name usually 'service_id' but logic uses 'kode_services' (FK to id)
             'kode_sparepart' => 'required|exists:spareparts,id',
@@ -267,6 +291,15 @@ class ServiceBoardController extends Controller
 
     public function deleteSparepartToko($id)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             DB::beginTransaction();
 
@@ -296,6 +329,15 @@ class ServiceBoardController extends Controller
 
     public function addSparepartLuar(Request $request)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $request->validate([
             'kode_services' => 'required|exists:sevices,id',
             'nama_part' => 'required|string',
@@ -326,6 +368,15 @@ class ServiceBoardController extends Controller
 
     public function deleteSparepartLuar($id)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             DB::beginTransaction();
             $data = DetailPartLuarService::findOrFail($id);
@@ -365,6 +416,15 @@ class ServiceBoardController extends Controller
 
     public function updateServiceDetails(Request $request)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $request->validate([
             'id' => 'required|exists:sevices,id',
             'nama_pelanggan' => 'required|string|max:255',

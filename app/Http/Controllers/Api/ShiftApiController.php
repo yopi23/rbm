@@ -66,9 +66,16 @@ class ShiftApiController extends Controller
         $activeShift = Shift::getActiveShift($user->id);
 
         if ($activeShift) {
+            $startTime = \Carbon\Carbon::parse($activeShift->start_time);
+            $message = 'Store already has an active shift.';
+            
+            if ($startTime->diffInHours(now()) > 12) {
+                $message = 'Shift sebelumnya (' . $startTime->format('d M H:i') . ') belum ditutup. Harap tutup shift tersebut dahulu.';
+            }
+
             return response()->json([
                 'success' => false,
-                'message' => 'Store already has an active shift.',
+                'message' => $message,
                 'data' => $this->formatShiftData($activeShift)
             ], 400);
         }

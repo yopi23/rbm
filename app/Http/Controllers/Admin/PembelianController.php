@@ -403,6 +403,12 @@ class PembelianController extends Controller
      */
     public function addItem(Request $request, $id)
 {
+    // Check Active Shift
+    $activeShift = Shift::getActiveShift(auth()->user()->id);
+    if (!$activeShift) {
+        return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+    }
+
     // 1. VALIDASI LENGKAP - (Tidak ada perubahan di sini)
     $validated = $request->validate([
         'nama_item' => 'required|string',
@@ -534,6 +540,12 @@ class PembelianController extends Controller
      */
     public function removeItem($id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         DB::beginTransaction();
 
         try {
@@ -567,6 +579,12 @@ class PembelianController extends Controller
  */
     public function finalize($id, PriceCalculationService $priceCalculator)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         // Ambil data dari form yang disubmit
         $metodePembayaran = request('metode_pembayaran', 'Lunas');
         $tglJatuhTempo = request('tgl_jatuh_tempo');

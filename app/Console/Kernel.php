@@ -20,7 +20,8 @@ class Kernel extends ConsoleKernel
         $schedule->command('app:proses-tutup-buku-harian')->dailyAt('23:55');
         
         // Auto Close Shifts (Runs with Auto Checkout)
-        $schedule->command('shift:auto-close')->dailyAt('17:00');
+        // Jalankan jam 3 pagi untuk menutup shift yang lupa ditutup kemarin
+        $schedule->command('shift:auto-close')->dailyAt('03:00');
         
         // Financial & Asset Management
         $schedule->command('assets:calculate-depreciation')->dailyAt('00:01');

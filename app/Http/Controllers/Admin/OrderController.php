@@ -4,8 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\Order;
 use App\Models\ListOrder;
+use App\Models\Order;
+use App\Models\Shift;
 use App\Models\Sparepart;
 use App\Models\Supplier;
 use Illuminate\Support\Facades\DB;
@@ -40,6 +41,10 @@ class OrderController extends Controller
  */
 public function update(Request $request, $id)
 {
+    $activeShift = Shift::getActiveShift(auth()->user()->id);
+    if (!$activeShift) {
+        return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+    }
     // Validasi input
     $request->validate([
         'kode_supplier' => 'required|exists:suppliers,id',
@@ -73,6 +78,10 @@ public function update(Request $request, $id)
      */
     public function create(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
         // Validasi input
         $request->validate([
             'kode_supplier' => 'required|exists:suppliers,id',
@@ -171,6 +180,10 @@ public function update(Request $request, $id)
      */
     public function addItem(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
         \Log::info('Data Request Tambah Item:', $request->all());
         // Validasi input
         $request->validate([
@@ -221,6 +234,10 @@ public function update(Request $request, $id)
      */
     public function addLowStockItem(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
         // Validasi input
         $request->validate([
             'sparepart_id' => 'required|exists:spareparts,id',
@@ -273,6 +290,10 @@ public function update(Request $request, $id)
      */
     public function updateItem(Request $request, $itemId)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
         // Validasi input
         $request->validate([
             'nama_item' => 'required|string|max:255',
@@ -309,6 +330,10 @@ public function update(Request $request, $id)
      */
     public function removeItem($itemId)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
         try {
             $item = ListOrder::findOrFail($itemId);
             $orderId = $item->order_id;
@@ -338,6 +363,10 @@ public function update(Request $request, $id)
      */
     public function finalize($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
         try {
             $order = Order::findOrFail($id);
 
@@ -369,6 +398,10 @@ public function update(Request $request, $id)
      */
     public function convertToPurchase($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
         DB::beginTransaction();
 
         try {
@@ -457,6 +490,10 @@ public function update(Request $request, $id)
      */
     public function cancel($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
         try {
             $order = Order::findOrFail($id);
 
@@ -501,6 +538,10 @@ public function update(Request $request, $id)
      */
     public function transferItemsToNewOrder(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
         // Validasi input
         $request->validate([
             'selected_items' => 'required|array',
@@ -566,6 +607,10 @@ public function update(Request $request, $id)
      */
     public function updateItemStatus(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
         // Validasi input
         $request->validate([
             'order_id' => 'required|exists:orders,id',
@@ -630,6 +675,10 @@ public function update(Request $request, $id)
      */
     public function bulkUpdateItemStatus(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
         // Validasi input
         $request->validate([
             'selected_items' => 'required|array',
@@ -670,6 +719,10 @@ public function update(Request $request, $id)
      */
     public function handleUnavailableItemsModal(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
         // Validasi input
         $request->validate([
             'selected_items' => 'required|array',

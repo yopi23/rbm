@@ -9,6 +9,7 @@ use App\Models\DetailBarangPesanan;
 use App\Models\Handphone;
 use App\Models\KategoriHandphone;
 use App\Models\RestokBarang;
+use App\Models\Shift;
 use App\Scopes\ActiveScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
@@ -130,6 +131,10 @@ class HandphoneController extends Controller
     // Store Functions
     public function store_produk(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
         $validate = $request->validate([
             'nama_barang' => ['required'],
             'kondisi_barang' => ['required'],
@@ -172,6 +177,10 @@ class HandphoneController extends Controller
     }
     public function store_kategori_produk(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
         $validate = $request->validate([
             'nama_kategori' => ['required'],
         ]);
@@ -217,6 +226,10 @@ class HandphoneController extends Controller
     // Update Functions
     public function update_produk(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
         $validate = $request->validate([
             'nama_barang' => ['required'],
             'kondisi_barang' => ['required'],
@@ -255,6 +268,10 @@ class HandphoneController extends Controller
     }
     public function update_kategori_produk(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
         $validate = $request->validate([
             'nama_kategori' => ['required'],
         ]);
@@ -284,6 +301,10 @@ class HandphoneController extends Controller
     // Delete Functions
     public function delete_produk($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
         $data = Handphone::withoutGlobalScope(ActiveScope::class)->findOrFail($id);
         if ($data->foto_barang != '-') {
             File::delete(public_path('uploads/' . $data->foto_barang));
@@ -299,6 +320,10 @@ class HandphoneController extends Controller
     }
     public function delete_kategori_produk($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
         $data = KategoriHandphone::findOrFail($id);
         if ($data->foto_kategori != '-') {
             File::delete(public_path('uploads/' . $data->foto_kategori));
@@ -341,6 +366,10 @@ class HandphoneController extends Controller
     }
     public function store_restok(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
         $data_restok = RestokBarang::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
         $kode_restok = 'RB' . date('Ymd') . $data_restok->count();
         $create = RestokBarang::create([
@@ -373,6 +402,10 @@ class HandphoneController extends Controller
     }
     public function update_restok(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
         $update = RestokBarang::findOrFail($id);
         $update->update([
             'tgl_restok' => $request->tgl_restok,
@@ -405,6 +438,10 @@ class HandphoneController extends Controller
     }
     public function delete_restok(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
         $data = RestokBarang::findOrFail($id);
         $data->delete();
         if ($data) {
@@ -432,6 +469,10 @@ class HandphoneController extends Controller
     }
     public function store_barang_rusak(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
         $data_barang = Handphone::findOrFail($request->kode_barang);
         if ($data_barang->stok_barang < $request->jumlah_rusak) {
             return redirect()->back()
@@ -463,6 +504,10 @@ class HandphoneController extends Controller
     public function update_barang_rusak(Request $request, $id)
     {
 
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
         $update = BarangRusak::findOrFail($id);
         $data_barang = Handphone::findOrFail($update->kode_barang);
         if ($data_barang != null) {
@@ -495,5 +540,15 @@ class HandphoneController extends Controller
     }
     public function delete_barang_rusak(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+        $data = BarangRusak::findOrFail($id);
+        $data->delete();
+        if ($data) {
+            return redirect()->route('stok_produk')->with(['success' => 'Barang Rusak Berhasil Dihapus']);
+        }
+        return redirect()->route('stok_produk')->with('error', "Oops, Something Went Wrong");
     }
 }

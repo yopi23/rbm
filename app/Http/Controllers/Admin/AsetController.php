@@ -102,6 +102,11 @@ class AsetController extends Controller
 
     public function update(Request $request, Aset $aset)
     {
+        $activeShift = Shift::getActiveShift(Auth::id());
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+
         if ($aset->kode_owner != $this->getOwnerId()) {
             abort(403);
         }
@@ -122,6 +127,11 @@ class AsetController extends Controller
 
     public function destroy(Aset $aset)
     {
+        $activeShift = Shift::getActiveShift(Auth::id());
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+
         if ($aset->kode_owner != $this->getOwnerId()) {
             abort(403);
         }

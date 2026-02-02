@@ -648,11 +648,14 @@ public function search(Request $request)
         $statusPenjualan = ($request->simpan == 'simpan') ? '2' : '1';
 
         // Get Active Shift ID
-        $shiftId = null;
         $activeShift = Shift::getActiveShift(auth()->user()->id);
-        if ($activeShift) {
-            $shiftId = $activeShift->id;
+        if (!$activeShift) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu untuk melakukan transaksi.'
+            ], 403);
         }
+        $shiftId = $activeShift->id;
 
         // Buat data penjualan terlebih dahulu
         $sale = Penjualan::create([
@@ -767,6 +770,15 @@ public function search(Request $request)
     }
     public function updateSaleStatus(Request $request)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $request->validate([
             'id_penjualan' => 'required|exists:penjualans,id',
         ]);
@@ -862,6 +874,15 @@ public function search(Request $request)
     // Update sale
     public function updateSale(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $sale = Penjualan::findOrFail($id);
 
         $updateData = [
@@ -974,6 +995,15 @@ public function search(Request $request)
     // Delete sale
     public function deleteSale($id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $sale = Penjualan::findOrFail($id);
         $sale->delete();
 
@@ -986,6 +1016,15 @@ public function search(Request $request)
     // Tambahkan method baru ini di SalesApiController.php
     public function cancelSale(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         // \Log::info('=== CANCEL SALE START ===');
         // \Log::info('Sale ID: ' . $id);
         // \Log::info('Request Data: ' . json_encode($request->all()));

@@ -15,6 +15,7 @@ use App\Models\Sparepart;
 use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\KasPerusahaan; // Added
+use App\Models\Shift; // Added for Shift Validation
 use App\Services\WhatsAppService;
 use Milon\Barcode\Facades\DNS1DFacade;
 use Illuminate\Support\Facades\DB;
@@ -125,6 +126,12 @@ class ServiceController extends Controller
     }
     public function update_detail_service(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $update = modelServices::findOrFail($id);
         $update->update([
             'tgl_service' => $request->tgl_service,
@@ -149,6 +156,12 @@ class ServiceController extends Controller
     }
     public function update_service(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $update = modelServices::findOrFail($id);
         $update->update([
             'tgl_service' => $request->tgl_service,
@@ -168,6 +181,12 @@ class ServiceController extends Controller
     //CRUD Garansi Service
     public function store_garansi_service(Request $request)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $create = Garansi::create([
             'type_garansi' => 'service',
             'kode_garansi' => $request->kode_garansi,
@@ -189,6 +208,12 @@ class ServiceController extends Controller
     }
     public function update_garansi_service(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $data = Garansi::findOrFail($id);
         $data->update([
             'nama_garansi' => $request->nama_garansi,
@@ -208,6 +233,12 @@ class ServiceController extends Controller
     }
     public function delete_garansi_service(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $data = Garansi::findOrFail($id);
         $data->delete();
         if ($data) {
@@ -224,6 +255,12 @@ class ServiceController extends Controller
     //CRUD Catatan Service
     public function store_catatan_service(Request $request)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $create = DetailCatatanService::create([
             'tgl_catatan_service' => $request->tgl_catatan_service,
             'kode_services' => $request->kode_services,
@@ -241,6 +278,12 @@ class ServiceController extends Controller
     }
     public function delete_catatan_service(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $data = DetailCatatanService::findOrFail($id);
         $data->delete();
         if ($data) {
@@ -253,6 +296,14 @@ class ServiceController extends Controller
     //CRUD Sparepart Toko
     public function store_sparepart_toko(Request $request)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with([
+                'error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ]);
+        }
+
         $cek = DetailPartServices::where([['kode_services', '=', $request->kode_services], ['kode_sparepart', '=', $request->kode_sparepart]])->get()->first();
         if ($cek) {
             $update = DetailPartServices::findOrFail($cek->id);
@@ -314,6 +365,12 @@ class ServiceController extends Controller
     }
     public function delete_sparepart_toko(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $data = DetailPartServices::findOrFail($id);
         if ($data) {
             $update_sparepart = Sparepart::findOrFail($data->kode_sparepart);
@@ -329,6 +386,12 @@ class ServiceController extends Controller
     }
     public function delete_service(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $data = modelServices::findOrFail($id);
 
         $data->delete();
@@ -339,6 +402,14 @@ class ServiceController extends Controller
     //CRUD Sparepart Luar
     public function store_sparepart_luar(Request $request)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with([
+                'error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ]);
+        }
+
         $create = DetailPartLuarService::create([
             'kode_services' => $request->kode_services,
             'nama_part' => $request->nama_part,
@@ -352,6 +423,12 @@ class ServiceController extends Controller
     }
     public function update_sparepart_luar(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $update = DetailPartLuarService::findOrFail($id);
         $update->update([
             'nama_part' => $request->nama_part,
@@ -365,6 +442,12 @@ class ServiceController extends Controller
     }
     public function delete_sparepart_luar(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $data = DetailPartLuarService::findOrFail($id);
         $data->delete();
         if ($data) {
@@ -441,6 +524,14 @@ class ServiceController extends Controller
     }
     public function proses_service(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with([
+                'error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ]);
+        }
+
         $update = modelServices::findOrFail($id);
         // Menggunakan ID teknisi dari request hanya jika status yang dikirim adalah 'Diproses'
         if ($request->status_services == 'Diproses') {
@@ -587,6 +678,12 @@ class ServiceController extends Controller
     }
     public function oper_service(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $update = modelServices::findOrFail($id);
         $update->update([
             'status_services' => $request->status_services,
@@ -598,6 +695,12 @@ class ServiceController extends Controller
     }
     public function pindahKomisi(Request $request)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         // dd($request->all());
         $id_service = $request->input('service_id');
         $teknisi_lama = $request->input('teknisi_lama');
@@ -716,6 +819,17 @@ class ServiceController extends Controller
     // selesaikan
     public function selesaikan(Request $request)
     {
+        // Check Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'status' => 'error', // Adjust response format if needed, usually Admin controllers return redirect or JSON depending on context. But selesaikan seems to be called via AJAX or form. 
+                // Looking at the code: return response()->json(['message' => 'Data berhasil disimpan'], 200);
+                // So JSON is appropriate.
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         // Validasi data
         $request->validate([
             'id_teknisi' => 'required',

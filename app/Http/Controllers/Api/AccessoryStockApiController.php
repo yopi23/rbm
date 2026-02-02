@@ -29,6 +29,15 @@ class AccessoryStockApiController extends Controller
      */
     public function store(Request $request): Response
     {
+        // Get Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.',
+            ], 403);
+        }
+
         $user = $request->user();
 
         // Validasi akses
@@ -55,7 +64,17 @@ class AccessoryStockApiController extends Controller
      */
     public function update(Request $request, string $id): Response
     {
-        //
+        // Get Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.',
+            ], 403);
+        }
+
+        // Implementation placeholder
+        return response()->json(['message' => 'Method not implemented yet'], 501);
     }
 
     /**
@@ -63,6 +82,16 @@ class AccessoryStockApiController extends Controller
      */
     public function destroy(string $id): Response
     {
-        //
+        // Get Active Shift
+        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.',
+            ], 403);
+        }
+
+        // Implementation placeholder
+        return response()->json(['message' => 'Method not implemented yet'], 501);
     }
 }

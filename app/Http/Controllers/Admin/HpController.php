@@ -3,9 +3,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Brand;
-use App\Models\ScreenSize;
 use App\Models\CameraPosition;
 use App\Models\HpData;
+use App\Models\ScreenSize;
+use App\Models\Shift;
 use Illuminate\Http\Request;
 
 class HpController extends Controller
@@ -87,6 +88,10 @@ class HpController extends Controller
     // Menyimpan data HP baru
     public function store(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
         $tipeList = $request->input('tipe_hp'); // array: ['a3s', 'a5s', 'a7s']
         $tipeArray = array_map('trim', explode(',', $tipeList)); // ['a3s', 'a5s', 'a7s']
 
@@ -126,6 +131,10 @@ class HpController extends Controller
     // Update data HP
     public function update(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->route('admin.tg.index')->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
         $validated = $request->validate([
             'brand_id' => 'required|exists:brands,id',
             'type' => 'required|string|max:255',
@@ -142,6 +151,10 @@ class HpController extends Controller
     // Hapus data HP
     public function destroy($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->route('admin.tg.index')->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
         $hp = HpData::findOrFail($id);
         $hp->delete();
 

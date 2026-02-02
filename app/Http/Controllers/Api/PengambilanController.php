@@ -86,11 +86,14 @@ class PengambilanController extends Controller
             $kode_pengambilan = 'PNG' . date('Ymd') . Auth::id() . $count;
 
             // Get Active Shift
-            $shiftId = null;
             $activeShift = Shift::getActiveShift(Auth::id());
-            if ($activeShift) {
-                $shiftId = $activeShift->id;
+            if (!$activeShift) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu untuk melakukan transaksi pengambilan.'
+                ], 403);
             }
+            $shiftId = $activeShift->id;
 
             // Insert ke table pengambilan
             $pengambilan = Pengambilan::create([

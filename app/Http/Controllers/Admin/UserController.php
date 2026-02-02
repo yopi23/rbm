@@ -132,6 +132,14 @@ class UserController extends Controller
             ]);
         }
 
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with([
+                'error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ]);
+        }
+
         $count = Penarikan::latest()->get()->count();
         $kode = 'PEN' . date('Ymd') . $this->getThisUser()->id_upline . $this->getThisUser()->kode_user;
         $create = Penarikan::create([
@@ -242,6 +250,12 @@ if (count($validPhoneNumbers) > 0) {
 
     public function delete_penarikan(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $data = Penarikan::findOrFail($id);
         $data->delete();
         if ($data) {
@@ -260,6 +274,12 @@ if (count($validPhoneNumbers) > 0) {
     }
     public function update_penarikan(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $data = Penarikan::findOrFail($id);
         $data->update([
             'jumlah_penarikan' => $request->jumlah_penarikan,

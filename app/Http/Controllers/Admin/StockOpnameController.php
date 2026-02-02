@@ -64,6 +64,11 @@ class StockOpnameController extends Controller
             'catatan' => 'nullable|string',
         ]);
 
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+
         try {
             DB::beginTransaction();
 
@@ -155,6 +160,11 @@ class StockOpnameController extends Controller
      */
     public function startProcess($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+
         try {
             $period = StockOpnamePeriod::findOrFail($id);
 
@@ -242,11 +252,11 @@ class StockOpnameController extends Controller
             $selisih = $validated['stock_aktual'] - $detail->stock_tercatat;
 
             // Get Active Shift
-            $shiftId = null;
             $activeShift = Shift::getActiveShift(auth()->user()->id);
-            if ($activeShift) {
-                $shiftId = $activeShift->id;
+            if (!$activeShift) {
+                return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
             }
+            $shiftId = $activeShift->id;
 
             // Update detail
             $detail->stock_aktual = $validated['stock_aktual'];
@@ -366,6 +376,11 @@ class StockOpnameController extends Controller
             'adjustment_qty' => 'required|integer',
         ]);
 
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+
         try {
             DB::beginTransaction();
 
@@ -448,6 +463,11 @@ class StockOpnameController extends Controller
      */
     public function completePeriod($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+
         try {
             $period = StockOpnamePeriod::findOrFail($id);
 
@@ -482,6 +502,11 @@ class StockOpnameController extends Controller
      */
     public function cancelPeriod($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+
         try {
             $period = StockOpnamePeriod::findOrFail($id);
 

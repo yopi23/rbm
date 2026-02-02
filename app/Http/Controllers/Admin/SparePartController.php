@@ -113,6 +113,12 @@ class SparePartController extends Controller
     // FUNGSI 3: Untuk menyimpan semua perubahan dari modal
     public function bulkUpdate(Request $request)
 {
+    $activeShift = Shift::getActiveShift(auth()->user()->id);
+    if (!$activeShift) {
+        return response()->json(['message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'], 403);
+    }
+    $shiftId = $activeShift->id;
+
     $request->validate(['items' => 'required|array']);
     $itemsData = $request->input('items');
 
@@ -229,6 +235,11 @@ class SparePartController extends Controller
     //update stock opname
     public function update_stok_sparepart(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+
         // Dapatkan semua data sparepart
         $spareparts = Sparepart::all();
 
@@ -269,6 +280,12 @@ class SparePartController extends Controller
     }
     public function store_kategori_sparepart(Request $request)
 {
+    $activeShift = Shift::getActiveShift(auth()->user()->id);
+    if (!$activeShift) {
+        return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+    }
+    $shiftId = $activeShift->id;
+
     $validate = $request->validate([
         'nama_kategori' => ['required'],
     ]);
@@ -310,6 +327,12 @@ class SparePartController extends Controller
     // Store Functions
     public function store_sparepart(Request $request)
 {
+    $activeShift = Shift::getActiveShift(auth()->user()->id);
+    if (!$activeShift) {
+        return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+    }
+    $shiftId = $activeShift->id;
+
     $validate = $request->validate([
         'nama_sparepart' => ['required'],
         'kode_kategori' => ['required'],
@@ -398,6 +421,12 @@ class SparePartController extends Controller
     // Update Functions
     public function update_sparepart(Request $request, $id)
 {
+    $activeShift = Shift::getActiveShift(auth()->user()->id);
+    if (!$activeShift) {
+        return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+    }
+    $shiftId = $activeShift->id;
+
     $validate = $request->validate([
         'nama_sparepart' => ['required'],
         'kode_kategori' => ['required'],
@@ -468,6 +497,12 @@ class SparePartController extends Controller
 
     public function update_kategori_sparepart(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+        $shiftId = $activeShift->id;
+
         $validate = $request->validate([
             'nama_kategori' => ['required'],
         ]);
@@ -496,6 +531,12 @@ class SparePartController extends Controller
     //Delete Functions
     public function delete_kategori_sparepart($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+        $shiftId = $activeShift->id;
+
         $data = KategoriSparepart::findOrFail($id);
         if ($data->foto_kategori != '-') {
             File::delete(public_path('uploads/' . $data->foto_kategori));
@@ -512,6 +553,12 @@ class SparePartController extends Controller
     //Delete Functions
     public function delete_sparepart($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+        $shiftId = $activeShift->id;
+
         $data = Sparepart::withoutGlobalScope(ActiveScope::class)->findOrFail($id);
         $data->stockHistory()->delete();
          $data->stockNotifications()->delete();
@@ -597,6 +644,12 @@ class SparePartController extends Controller
     //list order
     public function store(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+        $shiftId = $activeShift->id;
+
         $request->validate([
             'qty' => 'required|integer|min:1',
             'id_barang' => 'required',
@@ -689,6 +742,12 @@ class SparePartController extends Controller
     }
     public function updateStatus(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+        $shiftId = $activeShift->id;
+
         // Validasi
         $request->validate([
             'kode_order' => 'required|string',
@@ -710,6 +769,12 @@ class SparePartController extends Controller
     }
     public function updateSpl(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+        $shiftId = $activeShift->id;
+
         $request->validate([
             'order_id' => 'required|exists:order,kode_order',
             'spl_id' => 'required|exists:suppliers,id',
@@ -730,6 +795,11 @@ class SparePartController extends Controller
     }
     public function updateOrderToStock(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json(['success' => false, 'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'], 403);
+        }
+        $shiftId = $activeShift->id;
 
         // Validasi data yang dikirimkan
         $request->validate([
@@ -792,11 +862,11 @@ class SparePartController extends Controller
         }
 
         // Get Active Shift
-        $shiftId = null;
         $activeShift = Shift::getActiveShift(auth()->user()->id);
-        if ($activeShift) {
-            $shiftId = $activeShift->id;
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
         }
+        $shiftId = $activeShift->id;
 
         $create = SparepartRusak::create([
             'tgl_rusak_barang' => $request->tgl_rusak_barang,
@@ -823,6 +893,11 @@ class SparePartController extends Controller
 
     public function update_sparepart_rusak(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+        $shiftId = $activeShift->id;
 
         $update = SparepartRusak::findOrFail($id);
         $data_barang = Sparepart::findOrFail($update->kode_barang);
@@ -879,11 +954,11 @@ class SparePartController extends Controller
         $kode_restok = 'RS' . date('Ymd') . $data_restok->count();
 
         // Get Active Shift
-        $shiftId = null;
         $activeShift = Shift::getActiveShift(auth()->user()->id);
-        if ($activeShift) {
-            $shiftId = $activeShift->id;
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
         }
+        $shiftId = $activeShift->id;
 
         $create = RestokSparepart::create([
             'kode_owner' => $request->kode_owner,
@@ -925,6 +1000,12 @@ class SparePartController extends Controller
     }
     public function update_sparepart_restok(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+        $shiftId = $activeShift->id;
+
         $update = RestokSparepart::findOrFail($id);
         $update->update([
             'tgl_restok' => $request->tgl_restok,
@@ -965,6 +1046,12 @@ class SparePartController extends Controller
     }
     public function delete_sparepart_restok(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+        $shiftId = $activeShift->id;
+
         $data = RestokSparepart::findOrFail($id);
         $data->delete();
         if ($data) {
@@ -996,11 +1083,11 @@ class SparePartController extends Controller
         }
 
         // Get Active Shift
-        $shiftId = null;
         $activeShift = Shift::getActiveShift(auth()->user()->id);
-        if ($activeShift) {
-            $shiftId = $activeShift->id;
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
         }
+        $shiftId = $activeShift->id;
 
         $create = ReturSparepart::create([
             'tgl_retur_barang' => $request->tgl_retur_barang  ?: today('Y-m-d'),
@@ -1044,11 +1131,11 @@ class SparePartController extends Controller
         }
 
         // Get Active Shift
-        $shiftId = null;
         $activeShift = Shift::getActiveShift(auth()->user()->id);
-        if ($activeShift) {
-            $shiftId = $activeShift->id;
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
         }
+        $shiftId = $activeShift->id;
 
         if ($request->jenis_retur == 'supplier') {
             $create = ReturSparepart::create([
@@ -1099,6 +1186,12 @@ class SparePartController extends Controller
 
     public function ubah_status_retur(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+        $shiftId = $activeShift->id;
+
         $update = ReturSparepart::findOrFail($id);
         $update->update([
             'status_retur' => $request->status_retur
@@ -1124,6 +1217,12 @@ class SparePartController extends Controller
     }
     public function updateHargaEcer()
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+        $shiftId = $activeShift->id;
+
         // Ambil semua data sparepart
         $spareparts = Sparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->get();
 
@@ -1143,6 +1242,12 @@ class SparePartController extends Controller
 
     public function processData(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json(['message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'], 403);
+        }
+        $shiftId = $activeShift->id;
+
         // Validasi data
         $request->validate([
             'kode_kategori' => 'required',
@@ -1413,6 +1518,12 @@ class SparePartController extends Controller
 
     public function update_sub_kategori_sparepart(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+        $shiftId = $activeShift->id;
+
         $validate = $request->validate([
             'kategori_id' => ['required'],
             'nama_sub_kategori' => ['required'],
@@ -1448,6 +1559,12 @@ class SparePartController extends Controller
 
     public function delete_sub_kategori_sparepart($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+        $shiftId = $activeShift->id;
+
         $data = SubKategoriSparepart::findOrFail($id);
 
         if ($data->foto_sub_kategori != '-') {

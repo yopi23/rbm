@@ -1232,6 +1232,15 @@ class ServiceApiController extends Controller
     public function bulkUpdateServices(Request $request)
     {
         try {
+            // Get Active Shift
+            $activeShift = Shift::getActiveShift(auth()->user()->id);
+            if (!$activeShift) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.',
+                ], 403);
+            }
+
             $validator = Validator::make($request->all(), [
                 'service_ids' => 'required|array|min:1',
                 'service_ids.*' => 'integer|exists:sevices,id',
@@ -2229,12 +2238,15 @@ class ServiceApiController extends Controller
             }
 
             // 3. Buat Service Klaim Baru (kode ini tetap sama)
-            // Get Active Shift ID
-            $shiftId = null;
+            // Get Active Shift
             $activeShift = Shift::getActiveShift(auth()->user()->id);
-            if ($activeShift) {
-                $shiftId = $activeShift->id;
+            if (!$activeShift) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.',
+                ], 403);
             }
+            $shiftId = $activeShift->id;
 
             $newService = \App\Models\Sevices::create([
                 'kode_service' => $this->generateKodeService(),

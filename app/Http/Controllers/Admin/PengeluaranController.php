@@ -88,11 +88,11 @@ class PengeluaranController extends Controller
         DB::beginTransaction();
         try {
             // Get Active Shift
-            $shiftId = null;
             $activeShift = Shift::getActiveShift(Auth::id());
-            if ($activeShift) {
-                $shiftId = $activeShift->id;
+            if (!$activeShift) {
+                return back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
             }
+            $shiftId = $activeShift->id;
 
             $pengeluaran = PengeluaranToko::create([
                 'tanggal_pengeluaran' => $request->tanggal_pengeluaran,
@@ -126,6 +126,12 @@ class PengeluaranController extends Controller
     }
     public function update_pengeluaran_toko(Request  $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(Auth::id());
+        if (!$activeShift) {
+            return back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $val = $this->validate($request, [
             'tanggal_pengeluaran' => ['required']
         ]);
@@ -148,6 +154,12 @@ class PengeluaranController extends Controller
     }
     public function delete_pengeluaran_toko(Request  $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(Auth::id());
+        if (!$activeShift) {
+            return back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $data = PengeluaranToko::findOrFail($id);
         $data->delete();
         if ($data) {
@@ -309,11 +321,11 @@ class PengeluaranController extends Controller
         DB::beginTransaction();
         try {
             // Get Active Shift
-            $shiftId = null;
             $activeShift = Shift::getActiveShift(Auth::id());
-            if ($activeShift) {
-                $shiftId = $activeShift->id;
+            if (!$activeShift) {
+                return back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
             }
+            $shiftId = $activeShift->id;
 
             $validatedData['kategori'] = 'Lainnya'; // Default kategori
             if ($request->filled('beban_operasional_id')) {
@@ -344,6 +356,12 @@ class PengeluaranController extends Controller
     // PERBAIKAN PADA FUNGSI UPDATE
     public function update_pengeluaran_opex(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(Auth::id());
+        if (!$activeShift) {
+            return back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $validatedData = $request->validate([
             'tgl_pengeluaran' => ['required', 'date'],
             'nama_pengeluaran' => ['required', 'string', 'max:255'],
@@ -398,6 +416,12 @@ class PengeluaranController extends Controller
 
     public function delete_pengeluaran_opex(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(Auth::id());
+        if (!$activeShift) {
+            return back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         $data = PengeluaranOperasional::findOrFail($id);
         $data->delete();
         if ($data) {

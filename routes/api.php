@@ -180,6 +180,8 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     });
     Route::get('/commissions/today', [CommissionController::class, 'getTodayCommissions']);
     Route::get('/commissions/my-today', [CommissionController::class, 'getMyTodayCommission']);
+    // New Route for Detailed History (Technician Commission + Store Profit)
+    Route::get('/commissions/technician-history', [CommissionController::class, 'getTechnicianCommissionHistory']);
 
     // Service Management (General & Completed Specific)
     Route::post('/create-service', [DashboardController::class, 'create_service_api']); // Assuming this creates new services

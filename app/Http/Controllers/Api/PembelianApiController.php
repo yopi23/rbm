@@ -88,11 +88,14 @@ class PembelianApiController extends Controller
             }
 
             // Get Active Shift ID
-            $shiftId = null;
             $activeShift = Shift::getActiveShift(auth()->user()->id);
-            if ($activeShift) {
-                $shiftId = $activeShift->id;
+            if (!$activeShift) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+                ], 403);
             }
+            $shiftId = $activeShift->id;
 
             $pembelian = Pembelian::create([
                 'kode_pembelian' => $kode_pembelian,
@@ -191,6 +194,14 @@ class PembelianApiController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'tanggal_pembelian' => 'sometimes|date',
             'supplier' => 'sometimes|nullable|string|max:255',
@@ -229,6 +240,15 @@ class PembelianApiController extends Controller
      */
     public function addItem(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'nama_item' => 'required|string',
             'jumlah' => 'required|integer|min:1',
@@ -305,6 +325,14 @@ class PembelianApiController extends Controller
      */
     public function updateItem(Request $request, $detailId)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'nama_item' => 'required|string|max:255',
             'jumlah' => 'required|integer|min:1',
@@ -373,6 +401,14 @@ class PembelianApiController extends Controller
      */
     public function removeItem($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         DB::beginTransaction();
 
         try {
@@ -412,6 +448,15 @@ class PembelianApiController extends Controller
      */
     public function finalize(Request $request, $id, PriceCalculationService $priceCalculator)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'metode_pembayaran' => 'required|in:Lunas,Hutang',
             'tgl_jatuh_tempo' => 'required_if:metode_pembayaran,Hutang|nullable|date',

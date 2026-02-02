@@ -104,6 +104,11 @@ class ModalController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(Auth::id());
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+
         $request->validate([
             'tanggal' => 'required|date',
             'keterangan' => 'nullable|string|max:255',
@@ -145,6 +150,11 @@ class ModalController extends Controller
      */
     public function destroy($id)
     {
+        $activeShift = Shift::getActiveShift(Auth::id());
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+
         DB::beginTransaction();
         try {
             $transaksi = TransaksiModal::where('kode_owner', $this->getOwnerId())->findOrFail($id);

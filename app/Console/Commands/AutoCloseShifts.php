@@ -53,6 +53,14 @@ class AutoCloseShifts extends Command
         $count = 0;
 
         foreach ($openShifts as $shift) {
+            // Skip shifts that started less than 12 hours ago
+            // This prevents auto-closing active night shifts if the cron runs at 03:00 AM
+            $startTime = \Carbon\Carbon::parse($shift->start_time);
+            if ($startTime > now()->subHours(12)) {
+                $this->info("Skipping Shift ID {$shift->id} (Started < 12h ago).");
+                continue;
+            }
+
             try {
                 DB::beginTransaction();
 

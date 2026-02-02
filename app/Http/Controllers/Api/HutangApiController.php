@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Hutang;
 use App\Models\Pembelian;
+use App\Models\Shift;
 use App\Traits\ManajemenKasTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -49,6 +50,15 @@ class HutangApiController extends Controller
 
     public function bayar(Request $request, $id)
     {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         DB::beginTransaction();
         try {
             $hutang = Hutang::with('pembelian')->findOrFail($id); // Load relasi pembelian

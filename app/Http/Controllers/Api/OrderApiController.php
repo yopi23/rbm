@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Order;
 use App\Models\ListOrder;
+use App\Models\Shift;
 use App\Models\Sparepart;
 use App\Models\Supplier;
 use Illuminate\Support\Facades\DB;
@@ -260,6 +261,10 @@ class OrderApiController extends Controller
      */
     public function createOrder(Request $request)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json(['message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'], 403);
+        }
         // Validasi input
         $validator = Validator::make($request->all(), [
             'kode_supplier' => 'required|exists:suppliers,id',
@@ -318,6 +323,10 @@ class OrderApiController extends Controller
      */
     public function addOrderItem(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json(['message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'], 403);
+        }
         // Validasi input
         $validator = Validator::make($request->all(), [
             'nama_item' => 'required|string|max:255',
@@ -396,6 +405,10 @@ class OrderApiController extends Controller
      */
     public function addMultipleItems(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json(['message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'], 403);
+        }
         // Validasi input
         $validator = Validator::make($request->all(), [
             'items' => 'required|array',
@@ -476,6 +489,10 @@ class OrderApiController extends Controller
      */
     public function updateOrder(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json(['message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'], 403);
+        }
         // Validasi input
         $validator = Validator::make($request->all(), [
             'kode_supplier' => 'required|exists:suppliers,id',
@@ -529,6 +546,11 @@ class OrderApiController extends Controller
      */
     public function removeOrderItem($itemId)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json(['message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'], 403);
+        }
+
         try {
             $item = ListOrder::findOrFail($itemId);
 
@@ -579,6 +601,11 @@ class OrderApiController extends Controller
      */
     public function finalizeOrder($id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json(['message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'], 403);
+        }
+
         try {
             $order = Order::where('kode_owner', $this->getThisUser()->id_upline)->findOrFail($id);
 

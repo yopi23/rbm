@@ -147,6 +147,14 @@ class StockOpnameController extends Controller
             ], 422);
         }
 
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             DB::beginTransaction();
 
@@ -230,6 +238,14 @@ class StockOpnameController extends Controller
      */
     public function startProcess(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             $kode_owner = $this->getThisUser()->id_upline;
 
@@ -485,6 +501,14 @@ class StockOpnameController extends Controller
      */
     public function scanSparepart(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'search' => 'required|string',
         ]);
@@ -723,6 +747,14 @@ class StockOpnameController extends Controller
             ], 422);
         }
 
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         DB::beginTransaction();
 
         try {
@@ -869,6 +901,14 @@ class StockOpnameController extends Controller
                 'message' => 'Validasi gagal',
                 'errors' => $validator->errors()
             ], 422);
+        }
+
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
         }
 
         try {
@@ -1289,6 +1329,14 @@ class StockOpnameController extends Controller
      */
     public function cancelPeriod(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
         try {
             $kode_owner = $this->getThisUser()->id_upline;
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Supplier;
+use App\Models\Shift;
 use Illuminate\Http\Request;
 
 class SupplierController extends Controller
@@ -165,6 +166,12 @@ class SupplierController extends Controller
      */
     public function destroy($id)
     {
+        // Get Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        }
+
         //
         $data = Supplier::findOrFail($id);
         $data->delete();

@@ -17,6 +17,11 @@ class PengembalianController extends Controller
     //
     public function index()
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return redirect()->back()->withErrors(['error' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.']);
+        }
+
         $page = "Pengembalian";
         $listLaci = $this->getKategoriLaci();
         $data = Pengambilan::where([['user_input', '=', auth()->user()->id], ['kode_owner', '=', $this->getThisUser()->id_upline], ['status_pengambilan', '=', '0']])->get()->first();
@@ -24,11 +29,7 @@ class PengembalianController extends Controller
 
         if (!$data) {
             // Get Active Shift
-            $shiftId = null;
-            $activeShift = Shift::getActiveShift(auth()->user()->id);
-            if ($activeShift) {
-                $shiftId = $activeShift->id;
-            }
+            $shiftId = $activeShift->id;
 
             $kode_pengambilan = 'PNG' . date('Ymd') . auth()->user()->id . $count;
             $create = Pengambilan::create([
@@ -115,6 +116,14 @@ class PengembalianController extends Controller
     }
     public function destroy_detail(Request $request, $id)
     {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.',
+            ], 403);
+        }
+
         $service = modelServices::findOrFail($request->id_service);
 
         // Update field kode_pengambilan
