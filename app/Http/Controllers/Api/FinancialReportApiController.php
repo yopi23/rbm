@@ -212,11 +212,12 @@ class FinancialReportApiController extends Controller
                 'total_beban_operasional' => $profitData['total_beban'],
                 'laba_bersih_bisnis' => $profitData['laba_bersih'],
                 'detail_beban' => $profitData['detail_beban'],
+                'detail_hpp' => $profitData['detail_hpp'] ?? [], // NEW: Return detail HPP
 
                 // ANALISIS TAMBAHAN
                 'service_rugi_count' => $serviceStats->rugi_count ?? 0,
                 'service_profit_count' => ($serviceStats->total ?? 0) - ($serviceStats->rugi_count ?? 0),
-                'analisis_part_toko' => [], // Deprecated
+                'analisis_part_toko' => $this->getPartServiceDetails($kode_owner, $tgl_awal, $tgl_akhir), // Restored
                 
                 // BACKWARD COMPATIBILITY
                 'laba_bersih' => $profitData['laba_bersih'], 
@@ -322,7 +323,7 @@ class FinancialReportApiController extends Controller
             ->where('tanggal', '<=', $endDate)
             ->sum('jumlah');
 
-        $capitalOut = \App\Models\TransaksiModal::where('kode_owner', $ownerId)
+        $capitalOut = TransaksiModal::where('kode_owner', $ownerId)
             ->where('jenis_transaksi', 'penarikan_modal')
             ->where('tanggal', '<=', $endDate)
             ->sum('jumlah');
@@ -708,7 +709,8 @@ class FinancialReportApiController extends Controller
                 'sevices.nama_pelanggan',
                 'spareparts.nama_sparepart',
                 'detail_part_services.detail_harga_part_service as harga_jual',
-                'spareparts.harga_beli as harga_modal', // PENTING: Ambil harga modal
+                // PENTING: Ambil harga modal historis jika ada, fallback ke master
+                DB::raw('CASE WHEN detail_part_services.detail_modal_part_service > 0 THEN detail_part_services.detail_modal_part_service ELSE spareparts.harga_beli END as harga_modal'),
                 'detail_part_services.qty_part as qty',
                 'sevices.updated_at',
                 DB::raw("'Part Toko' as source_type")

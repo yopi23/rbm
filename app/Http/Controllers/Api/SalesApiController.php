@@ -16,6 +16,11 @@ use App\Models\KategoriSparepart;
 use App\Models\PemasukkanLain;
 use App\Models\ProductVariant;
 use App\Models\AttributeValue;
+use App\Models\Product;
+use App\Models\ProductAttribute;
+use App\Models\ProductAttributeValue;
+use App\Models\ProductVariantAttributeValue;
+use App\Models\Shift;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 

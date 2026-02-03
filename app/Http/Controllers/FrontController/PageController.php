@@ -17,9 +17,9 @@ class PageController extends Controller
         $datateam = User::join('user_details', 'user_details.kode_user', '=', 'users.id')->where([
             ['user_details.status_user', '=', '1'], ['user_details.jabatan', '!=', '0']
         ])->get(['users.*', 'user_details.*', 'users.id as id_user']);
-        $produk = Handphone::latest()->get()->count();
-        $sparepart = Sparepart::latest()->get()->count();
-        $service = Sevices::latest()->get()->count();
+        $produk = Handphone::count();
+        $sparepart = Sparepart::count();
+        $service = Sevices::count();
         return view('front.index', compact(['datateam', 'service', 'sparepart', 'produk']));
     }
     public function view_service(Request $request)

@@ -820,7 +820,7 @@ class ServiceController extends Controller
     public function selesaikan(Request $request)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'status' => 'error', // Adjust response format if needed, usually Admin controllers return redirect or JSON depending on context. But selesaikan seems to be called via AJAX or form. 

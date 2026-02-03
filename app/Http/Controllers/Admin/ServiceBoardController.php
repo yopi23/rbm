@@ -76,7 +76,7 @@ class ServiceBoardController extends Controller
     public function store(Request $request)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
         }
@@ -120,7 +120,7 @@ class ServiceBoardController extends Controller
     public function updateStatus(Request $request)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -214,7 +214,7 @@ class ServiceBoardController extends Controller
     public function addSparepartToko(Request $request)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -292,7 +292,7 @@ class ServiceBoardController extends Controller
     public function deleteSparepartToko($id)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -330,7 +330,7 @@ class ServiceBoardController extends Controller
     public function addSparepartLuar(Request $request)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -369,7 +369,7 @@ class ServiceBoardController extends Controller
     public function deleteSparepartLuar($id)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -417,7 +417,7 @@ class ServiceBoardController extends Controller
     public function updateServiceDetails(Request $request)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\AccessoryStockResource;
 use App\Models\AccessoryStock;
+use App\Models\Shift;
 use Illuminate\Http\Request;
 
 class AccessoryStockApiController extends Controller
@@ -30,7 +31,7 @@ class AccessoryStockApiController extends Controller
     public function store(Request $request): Response
     {
         // Get Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -65,7 +66,7 @@ class AccessoryStockApiController extends Controller
     public function update(Request $request, string $id): Response
     {
         // Get Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -83,7 +84,7 @@ class AccessoryStockApiController extends Controller
     public function destroy(string $id): Response
     {
         // Get Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -95,3 +96,4 @@ class AccessoryStockApiController extends Controller
         return response()->json(['message' => 'Method not implemented yet'], 501);
     }
 }
+

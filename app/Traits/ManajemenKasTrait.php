@@ -32,10 +32,12 @@ trait ManajemenKasTrait
             $ownerId = $sumberModel->kode_owner;
 
             // Dapatkan saldo terakhir dari kas milik owner ini secara aman (mengunci baris terakhir).
-            $saldoTerakhir = KasPerusahaan::where('kode_owner', $ownerId)
+            $lastKas = KasPerusahaan::where('kode_owner', $ownerId)
                                 ->latest('id')
                                 ->lockForUpdate() // Mencegah race condition jika ada 2 transaksi bersamaan
-                                ->first()->saldo ?? 0;
+                                ->first();
+            
+            $saldoTerakhir = $lastKas ? $lastKas->saldo : 0;
 
             // Hitung saldo baru
             $saldoBaru = $saldoTerakhir + $debit - $kredit;

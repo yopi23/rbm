@@ -203,9 +203,13 @@ class ShiftController extends Controller
                     'nama' => $history->sparepart->nama_sparepart,
                     'used' => 0,
                     'stock_in' => 0,
-                    'current_stock' => 0, // Will be updated to the latest stock_after
-                    'initial_stock_est' => 0
+                    'current_stock' => 0, 
+                    'initial_stock_est' => 0 // This will be calculated based on the FIRST history record found
                 ];
+
+                // Set initial stock estimation based on the first record found in this period
+                // Logic: If this is the first record, the stock BEFORE this change was the initial stock for this period.
+                $data[$id]['initial_stock_est'] = $history->stock_before;
             }
 
             // Aggregate changes
@@ -217,13 +221,9 @@ class ShiftController extends Controller
 
             // Always update current_stock to the latest stock_after in this sequence
             $data[$id]['current_stock'] = $history->stock_after;
-        }
-
-        // Calculate Initial Stock Estimate
-        foreach($data as &$item) {
-            // Initial = End + Used - In
-            $item['initial_stock_est'] = $item['current_stock'] + $item['used'] - $item['stock_in'];
-            $item['sisa'] = $item['current_stock'];
+            
+            // Recalculate remaining stock (sisa) to be consistent
+            $data[$id]['sisa'] = $data[$id]['current_stock'];
         }
 
         return $data;

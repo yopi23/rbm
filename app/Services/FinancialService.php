@@ -83,7 +83,16 @@ class FinancialService
         // 2. COGS / HPP (Harga Pokok Penjualan)
         // ==============================
         // Menggunakan method calculateCOGS yang sudah dioptimalkan
-        $hpp = $this->calculateCOGS($ownerId, $startRange, $endRange);
+        $hppResult = $this->calculateCOGS($ownerId, $startRange, $endRange);
+        
+        // Handle backward compatibility jika calculateCOGS mengembalikan float (old version)
+        if (is_array($hppResult)) {
+            $hpp = $hppResult['total'];
+            $hppDetails = $hppResult['breakdown'];
+        } else {
+            $hpp = $hppResult;
+            $hppDetails = [];
+        }
 
         // ==============================
         // 3. LABA KOTOR
@@ -159,6 +168,7 @@ class FinancialService
             'laba_bersih' => round($netProfit, 0),
             'net_profit' => round($netProfit, 0), // Added alias
             'detail_beban' => array_map(function($value) { return round($value, 0); }, $detailBeban),
+            'detail_hpp' => $hppDetails, // NEW: Return detail HPP
             'jumlah_hari_periode' => $calculatedJumlahHariPeriode,
         ];
     }
@@ -166,6 +176,7 @@ class FinancialService
     /**
      * Menghitung HPP (Cost of Goods Sold)
      * Total Modal dari barang/jasa yang laku terjual.
+     * Updated: Now returns array with breakdown
      */
     public function calculateCOGS($ownerId, $startDate, $endDate)
     {
@@ -173,6 +184,13 @@ class FinancialService
         $endRange = $endDate instanceof Carbon ? $endDate : Carbon::parse($endDate);
 
         $totalHPP = 0;
+        
+        $breakdown = [
+            'part_toko_service' => 0,
+            'part_luar_service' => 0,
+            'barang_retail' => 0,
+            'sparepart_retail' => 0
+        ];
 
         // A. HPP dari Service (Part Toko & Part Luar)
         // Cari service yang selesai/diambil pada periode ini
@@ -183,13 +201,21 @@ class FinancialService
 
         if ($services->isNotEmpty()) {
             // Part Toko
-            $partTokoHPP = DetailPartServices::whereIn('kode_services', $services)
-                ->sum(DB::raw('detail_modal_part_service * qty_part'));
+            // Fix: Join with spareparts to get harga_beli if detail_modal_part_service is 0 (Backward Compatibility)
+            $partTokoHPP = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+                ->whereIn('detail_part_services.kode_services', $services)
+                ->sum(DB::raw('CASE 
+                    WHEN detail_part_services.detail_modal_part_service > 0 THEN detail_part_services.detail_modal_part_service 
+                    ELSE spareparts.harga_beli 
+                END * detail_part_services.qty_part'));
             
             // Part Luar
             $partLuarHPP = DetailPartLuarService::whereIn('kode_services', $services)
                 ->select(DB::raw('SUM(CASE WHEN harga_beli > 0 THEN harga_beli ELSE harga_part END * qty_part) as total_hpp'))
                 ->value('total_hpp');
+                
+            $breakdown['part_toko_service'] = (float) $partTokoHPP;
+            $breakdown['part_luar_service'] = (float) $partLuarHPP;
 
             $totalHPP += ($partTokoHPP + $partLuarHPP);
         }
@@ -209,10 +235,16 @@ class FinancialService
             $sparepartHPP = DetailSparepartPenjualan::whereIn('kode_penjualan', $penjualans)
                 ->sum(DB::raw('detail_harga_modal * qty_sparepart'));
 
+            $breakdown['barang_retail'] = (float) $barangHPP;
+            $breakdown['sparepart_retail'] = (float) $sparepartHPP;
+
             $totalHPP += ($barangHPP + $sparepartHPP);
         }
 
-        return $totalHPP;
+        return [
+            'total' => $totalHPP,
+            'breakdown' => $breakdown
+        ];
     }
 
     /**

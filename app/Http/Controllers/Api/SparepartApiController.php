@@ -26,6 +26,7 @@ use App\Models\Shift;
 use Carbon\Carbon; // Added for date handling
 use Illuminate\Validation\Rule;
 use App\Traits\ManajemenKasTrait;
+use App\Models\HistoryLaci;
 
 
 class SparepartApiController extends Controller
@@ -662,7 +663,7 @@ class SparepartApiController extends Controller
     public function updateService(Request $request, $id)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -676,7 +677,7 @@ class SparepartApiController extends Controller
 
                 // 1. Cari riwayat DP lama di tabel history_laci berdasarkan kode_service
                 // Kita cari transaksi 'masuk' yang pernah dicatat untuk service ini
-                $oldHistory = \App\Models\HistoryLaci::where('reference_code', $service->kode_service)
+                $oldHistory = HistoryLaci::where('reference_code', $service->kode_service)
                     ->where('reference_type', 'service')
                     ->where('masuk', '>', 0)
                     ->latest()
@@ -818,7 +819,7 @@ class SparepartApiController extends Controller
     public function recalculateCommission(Request $request, $serviceId) // Public method for API route
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -1168,7 +1169,7 @@ class SparepartApiController extends Controller
     public function addPartTokoToCompletedService(Request $request) // Renamed from restoreSparepartTokoClean for clarity on its purpose
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -1296,7 +1297,7 @@ class SparepartApiController extends Controller
     public function updatePartTokoQuantityForCompletedService(Request $request, $detailPartId) // Renamed from updateSparepartToko
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -1398,7 +1399,7 @@ class SparepartApiController extends Controller
     public function deletePartTokoFromCompletedService($detailPartId) // Renamed from deleteSparepartTokoClean
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -1472,7 +1473,7 @@ class SparepartApiController extends Controller
     public function addPartLuarToCompletedService(Request $request) // Renamed from storeSparepartLuar
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -1539,7 +1540,7 @@ class SparepartApiController extends Controller
     public function updatePartLuarForCompletedService(Request $request, $detailPartLuarId) // Renamed from updateSparepartLuar
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -1618,7 +1619,7 @@ class SparepartApiController extends Controller
     public function deletePartLuarFromCompletedService($detailPartLuarId) // Renamed from deleteSparepartLuar
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -1681,7 +1682,7 @@ class SparepartApiController extends Controller
     public function storeSparepartToko(Request $request)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -1704,7 +1705,7 @@ class SparepartApiController extends Controller
                 ], 422);
             }
 
-            $sparepart = \App\Models\Sparepart::find($request->kode_sparepart);
+            $sparepart = Sparepart::find($request->kode_sparepart);
             if (!$sparepart) {
                 return response()->json([
                     'success' => false,
@@ -1715,10 +1716,10 @@ class SparepartApiController extends Controller
             DB::beginTransaction();
             try {
                 // Ambil data service untuk cek status klaim
-                $service = \App\Models\Sevices::findOrFail($request->kode_services);
+                $service = modelServices::findOrFail($request->kode_services);
                 $isWarrantyClaim = $service->claimed_from_service_id !== null;
 
-                $cek = \App\Models\DetailPartServices::where([
+                $cek = DetailPartServices::where([
                     ['kode_services', '=', $request->kode_services],
                     ['kode_sparepart', '=', $request->kode_sparepart]
                 ])->first();
@@ -1787,7 +1788,7 @@ class SparepartApiController extends Controller
                         ], 400);
                     }
 
-                    \App\Models\DetailPartServices::create([
+                    DetailPartServices::create([
                         'kode_services' => $request->kode_services,
                         'kode_sparepart' => $request->kode_sparepart,
                         'detail_modal_part_service' => $sparepart->harga_beli,
@@ -1851,7 +1852,7 @@ class SparepartApiController extends Controller
     public function deletePartTokoFromService($detailPartId)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -1917,7 +1918,7 @@ class SparepartApiController extends Controller
     public function storeSparepartLuar(Request $request)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -1974,7 +1975,7 @@ class SparepartApiController extends Controller
     public function updateSparepartLuar(Request $request, $id)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -2035,7 +2036,7 @@ class SparepartApiController extends Controller
     public function deleteSparepartLuar($id)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -2079,7 +2080,7 @@ class SparepartApiController extends Controller
     public function updateServiceStatus(Request $request, $id)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -2259,7 +2260,7 @@ class SparepartApiController extends Controller
     public function storeGaransiService(Request $request)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -2383,7 +2384,7 @@ class SparepartApiController extends Controller
     public function updateGaransiService(Request $request, $id)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -2457,7 +2458,7 @@ class SparepartApiController extends Controller
     public function deleteGaransiService($id)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -2549,7 +2550,7 @@ class SparepartApiController extends Controller
     public function storeCatatanService(Request $request)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -2607,7 +2608,7 @@ class SparepartApiController extends Controller
     public function updateCatatanService(Request $request, $id)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -2676,7 +2677,7 @@ class SparepartApiController extends Controller
     public function deleteCatatanService($id)
     {
         // Check Active Shift
-        $activeShift = \App\Models\Shift::getActiveShift(auth()->user()->id);
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
         if (!$activeShift) {
             return response()->json([
                 'success' => false,
@@ -2831,3 +2832,5 @@ class SparepartApiController extends Controller
 
 
 }
+
+
