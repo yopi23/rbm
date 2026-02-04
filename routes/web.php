@@ -549,7 +549,7 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
     });
      // Pembelian Routes
     Route::prefix('admin')->middleware(['auth'])->group(function () {
-        Route::get('/accumulated-funds', [App\Http\Controllers\Admin\AccumulatedFundsController::class, 'index'])->name('accumulated.funds');
+        // Duplicate route removed
         Route::get('/pembelian', [PembelianController::class, 'index'])->name('pembelian.index');
         Route::get('/pembelian/create', [PembelianController::class, 'create'])->name('pembelian.create');
         Route::post('/pembelian', [PembelianController::class, 'store'])->name('pembelian.store');
