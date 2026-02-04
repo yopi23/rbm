@@ -16,7 +16,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use App\Models\StockHistory;
 use App\Models\StockNotification;
-use App\Models\HargaKhusus;
 use App\Models\Hutang;
 use App\Models\ProductVariant;
 use App\Models\Shift; // Import Shift
@@ -685,7 +684,6 @@ class PembelianController extends Controller
                     $detail->product_variant_id = $variant->id;
                     $detail->save();
                     $sparepart->save();
-                    $this->updateHargaKhusus($sparepart, $calculatedPrices);
 
                     // Log stock change for NEW ITEM
                     $this->logStockChange(
@@ -755,6 +753,8 @@ class PembelianController extends Controller
                     if ($sparepart) {
                         $sparepart->stok_sparepart = $new_total_stock;
                         $sparepart->harga_beli = $new_stock_cost;
+                        $sparepart->harga_jual = $calculatedPrices['internal_price'];
+                        $sparepart->harga_ecer = $calculatedPrices['wholesale_price'];
                         $sparepart->harga_pasang = $calculatedPrices['default_service_fee'] ?? 0;
                         $sparepart->save();
 
@@ -774,7 +774,6 @@ class PembelianController extends Controller
                     throw new \Exception('Varian produk untuk restock tidak ditemukan untuk item: "' . $detail->nama_item . '".');
                 }
 
-                    $this->updateHargaKhusus($sparepart, $calculatedPrices);
                 }
             }
 
@@ -831,16 +830,6 @@ class PembelianController extends Controller
             return back()->withErrors(['error' => 'GAGAL: ' . $e->getMessage()]);
         }
     }
-    protected function updateHargaKhusus($sparepart, $calculatedPrices)
-{
-    HargaKhusus::updateOrCreate(
-        ['id_sp' => $sparepart->id],
-        [
-            'harga_toko'   =>  0,
-            'harga_satuan' => $calculatedPrices['retail_price'] ?? 0,
-        ]
-    );
-}
 
 
 

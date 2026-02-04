@@ -124,8 +124,16 @@ class ShiftApiController extends Controller
         }
 
         // Calculate financials
-        $cashIn = $shift->kasPerusahaan()->sum('debit');
-        $cashOut = $shift->kasPerusahaan()->sum('kredit');
+        // EXCLUDE Pembelian (Stock) and Hutang (Debt) from Shift Cash Flow
+        // Because they use "Kas Toko/Safe", not "Kas Laci/Drawer"
+        $cashIn = $shift->kasPerusahaan()
+            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+            ->sum('debit');
+
+        $cashOut = $shift->kasPerusahaan()
+            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+            ->sum('kredit');
+
         $expectedCash = $shift->modal_awal + $cashIn - $cashOut;
 
         // Generate Snapshot Report

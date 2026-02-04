@@ -326,8 +326,8 @@ class ReviewController extends Controller
         ]);
         $sparepart->update([
                 'harga_beli' => $variant->purchase_price,
-                'harga_jual' => $variant->internal_price,
-                'harga_ecer' => $variant->wholesale_price,
+                'harga_jual' => $variant->retail_price,
+                'harga_ecer' => $variant->retail_price,
                 'harga_pasang' => $calculatedPrices['default_service_fee'],
                 'stok_sparepart' => $variant->stock,
             ]);

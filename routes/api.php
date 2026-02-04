@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\PembelianApiController;
 use App\Http\Controllers\Api\QrisController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\ShiftApiController;
+use App\Http\Controllers\Api\AccumulatedFundsApiController;
 use Illuminate\Support\Facades\Broadcast;
 
 /*
@@ -145,6 +146,7 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::get('/laci-breakdown/export', [FinancialReportApiController::class, 'exportLaciBreakdown']);
 
     // Financial & Reports (existing, tetap sama)
+    Route::get('/accumulated-funds', [AccumulatedFundsApiController::class, 'index']); // New Accumulated Funds
     Route::get('/financial-report', [FinancialReportApiController::class, 'getFinancialReport']);
     Route::get('/profit-allocation/preview', [FinancialReportApiController::class, 'getProfitAllocationPreview']);
     Route::post('/profit-allocation/distribute', [FinancialReportApiController::class, 'processProfitDistribution']);

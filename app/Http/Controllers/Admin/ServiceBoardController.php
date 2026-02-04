@@ -246,8 +246,19 @@ class ServiceBoardController extends Controller
                     'qty_part' => $qty_baru,
                     'user_input' => auth()->id(),
                 ]);
+
+                // Manually log stock change for update (Observer only handles Created)
+                $update_sparepart->logStockChange(
+                    -$qty_used,
+                    'service_add_qty',
+                    $request->kode_services,
+                    'Service Board Add Part (Update): ' . $request->kode_services,
+                    auth()->id()
+                );
+
             } else {
                 // Create new
+                // Observer will handle stock update and logging
                 DetailPartServices::create([
                     'kode_services' => $request->kode_services,
                     'kode_sparepart' => $request->kode_sparepart,
@@ -256,25 +267,6 @@ class ServiceBoardController extends Controller
                     'qty_part' => $qty_used,
                     'user_input' => auth()->id(),
                 ]);
-            }
-
-            // Deduct stock
-            $current_db_stock = $update_sparepart->stok_sparepart;
-            $stok_baru = $current_db_stock - $qty_used;
-            $update_sparepart->update(['stok_sparepart' => $stok_baru]);
-
-            // Log Stock History
-            if (method_exists($this, 'logStockChange')) {
-                $this->logStockChange(
-                    $update_sparepart->id,
-                    -$qty_used,
-                    'service_add_qty',
-                    $request->kode_services,
-                    'Service Board Add Part: ' . $request->kode_services,
-                    auth()->id(),
-                    $current_db_stock,
-                    $stok_baru
-                );
             }
 
             // Update Total Biaya Service
@@ -306,13 +298,15 @@ class ServiceBoardController extends Controller
             $data = DetailPartServices::findOrFail($id);
             $serviceId = $data->kode_services;
 
-            // Restore stock
+            // Restore stock using model method (updates sparepart + variant + logs history)
             $update_sparepart = Sparepart::findOrFail($data->kode_sparepart);
-            $stok_baru = $update_sparepart->stok_sparepart + $data->qty_part;
-            $update_sparepart->update(['stok_sparepart' => $stok_baru]);
-
-            // Log Stock History (optional for restore, but good practice)
-            // ...
+            $update_sparepart->logStockChange(
+                $data->qty_part,
+                'service_remove_part',
+                $serviceId,
+                'Service Board Remove Part: ' . $serviceId,
+                auth()->id()
+            );
 
             $data->delete();
 

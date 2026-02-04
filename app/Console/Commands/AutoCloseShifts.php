@@ -65,8 +65,13 @@ class AutoCloseShifts extends Command
                 DB::beginTransaction();
 
                 // Calculate financials (Logic copied from ShiftApiController::close)
-                $cashIn = $shift->kasPerusahaan()->sum('debit');
-                $cashOut = $shift->kasPerusahaan()->sum('kredit');
+                // EXCLUDE Pembelian (Stock) and Hutang (Debt) -> Kas Toko
+                $cashIn = $shift->kasPerusahaan()
+                    ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+                    ->sum('debit');
+                $cashOut = $shift->kasPerusahaan()
+                    ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+                    ->sum('kredit');
                 $expectedCash = $shift->modal_awal + $cashIn - $cashOut;
 
                 // Generate Snapshot Report (Simplified version of ShiftApiController::getSparepartAnalysis)

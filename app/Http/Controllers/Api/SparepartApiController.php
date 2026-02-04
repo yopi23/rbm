@@ -1231,7 +1231,15 @@ class SparepartApiController extends Controller
                         'qty_part' => $newTotalQtyForService,
                         'user_input' => auth()->user()->id,
                     ]);
-                    $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
+
+                    // Use logStockChange to update stock and variant
+                    $sparepart->logStockChange(
+                        -$qtyToAdd,
+                        'service_update_qty',
+                        $serviceId,
+                        'Penambahan qty sparepart pada service selesai: ' . $serviceId,
+                        auth()->user()->id
+                    );
 
                 } else {
                     // New part for this service
@@ -1253,7 +1261,9 @@ class SparepartApiController extends Controller
                         'qty_part' => $qtyToAdd,
                         'user_input' => auth()->user()->id,
                     ]);
-                    $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
+                    
+                    // REMOVED: $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
+                    // Handled by PartServiceObserver -> logStockChange (which also updates variant stock)
                 }
 
                 // Recalculate commission
@@ -1349,9 +1359,14 @@ class SparepartApiController extends Controller
                     'user_input' => auth()->user()->id,
                 ]);
 
-                $sparepart->update([
-                    'stok_sparepart' => $projectedNewOverallStock,
-                ]);
+                // Use logStockChange to update stock and variant
+                $sparepart->logStockChange(
+                    $stockAdjustment,
+                    'service_update_qty_api',
+                    $serviceId,
+                    'Perubahan jumlah sparepart via API pada service: ' . $serviceId,
+                    auth()->user()->id
+                );
 
                 // Recalculate commission
                 $commissionData = $this->performCommissionRecalculation($serviceId);
@@ -1417,14 +1432,15 @@ class SparepartApiController extends Controller
             $deletedQty = (int) $data->qty_part; // Ensure it's an integer
 
             $sparepart = Sparepart::findOrFail($sparepartId);
-            $stok_baru = (int) $sparepart->stok_sparepart + $deletedQty;
-
-            $variant = $data->variant;
-
-            $sparepart->update(['stok_sparepart' => $stok_baru]);
-            if ($variant) {
-                $variant->increment('stock', $detailPart->qty_part);
-            }
+            
+            // Use logStockChange to restore stock and variant
+            $sparepart->logStockChange(
+                $deletedQty,
+                'service_delete_part_api',
+                $serviceId,
+                'Pengembalian stok dari penghapusan part pada service: ' . $serviceId,
+                auth()->user()->id
+            );
 
             $data->delete();
 
@@ -1440,7 +1456,7 @@ class SparepartApiController extends Controller
                     'service_id' => $serviceId,
                     'sparepart_id' => $sparepartId,
                     'restored_qty_to_stock' => $deletedQty,
-                    'remaining_stock' => $stok_baru,
+                    'remaining_stock' => $sparepart->stok_sparepart,
                     'commission_data' => $commissionData
                 ]
             ], 200);
@@ -1875,11 +1891,14 @@ class SparepartApiController extends Controller
             $modalPartYangDihapus = $detailPart->detail_modal_part_service * $detailPart->qty_part;
             // =========================================================================
 
-            // 2. Kembalikan stok sparepart
-            $sparepart->increment('stok_sparepart', $detailPart->qty_part);
-            if ($variant) {
-                $variant->increment('stock', $detailPart->qty_part);
-            }
+            // 2. Kembalikan stok sparepart via logStockChange
+            $sparepart->logStockChange(
+                $detailPart->qty_part,
+                'service_delete_part_api',
+                $service ? $service->id : $detailPart->kode_services, // Fallback ID
+                'Pengembalian stok dari penghapusan part pada service: ' . ($service ? $service->kode_service : $detailPart->kode_services),
+                auth()->user()->id
+            );
 
             // 3. Lakukan koreksi di buku besar (jika ini service klaim)
             if ($service && $service->claimed_from_service_id !== null) {

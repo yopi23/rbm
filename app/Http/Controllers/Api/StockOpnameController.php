@@ -962,53 +962,34 @@ class StockOpnameController extends Controller
             $detail->checked_at = now();
             $detail->save();
 
-            // LANGSUNG UPDATE STOK SPAREPART & VARIANT
+            // LANGSUNG UPDATE STOK SPAREPART & VARIANT via logStockChange
             if ($selisih != 0) {
                 $currentStock = $sparepart->stok_sparepart;
-                $newStock = $stockAktual; // Stok baru = stok aktual hasil pemeriksaan
+                // Calculate delta based on current stock to ensure final stock matches actual count
+                // If we want final stock to be $stockAktual, and current is $currentStock,
+                // then change needed is $stockAktual - $currentStock.
+                $delta = $stockAktual - $currentStock;
 
-                // Update Sparepart
-                $sparepart->stok_sparepart = $newStock;
-                $sparepart->save();
-
-                // Update Variant
-                $variant = $sparepart->variants->first();
-                if ($variant) {
-                    $variant->stock = $newStock;
-                    $variant->save();
+                if ($delta != 0) {
+                     $sparepart->logStockChange(
+                        $delta,
+                        'stock_opname',
+                        $period->kode_periode,
+                        'Penyesuaian dari stock opname: ' . ($request->catatan ?? 'Tidak ada catatan'),
+                        $user->id
+                    );
                 }
 
-                // Catat ke adjustment history untuk riwayat
+                // Catat ke adjustment history untuk riwayat detail opname
                 StockOpnameAdjustment::create([
                     'detail_id' => $detail->id,
                     'stock_before' => $currentStock,
-                    'stock_after' => $newStock,
-                    'adjustment_qty' => $selisih,
+                    'stock_after' => $stockAktual,
+                    'adjustment_qty' => $delta, // Record the actual change made
                     'alasan_adjustment' => $request->catatan ?? 'Penyesuaian otomatis dari pemeriksaan stock opname',
                     'user_input' => $user->id,
                     'kode_owner' => $kode_owner,
                 ]);
-
-                // Catat di stock history
-                if (class_exists('App\Models\StockHistory')) {
-                    $shiftId = null;
-                    $activeShift = Shift::getActiveShift($user->id);
-                    if ($activeShift) {
-                        $shiftId = $activeShift->id;
-                    }
-
-                    StockHistory::create([
-                        'sparepart_id' => $sparepart->id,
-                        'quantity_change' => $selisih,
-                        'reference_type' => 'stock_opname',
-                        'reference_id' => $period->kode_periode,
-                        'stock_before' => $currentStock,
-                        'stock_after' => $newStock,
-                        'notes' => 'Penyesuaian dari stock opname: ' . ($request->catatan ?? 'Tidak ada catatan'),
-                        'user_input' => $user->id,
-                        'shift_id' => $shiftId,
-                    ]);
-                }
             }
 
             // Update status periode jika semua item sudah diperiksa

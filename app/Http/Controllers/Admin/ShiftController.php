@@ -99,8 +99,13 @@ class ShiftController extends Controller
         } else {
             // Live calculation
             // Calculate Cash Flow based on KasPerusahaan (Ledger) linked to this Shift
-            $cashIn = $shift->kasPerusahaan()->sum('debit');
-            $cashOut = $shift->kasPerusahaan()->sum('kredit');
+            // EXCLUDE Pembelian (Stock) and Hutang (Debt) -> Kas Toko
+            $cashIn = $shift->kasPerusahaan()
+                ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+                ->sum('debit');
+            $cashOut = $shift->kasPerusahaan()
+                ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+                ->sum('kredit');
             $expectedCash = $shift->modal_awal + $cashIn - $cashOut;
             $sparepartReport = $this->getSparepartAnalysis($shift);
         }
@@ -126,8 +131,12 @@ class ShiftController extends Controller
         $shift = Shift::findOrFail($id);
         if($shift->status == 'closed') return redirect()->route('shift.show', $shift->id);
         
-        $cashIn = $shift->kasPerusahaan()->sum('debit');
-        $cashOut = $shift->kasPerusahaan()->sum('kredit');
+        $cashIn = $shift->kasPerusahaan()
+            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+            ->sum('debit');
+        $cashOut = $shift->kasPerusahaan()
+            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+            ->sum('kredit');
         $expectedCash = $shift->modal_awal + $cashIn - $cashOut;
         
         $page = 'Tutup Shift';
@@ -141,8 +150,12 @@ class ShiftController extends Controller
             'saldo_akhir_aktual' => 'required|numeric|min:0',
         ]);
 
-        $cashIn = $shift->kasPerusahaan()->sum('debit');
-        $cashOut = $shift->kasPerusahaan()->sum('kredit');
+        $cashIn = $shift->kasPerusahaan()
+            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+            ->sum('debit');
+        $cashOut = $shift->kasPerusahaan()
+            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+            ->sum('kredit');
         $expectedCash = $shift->modal_awal + $cashIn - $cashOut;
 
         // Generate Snapshot Report

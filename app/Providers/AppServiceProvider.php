@@ -12,6 +12,8 @@ use Illuminate\Support\ServiceProvider;
 use PDO;
 use App\Observers\SparepartSaleObserver;  // Perhatikan namespace yang benar
 use App\Observers\PartServiceObserver;
+use App\Models\PengeluaranOperasional;
+use App\Observers\PengeluaranOperasionalObserver;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Pagination\Paginator;
 
@@ -43,6 +45,7 @@ class AppServiceProvider extends ServiceProvider
         date_default_timezone_set('Asia/Jakarta');
         DetailSparepartPenjualan::observe(SparepartSaleObserver::class);
         DetailPartServices::observe(PartServiceObserver::class);
+        PengeluaranOperasional::observe(PengeluaranOperasionalObserver::class);
 
 
         Blade::directive('lateFormat', function ($minutes) {

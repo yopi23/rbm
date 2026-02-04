@@ -162,15 +162,22 @@ class FinancialReportApiController extends Controller
                 ->sum(DB::raw('detail_part_luar_services.harga_part * detail_part_luar_services.qty_part'));
             
             // Total Cash Out Updated
+            // EXCLUDE Pembelian Stok (Tunai) & Bayar Hutang from "Total Uang Keluar" (Operational Flow)
+            // User feedback: Stock purchases & Debt payments use "Kas Toko" (Safe), not "Kas Laci" (Daily Flow).
+            // Including them causes "Saldo Kas" to be negative, which confuses the daily evaluation.
             $totalCashOut = $totalCashOutStore + 
                            $totalCashOutOperational + 
                            $totalCashOutWithdrawal + 
-                           $totalPembelianTunai + 
-                           $totalBayarHutang + 
+                           // $totalPembelianTunai + // Excluded from Operational Cash Out
+                           // $totalBayarHutang + // Excluded from Operational Cash Out
                            $totalCashOutPartsLuar;
 
             $netCashFlow = $totalCashIn - $totalCashOut;
-            $uangRealDiLaci = $totalCashIn - $totalCashOutWithdrawal; // Withdrawal is taken from laci usually
+            
+            // Uang Real di Laci (Drawer Balance)
+            // Logic: In - (Withdrawal + Ops + Store + Part Luar)
+            // We assume these are paid from the drawer during the shift.
+            $uangRealDiLaci = $totalCashIn - ($totalCashOutWithdrawal + $totalCashOutStore + $totalCashOutOperational + $totalCashOutPartsLuar);
 
              // 3. Service Stats
             $serviceStats = Sevices::where('kode_owner', $kode_owner)
@@ -201,9 +208,7 @@ class FinancialReportApiController extends Controller
                 'total_pembelian_tunai' => $totalPembelianTunai, // NEW
                 'total_bayar_hutang' => $totalBayarHutang, // NEW
                 'total_part_luar' => $totalCashOutPartsLuar, // NEW (Replacing total_part_service mix)
-                
-                // Legacy field for compatibility (optional, maybe keep it but 0 or accurate?)
-                // 'total_part_service' => $totalCashOutPartsLuar, 
+                'total_part_service' => $totalCashOutPartsLuar, // Legacy field for compatibility 
 
                 // PROFIT ANALYSIS (FROM TRAIT - ACCURATE)
                 'laba_service' => 0, // Combined in laba_kotor now
@@ -873,6 +878,7 @@ class FinancialReportApiController extends Controller
 
                 $operationalExpense = PengeluaranOperasional::where('kode_owner', $kode_owner)
                     ->whereDate('created_at', $dateStr)
+                    ->whereNull('beban_operasional_id') // EXCLUDE Sinking Fund Payments (Allocated Daily)
                     ->sum('jml_pengeluaran');
 
                 $withdrawalExpense = Penarikan::where('kode_owner', $kode_owner)

@@ -339,11 +339,7 @@ class PengeluaranController extends Controller
 
             $pengeluaran = PengeluaranOperasional::create($validatedData);
 
-            $this->catatKas(
-                $pengeluaran, 0, $pengeluaran->jml_pengeluaran,
-                'Pengeluaran Opex: ' . $pengeluaran->nama_pengeluaran,
-                $pengeluaran->tgl_pengeluaran
-            );
+            // $this->catatKas(...) REMOVED: Ditangani oleh Observer untuk mencegah duplikasi dan handle update/delete
 
             DB::commit();
             return redirect()->route('pengeluaran_operasional')->with('success', 'Pengeluaran Operasional Berhasil Ditambahkan');

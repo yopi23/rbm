@@ -169,6 +169,8 @@ Route::group(['middleware' => 'checkRole:0'], function () {
 //admin
 Route::group(['middleware' => ['auth']], function () {
     //Admin Dashboard
+    Route::get('/accumulated-funds', [App\Http\Controllers\Admin\AccumulatedFundsController::class, 'index'])->name('accumulated.funds');
+
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/profile', [UserController::class, 'view_profile'])->name('profile');
     Route::put('profile/{id}/update', [UserController::class, 'update_profile'])->name('update_profile');
@@ -546,7 +548,8 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
         Route::get('/item-chart/{itemId}', [StockManagementController::class, 'getItemStockAndSalesChart'])->name('item-chart');
     });
      // Pembelian Routes
-     Route::prefix('admin')->middleware(['auth'])->group(function () {
+    Route::prefix('admin')->middleware(['auth'])->group(function () {
+        Route::get('/accumulated-funds', [App\Http\Controllers\Admin\AccumulatedFundsController::class, 'index'])->name('accumulated.funds');
         Route::get('/pembelian', [PembelianController::class, 'index'])->name('pembelian.index');
         Route::get('/pembelian/create', [PembelianController::class, 'create'])->name('pembelian.create');
         Route::post('/pembelian', [PembelianController::class, 'store'])->name('pembelian.store');

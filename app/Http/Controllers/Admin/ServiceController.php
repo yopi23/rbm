@@ -322,23 +322,15 @@ class ServiceController extends Controller
                 // Simplified Logic:
                 // We are adding $request->qty_part to the usage.
                 // So we deduct $request->qty_part from current stock.
-                $current_db_stock = $update_sparepart->stok_sparepart;
-                $stok_baru = $current_db_stock - $request->qty_part;
-
-                $update_sparepart->update([
-                    'stok_sparepart' => $stok_baru,
-                ]);
-
-                // Log Stock History
-                $this->logStockChange(
-                    $update_sparepart->id,
+                
+                // Use model method to handle stock update (sparepart + variant) and logging
+                // This handles the "Update" case where Observer is not triggered
+                $update_sparepart->logStockChange(
                     -$request->qty_part, // Negative because used
                     'service_add_qty',
                     $request->kode_services,
                     'Service Tambah Part Qty: ' . $request->kode_services,
-                    auth()->user()->id,
-                    $current_db_stock,
-                    $stok_baru
+                    auth()->user()->id
                 );
 
                 return redirect()->back();
@@ -354,11 +346,8 @@ class ServiceController extends Controller
                 'user_input' => auth()->user()->id,
             ]);
             if ($create) {
-
-                $stok_baru = $update_sparepart->stok_sparepart - $request->qty_part;
-                $update_sparepart->update([
-                    'stok_sparepart' => $stok_baru,
-                ]);
+                // Stock update is handled by PartServiceObserver -> logStockChange
+                // No need to manually update stock here to avoid double decrement
                 return redirect()->back();
             }
         }
@@ -374,10 +363,16 @@ class ServiceController extends Controller
         $data = DetailPartServices::findOrFail($id);
         if ($data) {
             $update_sparepart = Sparepart::findOrFail($data->kode_sparepart);
-            $stok_baru = $update_sparepart->stok_sparepart + $data->qty_part;
-            $update_sparepart->update([
-                'stok_sparepart' => $stok_baru,
-            ]);
+            
+            // Use model method to handle stock update (sparepart + variant) and logging
+            // Positive value to restore stock
+            $update_sparepart->logStockChange(
+                $data->qty_part,
+                'service_delete_qty',
+                $data->kode_services,
+                'Service Hapus Part: ' . $data->kode_services,
+                auth()->user()->id
+            );
         }
         $data->delete();
         if ($data) {

@@ -65,7 +65,7 @@ class Sparepart extends Model
     /**
      * Method untuk mencatat perubahan stok
      */
-    public function logStockChange($change, $referenceType, $referenceId, $notes = null, $userId)
+    public function logStockChange($change, $referenceType, $referenceId, $notes = null, $userId, $specificVariantId = null)
     {
         $stockBefore = $this->stok_sparepart;
         $stockAfter = $stockBefore + $change;
@@ -73,6 +73,19 @@ class Sparepart extends Model
         // Update stok sparepart
         $this->stok_sparepart = $stockAfter;
         $this->save();
+
+        // Update Variant Stock
+        $variant = null;
+        if ($specificVariantId) {
+            $variant = ProductVariant::find($specificVariantId);
+        } else {
+            $variant = $this->variants->first();
+        }
+
+        if ($variant) {
+            $variant->stock = $stockAfter;
+            $variant->save();
+        }
 
         // Buat log history
         return StockHistory::create([

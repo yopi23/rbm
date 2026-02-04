@@ -136,6 +136,15 @@ class SparePartController extends Controller
                     'stok_sparepart' => $data['stok_sparepart'] ?? $sparepart->stok_sparepart,
                 ]);
 
+                // Update Variant Stock
+                if (isset($data['stok_sparepart'])) {
+                    $variant = $sparepart->variants->first();
+                    if ($variant) {
+                        $variant->stock = $data['stok_sparepart'];
+                        $variant->save();
+                    }
+                }
+
                 // 2. Ambil nilai harga khusus dari data input, default ke 0 jika tidak ada
                 $hargaToko = $data['harga_khusus_toko'] ?? 0;
                 $hargaSatuan = $data['harga_khusus_satuan'] ?? 0;
@@ -254,6 +263,13 @@ class SparePartController extends Controller
                 $sparepart->update([
                     'stok_sparepart' => strval($stock_asli)
                 ]);
+
+                // Update Variant Stock
+                $variant = $sparepart->variants->first();
+                if ($variant) {
+                    $variant->stock = $stock_asli;
+                    $variant->save();
+                }
 
                 // Nol kan stock_alis
                 $sparepart->update([
@@ -883,6 +899,13 @@ class SparePartController extends Controller
             $data_barang->update([
                 'stok_sparepart' => $stok_baru,
             ]);
+
+            // Update Variant Stock
+            $variant = $data_barang->variants->first();
+            if ($variant) {
+                $variant->decrement('stock', $request->jumlah_retur);
+            }
+
             return redirect()->route('stok_sparepart')
                 ->with([
                     'success' => 'Sparepart Rusak Berhasil DiTambah'
@@ -908,6 +931,14 @@ class SparePartController extends Controller
                 $data_barang->update([
                     'stok_sparepart' => $stok_baru
                 ]);
+                
+                // Update Variant Stock
+                $variant = $data_barang->variants->first();
+                if ($variant) {
+                    $variant->stock = $stok_baru;
+                    $variant->save();
+                }
+
                 if ($data_barang) {
                     $update->update([
                         'tgl_rusak_barang' => $request->tgl_rusak_barang,
@@ -981,6 +1012,13 @@ class SparePartController extends Controller
                     $update->update([
                         'stok_sparepart' => $stok_baru
                     ]);
+
+                    // Update Variant Stock
+                    $variant = $update->variants->first();
+                    if ($variant) {
+                        $variant->stock = $stok_baru;
+                        $variant->save();
+                    }
                 }
             }
             if ($update != null) {
@@ -1024,6 +1062,14 @@ class SparePartController extends Controller
                     $updates->update([
                         'stok_sparepart' => $stok_baru
                     ]);
+
+                    // Update Variant Stock
+                    $variant = $updates->variants->first();
+                    if ($variant) {
+                        $variant->stock = $stok_baru;
+                        $variant->save();
+                    }
+
                     return redirect()->route('stok_sparepart')
                         ->with([
                             'success' => 'Edit Restok Berhasil'
@@ -1105,6 +1151,14 @@ class SparePartController extends Controller
             $data_barang->update([
                 'stok_sparepart' => $stok_baru,
             ]);
+
+            // Update Variant Stock
+            $variant = $data_barang->variants->first();
+            if ($variant) {
+                $variant->stock = $stok_baru;
+                $variant->save();
+            }
+
             return redirect()->route('stok_sparepart')
                 ->with([
                     'success' => 'Retur Berhasil DiTambah'
@@ -1173,6 +1227,14 @@ class SparePartController extends Controller
             $data_sparepart->update([
                 'stok_sparepart' => $stok_baru,
             ]);
+
+            // Update Variant Stock
+            $variant = $data_sparepart->variants->first();
+            if ($variant) {
+                $variant->stock = $stok_baru;
+                $variant->save();
+            }
+
             return redirect()->back()
                 ->with([
                     'success' => 'Retur Berhasil DiTambah'
@@ -1203,6 +1265,14 @@ class SparePartController extends Controller
             $data_barang->update([
                 'stok_sparepart' => $stok_baru,
             ]);
+
+            // Update Variant Stock
+            $variant = $data_barang->variants->first();
+            if ($variant) {
+                $variant->stock = $stok_baru;
+                $variant->save();
+            }
+            
             return redirect()->back();
         }
     }
@@ -1302,6 +1372,17 @@ class SparePartController extends Controller
                 $sparepart->kode_sparepart = $kode_sparepart;
                 $sparepart->kode_owner = $this->getThisUser()->id_upline;
                 $sparepart->save();
+                
+                // Create default ProductVariant
+                \App\Models\ProductVariant::create([
+                    'sparepart_id'    => $sparepart->id,
+                    'purchase_price'  => $sparepart->harga_beli,
+                    'stock'           => $sparepart->stok_sparepart,
+                    'wholesale_price' => $sparepart->harga_ecer,
+                    'retail_price'    => $sparepart->harga_jual,
+                    'internal_price'  => $sparepart->harga_jual,
+                ]);
+
                 // Tambahkan harga beli ke total hutang
                 $totalHutang += $parsedData['hargaBeli'] * $sparepartData['stok'];
             }
@@ -1331,6 +1412,16 @@ class SparePartController extends Controller
 
                     // Simpan perubahan pada data restock
                     $sparepart->save();
+                    
+                    // Update Variant Stock & Price
+                    $variant = $sparepart->variants->first();
+                    if ($variant) {
+                        $variant->stock = $sparepart->stok_sparepart;
+                        // Optional: update prices if needed, but stock is priority
+                        $variant->purchase_price = $sparepart->harga_beli;
+                        $variant->save();
+                    }
+
                     // Tambahkan harga beli ke total hutang
                     $totalHutang += $parsedData['hargaBeli'] * $restockData['stok_sparepart'];
                 }

@@ -96,7 +96,8 @@ public function searchSuggestions(Request $request)
             ->with([
                 'kategori',
                 'subKategori',
-                'variants.attributeValues'
+                'variants.attributeValues',
+                'hargaKhusus'
             ])
             ->where('kode_owner', $userId)
             ->where('stok_sparepart', '>', 0);
@@ -159,22 +160,39 @@ public function searchSuggestions(Request $request)
 
         // Transformasi data yang cepat karena semua relasi sudah di-load
         $data = $suggestions->map(function($item) {
-            // ... (logika transformasi tetap sama)
+            // 1. Tambahkan data lain yang Anda butuhkan
+            $item->kategori_nama = optional($item->kategori)->nama_kategori;
+            $item->sub_kategori_nama = optional($item->subKategori)->nama_sub_kategori;
+            $item->stock_status = $item->stok_sparepart > 0 ? 'available' : 'out_of_stock';
+            $item->low_stock = $item->stok_sparepart > 0 && $item->stok_sparepart <= 5;
+
+            // 2. Logika untuk mengubah format harga khusus (CONTEK DARI search)
+            $hargaKhususPertama = $item->hargaKhusus->first();
+            if ($hargaKhususPertama) {
+                $item->harga_khusus = [
+                    'harga_toko'   => (int) $hargaKhususPertama->harga_toko,
+                    'harga_satuan' => (int) $hargaKhususPertama->harga_satuan,
+                ];
+            } else {
+                $item->harga_khusus = null;
+            }
+
+            // 3. Logic tambahan khusus suggestion (display_text & attributes string)
             $attributes = $item->variants->pluck('attributeValues')->flatten()->pluck('value')->unique()->implode(', ');
+            $item->attributes_text = $attributes; // Simpan di property baru jika perlu
+            
             $displayText = $item->nama_sparepart;
             if (!empty($attributes)) {
                 $displayText .= ' (' . $attributes . ')';
             }
-            return [
-                'id' => $item->id,
-                'nama_sparepart' => $item->nama_sparepart,
-                'kode_sparepart' => $item->kode_sparepart,
-                'stok_sparepart' => (int) $item->stok_sparepart,
-                'kategori_nama' => optional($item->kategori)->nama_kategori,
-                'sub_kategori_nama' => optional($item->subKategori)->nama_sub_kategori,
-                'attributes' => $attributes,
-                'display_text' => $displayText
-            ];
+            $item->display_text = $displayText;
+
+            // 4. Bersihkan relasi yang tidak perlu di output JSON (variants DIBIARKAN agar muncul)
+            unset($item->hargaKhusus);
+            unset($item->kategori); 
+            unset($item->subKategori);
+
+            return $item;
         });
 
         return response()->json([
@@ -1064,32 +1082,21 @@ public function search(Request $request)
 
                 $sparepart = Sparepart::find($detail->kode_sparepart);
                 if ($sparepart) {
-                    // \Log::info('Sparepart found: ' . json_encode($sparepart->toArray()));
-                    // \Log::info('Current stock: ' . $sparepart->stok_sparepart);
-                    // \Log::info('Returning qty: ' . $detail->qty_sparepart);
-
-                    $oldStock = $sparepart->stok_sparepart;
-                    $newStock = $oldStock + $detail->qty_sparepart;
-
-                    // \Log::info('Stock calculation: ' . $oldStock . ' + ' . $detail->qty_sparepart . ' = ' . $newStock);
-
-                    $updateResult = $sparepart->update([
-                        'stok_sparepart' => $newStock
-                    ]);
-
-                    // \Log::info('Stock update result: ' . ($updateResult ? 'SUCCESS' : 'FAILED'));
-
-                    // Verify update
-                    $sparepart->refresh();
-                    // \Log::info('Stock after update: ' . $sparepart->stok_sparepart);
+                    // Use logStockChange to restore stock and variant
+                    $sparepart->logStockChange(
+                        $detail->qty_sparepart,
+                        'sale_cancel',
+                        $sale->id,
+                        'Pengembalian stok dari pembatalan penjualan: ' . $sale->kode_penjualan,
+                        auth()->user()->id
+                    );
 
                     $stockUpdates[] = [
                         'sparepart_id' => $detail->kode_sparepart,
                         'sparepart_name' => $sparepart->nama_sparepart,
-                        'old_stock' => $oldStock,
                         'returned_qty' => $detail->qty_sparepart,
                         'new_stock' => $sparepart->stok_sparepart,
-                        'update_success' => $updateResult
+                        'update_success' => true
                     ];
                 } else {
                     // \Log::error('Sparepart not found with ID: ' . $detail->kode_sparepart);

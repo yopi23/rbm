@@ -10,7 +10,6 @@ use App\Models\Sparepart;
 use App\Models\Supplier;
 use App\Models\ProductVariant;
 use App\Models\KategoriSparepart;
-use App\Models\HargaKhusus;
 use App\Models\SubKategoriSparepart;
 use App\Services\PriceCalculationService;
 use App\Traits\ManajemenKasTrait;
@@ -512,7 +511,7 @@ class PembelianApiController extends Controller
                             'kode_spl' => $validated['supplier'],
                             'foto_sparepart' => '-',
                             'desc_sparepart' => null,
-                            'stok_sparepart' => $detail->jumlah,
+                            'stok_sparepart' => 0,
                             'harga_beli' => $detail->harga_beli,
                             'harga_jual' => $calculatedPrices['internal_price'],
                             'harga_ecer' => $calculatedPrices['wholesale_price'],
@@ -524,7 +523,7 @@ class PembelianApiController extends Controller
 
                     $variant = $sparepart->variants()->create([
                         'purchase_price' => $detail->harga_beli,
-                        'stock' => $detail->jumlah,
+                        'stock' => 0,
                         'wholesale_price' => $calculatedPrices['wholesale_price'],
                         'retail_price' => $calculatedPrices['retail_price'],
                         'internal_price' => $calculatedPrices['internal_price'],
@@ -536,8 +535,16 @@ class PembelianApiController extends Controller
 
                     $detail->product_variant_id = $variant->id;
                     $detail->save();
-                    $sparepart->save();
-                    $this->updateHargaKhusus($sparepart, $calculatedPrices);
+
+                    // Use logStockChange for centralized stock management
+                    $sparepart->logStockChange(
+                        $detail->jumlah,
+                        'pembelian',
+                        $pembelian->kode_pembelian,
+                        'Pembelian Item Baru: ' . $detail->nama_item,
+                        auth()->user()->id,
+                        $variant->id
+                    );
 
                 } else {
                     // Proses restock
@@ -577,18 +584,30 @@ class PembelianApiController extends Controller
                             ? ($total_old_value + $total_new_value) / $new_total_stock
                             : $new_stock_cost;
 
-                        $variant->stock = $new_total_stock;
+                        // Update prices
                         $variant->purchase_price = $new_average_cost;
                         $variant->wholesale_price = $calculatedPrices['wholesale_price'];
                         $variant->retail_price = $calculatedPrices['retail_price'];
                         $variant->internal_price = $calculatedPrices['internal_price'];
-                        $variant->save();
+                        // $variant->stock will be updated by logStockChange
 
-                        $sparepart->stok_sparepart = $new_total_stock;
                         $sparepart->harga_beli = $new_stock_cost;
+                        $sparepart->harga_jual = $calculatedPrices['internal_price'];
+                        $sparepart->harga_ecer = $calculatedPrices['wholesale_price'];
                         $sparepart->harga_pasang = $calculatedPrices['default_service_fee'] ?? 0;
-                        $sparepart->save();
-$this->updateHargaKhusus($sparepart, $calculatedPrices);
+                        // $sparepart->stok_sparepart will be updated by logStockChange
+                        
+
+
+                        // Use logStockChange for centralized stock management
+                        $sparepart->logStockChange(
+                            $detail->jumlah,
+                            'pembelian',
+                            $pembelian->kode_pembelian,
+                            'Restock Item: ' . $detail->nama_item,
+                            auth()->user()->id,
+                            $variant->id
+                        );
                     }
                 }
             }
@@ -645,17 +664,6 @@ $this->updateHargaKhusus($sparepart, $calculatedPrices);
             ], 500);
         }
     }
-
-    protected function updateHargaKhusus($sparepart, $calculatedPrices)
-{
-    HargaKhusus::updateOrCreate(
-        ['id_sp' => $sparepart->id],
-        [
-            'harga_toko'   =>  0,
-            'harga_satuan' => $calculatedPrices['retail_price'] ?? 0,
-        ]
-    );
-}
 
     /**
      * GET /api/pembelian/search-variants

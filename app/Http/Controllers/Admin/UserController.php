@@ -153,6 +153,11 @@ class UserController extends Controller
             'dari_saldo' => $user->saldo,
             'shift_id' => Shift::getActiveShift(auth()->user()->id)->id ?? null,
         ]);
+        
+        // Tentukan status berdasarkan jabatan (Admin=1/Sukses, Karyawan=0/Pending)
+        $statusPenarikan = ($user->jabatan == '1') ? '1' : '0';
+        $create->update(['status_penarikan' => $statusPenarikan]);
+
         if ($create) {
             $data = Penarikan::where([['kode_penarikan', '=', $kode]])->get()->first();
             $pegawais = UserDetail::where([['kode_user', '=', $data->kode_user]])->get()->first();
@@ -167,13 +172,16 @@ class UserController extends Controller
                 'saldo' => $new_saldo
             ]);
 
-            $this->catatKas(
-                $create,                                     // Model sumber
-                0,                                           // Debit
-                $jumlahPenarikan,                            // Kredit (uang keluar dari kas perusahaan)
-                'Penarikan Saldo Teknisi: ' . $pegawais->fullname, // Deskripsi
-                now()                                        // Tanggal
-            );
+            // HANYA Catat Kas jika Status Disetujui (Admin)
+            if ($statusPenarikan == '1') {
+                $this->catatKas(
+                    $create,                                     // Model sumber
+                    0,                                           // Debit
+                    $jumlahPenarikan,                            // Kredit (uang keluar dari kas perusahaan)
+                    'Penarikan Saldo Teknisi: ' . $pegawais->fullname, // Deskripsi
+                    now()                                        // Tanggal
+                );
+            }
 
             DB::commit();
 
@@ -281,19 +289,35 @@ if (count($validPhoneNumbers) > 0) {
         }
 
         $data = Penarikan::findOrFail($id);
+        $oldStatus = $data->status_penarikan;
+        
         $data->update([
             'jumlah_penarikan' => $request->jumlah_penarikan,
             'catatan_penarikan' => $request->catatan_penarikan != null ? $request->catatan_penarikan : '-',
             'status_penarikan' => $request->status_penarikan,
         ]);
+        
         if ($data) {
-            if ($request->status_penarikan == '2') {
-                $pegawais = UserDetail::where([['kode_user', '=', $data->kode_user]])->get()->first();
+            $pegawais = UserDetail::where([['kode_user', '=', $data->kode_user]])->get()->first();
+
+            // 1. Pending -> Approved (0 -> 1)
+            if ($oldStatus == '0' && $request->status_penarikan == '1') {
+                 $this->catatKas(
+                    $data,
+                    0,
+                    $data->jumlah_penarikan,
+                    'Penarikan Saldo Teknisi: ' . $pegawais->fullname,
+                    now()
+                );
+            }
+            // 2. Rejected (Any -> 2)
+            elseif ($request->status_penarikan == '2' && $oldStatus != '2') {
                 $new_saldo = $pegawais->saldo + $request->jumlah_penarikan;
                 $pegawais->update([
                     'saldo' => $new_saldo
                 ]);
             }
+            
             return redirect()->route('profile')->with([
                 'success' => 'Penarikan Berhasil Di Update'
             ]);

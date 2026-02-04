@@ -153,22 +153,14 @@ class PenjualanController extends Controller
             ]);
             if ($cek) {
                 $update = Sparepart::findOrFail($request->kode_sparepart);
-                $stok_awal = $update->stok_sparepart;
-                $stok_baru = $stok_awal - $request->qty_sparepart;
-                $update->update([
-                    'stok_sparepart' => $stok_baru,
-                ]);
-
-                // Log Stock History
-                $this->logStockChange(
-                    $update->id,
-                    -$request->qty_sparepart, // Negative because sold
-                    'sales_add_qty',
+                
+                // Use logStockChange to update stock and variant
+                $update->logStockChange(
+                    -$request->qty_sparepart,
+                    'sale_add_qty',
                     $request->kode_penjualan,
                     'Penjualan Tambah Qty: ' . $request->kode_penjualan,
-                    auth()->user()->id,
-                    $stok_awal,
-                    $stok_baru
+                    auth()->user()->id
                 );
 
                 return redirect()->back();
@@ -180,9 +172,14 @@ class PenjualanController extends Controller
                 ? $request->custom_harga // Jika ada, gunakan harga kustom
                 : $update->harga_ecer; // Jika tidak, gunakan harga jual default
 
+            // Get Variant ID
+            $variant = $update->variants->first();
+            $variantId = $variant ? $variant->id : null;
+
             $create = DetailSparepartPenjualan::create([
                 'kode_penjualan' => $request->kode_penjualan,
                 'kode_sparepart' => $request->kode_sparepart,
+                'product_variant_id' => $variantId,
                 'detail_harga_modal' => $update->harga_beli,
                 'detail_harga_jual' => $hargaJual,
                 'qty_sparepart' => $request->qty_sparepart,
@@ -191,24 +188,7 @@ class PenjualanController extends Controller
                 'updated_at' => Carbon::now(),
             ]);
             if ($create) {
-                $stok_awal = $update->stok_sparepart;
-                $stok_baru = $stok_awal - $request->qty_sparepart;
-                $update->update([
-                    'stok_sparepart' => $stok_baru,
-                ]);
-
-                // Log Stock History
-                $this->logStockChange(
-                    $update->id,
-                    -$request->qty_sparepart, // Negative because sold
-                    'sales_new_item',
-                    $request->kode_penjualan,
-                    'Penjualan Item Baru: ' . $request->kode_penjualan,
-                    auth()->user()->id,
-                    $stok_awal,
-                    $stok_baru
-                );
-
+                // Stock update is handled by SparepartSaleObserver
                 return redirect()->back();
             }
         }
@@ -224,22 +204,14 @@ class PenjualanController extends Controller
         $data = DetailSparepartPenjualan::findOrFail($id);
         if ($data) {
             $update = Sparepart::findOrFail($data->kode_sparepart);
-            $stok_awal = $update->stok_sparepart;
-            $stok_baru = $stok_awal + $data->qty_sparepart;
-            $update->update([
-                'stok_sparepart' => $stok_baru,
-            ]);
-
-            // Log Stock History
-            $this->logStockChange(
-                $update->id,
+            
+            // Use model method to handle stock restore (sparepart + variant) and logging
+            $update->logStockChange(
                 $data->qty_sparepart, // Positive because restored
                 'sales_cancel_item',
                 $data->kode_penjualan,
                 'Batal Penjualan Item: ' . $data->kode_penjualan,
-                auth()->user()->id,
-                $stok_awal,
-                $stok_baru
+                auth()->user()->id
             );
         }
         $data->delete();

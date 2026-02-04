@@ -103,10 +103,18 @@ class FinancialService
         // 4. EXPENSES (Beban-beban)
         // ==============================
         
-        // A. Biaya Operasional Insidental (Pengeluaran Toko)
+        // A. Biaya Operasional Insidental (Pengeluaran Toko - Legacy)
         $biayaOperasionalInsidental = PengeluaranToko::where('kode_owner', $ownerId)
             ->whereBetween('tanggal_pengeluaran', [$startRange, $endRange])
             ->sum('jumlah_pengeluaran');
+
+        // A.2 Biaya Operasional (PengeluaranOperasional - New)
+        // EXCLUDE Sinking Fund Payments (beban_operasional_id IS NOT NULL)
+        // Karena beban sinking fund sudah dihitung harian di bagian "D. Beban Tetap Operasional"
+        $biayaOperasionalBaru = PengeluaranOperasional::where('kode_owner', $ownerId)
+            ->whereBetween('tgl_pengeluaran', [$startRange, $endRange])
+            ->whereNull('beban_operasional_id') // Hanya ambil yang insidental / non-sinking fund
+            ->sum('jml_pengeluaran');
 
         // B. Biaya Komisi (Dari Service)
         $serviceIdsSelesai = Sevices::where('kode_owner', $ownerId)
@@ -122,7 +130,7 @@ class FinancialService
         $bebanPenyusutanHarian = ($calculatedDaysInMonth > 0) ? $totalPenyusutanBulananAktif / $calculatedDaysInMonth : 0;
         $bebanPenyusutanPeriodik = $bebanPenyusutanHarian * $calculatedJumlahHariPeriode;
 
-        // D. Beban Tetap Operasional (Fixed Cost Prorated)
+        // D. Beban Tetap Operasional (Fixed Cost Prorated / Sinking Fund Allocation)
         $totalBebanBulananAktif = BebanOperasional::where('kode_owner', $ownerId)
             ->where('periode', 'bulanan')
             ->where('created_at', '<=', $endRange)
@@ -145,7 +153,7 @@ class FinancialService
             }
         }
 
-        $totalExpenses = $biayaOperasionalInsidental + $biayaKomisi + $bebanPenyusutanPeriodik + $bebanTetapPeriodik;
+        $totalExpenses = $biayaOperasionalInsidental + $biayaOperasionalBaru + $biayaKomisi + $bebanPenyusutanPeriodik + $bebanTetapPeriodik;
 
         // ==============================
         // 5. NET PROFIT
@@ -154,7 +162,8 @@ class FinancialService
 
         $detailBeban = [
             'HPP (Modal Pokok Penjualan)' => $hpp,
-            'Biaya Operasional Insidental' => $biayaOperasionalInsidental,
+            'Biaya Operasional (Legacy)' => $biayaOperasionalInsidental,
+            'Biaya Operasional (New)' => $biayaOperasionalBaru,
             'Biaya Komisi Teknisi' => $biayaKomisi,
             'Beban Penyusutan Aset' => $bebanPenyusutanPeriodik,
             'Beban Tetap Periodik' => $bebanTetapPeriodik,

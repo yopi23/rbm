@@ -540,11 +540,7 @@ class PengeluaranApiController extends Controller
 
             $pengeluaran = PengeluaranOperasional::create($validatedData);
 
-            $this->catatKas(
-                $pengeluaran, 0, $pengeluaran->jml_pengeluaran,
-                'Pengeluaran Opex (API): ' . $pengeluaran->nama_pengeluaran,
-                $pengeluaran->tgl_pengeluaran
-            );
+            // $this->catatKas(...) REMOVED: Ditangani oleh Observer untuk mencegah duplikasi dan handle update/delete
 
             if (isset($validatedData['id_kategorilaci'])) {
                 $keterangan = $validatedData['kategori'] . " - " . $validatedData['nama_pengeluaran'];

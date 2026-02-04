@@ -203,6 +203,13 @@
                                      </a>
                                  </li>
                                  <li class="nav-item">
+                                     <a href="{{ route('accumulated.funds') }}"
+                                         class="nav-link {{ request()->routeIs('accumulated.funds') ? 'active' : '' }}">
+                                         <i class="fas fa-wallet nav-icon"></i>
+                                         <p>Dana Terkumpul</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
                                      <a href="{{ route('beban.index') }}"
                                          class="nav-link {{ request()->routeIs('beban.index') ? 'active' : '' }}">
                                          <i class="fas fa-file-invoice nav-icon"></i>
