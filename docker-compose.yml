@@ -22,20 +22,20 @@ services:
             - rbmnet
         platform: linux/amd64
 
-    wa-gateway:
-        build:
-            context: ../wa-gateway # Update this to the directory containing your wa-gateway.js
-        container_name: wa-gateway
-        restart: unless-stopped
-        volumes:
-            - ../wa-sessions:/usr/src/app/sessions # Persist sessions outside container
-        environment:
-            - WA_SESSIONS_DIR=/usr/src/app/sessions
-            - NODE_ENV=production
-        ports:
-            - "3000:3000" # Adjust if needed
-        networks:
-            - rbmnet
+    # wa-gateway:
+    #     build:
+    #         context: ../wa-gateway # Update this to the directory containing your wa-gateway.js
+    #     container_name: wa-gateway
+    #     restart: unless-stopped
+    #     volumes:
+    #         - ../wa-sessions:/usr/src/app/sessions # Persist sessions outside container
+    #     environment:
+    #         - WA_SESSIONS_DIR=/usr/src/app/sessions
+    #         - NODE_ENV=production
+    #     ports:
+    #         - "3000:3000" # Adjust if needed
+    #     networks:
+    #         - rbmnet
 
     # Nginx Service
     webserver:
@@ -96,10 +96,32 @@ services:
             - rbmnet
         platform: linux/amd64
 
+    # n8n Service
+    n8n:
+        image: n8nio/n8n:latest
+        container_name: n8n_rbm
+        restart: unless-stopped
+        ports:
+            - "5678:5678"
+        environment:
+            - N8N_HOST=localhost
+            - N8N_PORT=5678
+            - N8N_PROTOCOL=http
+            - NODE_ENV=production
+            - WEBHOOK_URL=http://localhost:5678/
+            - GENERIC_TIMEZONE=Asia/Jakarta
+        volumes:
+            - n8n_data:/home/node/.n8n
+        networks:
+            - rbmnet
+        platform: linux/amd64
+
 networks:
     rbmnet:
         driver: bridge
 
 volumes:
     lbdata:
+        driver: local
+    n8n_data:
         driver: local
