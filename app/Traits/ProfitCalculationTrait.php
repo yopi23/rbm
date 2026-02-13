@@ -52,7 +52,7 @@ trait ProfitCalculationTrait
             ->whereBetween('created_at', [$startRange, $endRange])
             ->sum('jumlah_pemasukkan');
 
-        $totalPendapatan = $totalPendapatanPenjualan + $totalPendapatanService + $totalPemasukkanLain;
+        $totalPendapatan = $totalPendapatanPenjualan + $totalPendapatanService;
 
         // ==============================
         // B.1 & B.2: Perhitungan HPP
@@ -132,7 +132,9 @@ trait ProfitCalculationTrait
 
         // ======================================================================
         // F. Hitung Laba Bersih Final
-        $labaBersih = $labaKotor - $biayaOperasionalInsidental - $biayaKomisi - $bebanPenyusutanPeriodik - $bebanTetapPeriodik;
+        $labaBersihOperasional = $labaKotor - $biayaOperasionalInsidental - $biayaKomisi - $bebanPenyusutanPeriodik - $bebanTetapPeriodik;
+        // REVISI: Pemasukkan Lain TIDAK dimasukkan ke dalam perhitungan Laba Bersih
+        $labaBersih = $labaBersihOperasional;
 
         // Detail beban untuk laporan
         $detailBeban = [

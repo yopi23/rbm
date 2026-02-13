@@ -77,7 +77,7 @@ class FinancialService
             ->whereBetween('created_at', [$startRange, $endRange])
             ->sum('jumlah_pemasukkan');
 
-        $revenue = $totalPendapatanPenjualan + $totalPendapatanService + $totalPemasukkanLain;
+        $revenue = $totalPendapatanPenjualan + $totalPendapatanService;
 
         // ==============================
         // 2. COGS / HPP (Harga Pokok Penjualan)
@@ -158,7 +158,11 @@ class FinancialService
         // ==============================
         // 5. NET PROFIT
         // ==============================
-        $netProfit = $grossProfit - $totalExpenses;
+        $netProfitFromOps = $grossProfit - $totalExpenses;
+        // REVISI: Pemasukkan Lain TIDAK dimasukkan ke dalam perhitungan Laba Bersih Operasional/Final
+        // karena user menyatakan itu bukan komponen laba (misal: titipan, modal, dll).
+        $netProfit = $netProfitFromOps; 
+
 
         $detailBeban = [
             'HPP (Modal Pokok Penjualan)' => $hpp,
