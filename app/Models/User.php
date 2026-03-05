@@ -26,6 +26,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'fcm_token',
     ];
 
     /**
@@ -48,32 +49,32 @@ class User extends Authenticatable
     ];
     public function userDetail()
     {
-        return $this->hasOne(UserDetail::class, 'kode_user');
+        return $this->hasOne(UserDetail::class , 'kode_user');
     }
     // app/Models/User.php
     public function salarySetting()
     {
-        return $this->hasOne(SalarySetting::class, 'user_id');
+        return $this->hasOne(SalarySetting::class , 'user_id');
     }
 
     public function attendances()
     {
-        return $this->hasMany(Attendance::class, 'user_id');
+        return $this->hasMany(Attendance::class , 'user_id');
     }
 
     public function violations()
     {
-        return $this->hasMany(Violation::class, 'user_id');
+        return $this->hasMany(Violation::class , 'user_id');
     }
 
     public function monthlyReports()
     {
-        return $this->hasMany(EmployeeMonthlyReport::class, 'user_id');
+        return $this->hasMany(EmployeeMonthlyReport::class , 'user_id');
     }
 
     public function workSchedules()
     {
-        return $this->hasMany(WorkSchedule::class, 'user_id');
+        return $this->hasMany(WorkSchedule::class , 'user_id');
     }
     /**
      * Mendapatkan data langganan milik user ini.

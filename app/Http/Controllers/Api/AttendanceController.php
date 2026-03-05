@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use App\Services\FCMService;
 use Carbon\Carbon;
 
 class AttendanceController extends Controller
@@ -87,23 +88,23 @@ class AttendanceController extends Controller
                 );
 
                 if ($checkInTime->gt($scheduleStartTime)) {
-                    $lateMinutes = (int) $checkInTime->diffInMinutes($scheduleStartTime, true);
+                    $lateMinutes = (int)$checkInTime->diffInMinutes($scheduleStartTime, true);
                 }
             }
 
             // Create attendance record
             $attendance = Attendance::updateOrCreate(
-                [
-                    'user_id' => $userId,
-                    'attendance_date' => $today,
-                ],
-                [
-                    'check_in' => Carbon::now(),
-                    'status' => 'hadir',
-                    'location' => $request->location ?? 'Mobile App Scan',
-                    'late_minutes' => $lateMinutes,
-                    'created_by' => $userId,
-                ]
+            [
+                'user_id' => $userId,
+                'attendance_date' => $today,
+            ],
+            [
+                'check_in' => Carbon::now(),
+                'status' => 'hadir',
+                'location' => $request->location ?? 'Mobile App Scan',
+                'late_minutes' => $lateMinutes,
+                'created_by' => $userId,
+            ]
             );
 
             // Create violation if late more than 30 minutes
@@ -117,6 +118,25 @@ class AttendanceController extends Controller
                     'status' => 'pending',
                     'created_by' => $userId,
                 ]);
+
+                // Notifikasi Push (FCM) ke Admin jika terlambat lebih dari 30 menit
+                try {
+                    $currentUserDetail = UserDetail::where('kode_user', $userId)->first();
+                    if ($currentUserDetail) {
+                        $adminUser = User::find($currentUserDetail->id_upline);
+                        if ($adminUser && !empty($adminUser->fcm_token)) {
+                            FCMService::sendNotification(
+                                $adminUser->fcm_token,
+                                'Karyawan Terlambat!',
+                                "{$currentUserDetail->fullname} terlambat absen ($lateMinutes menit)",
+                            ['type' => 'attendance_late', 'user_id' => $userId]
+                            );
+                        }
+                    }
+                }
+                catch (\Exception $fcmException) {
+                    Log::error("Failed to send FCM notification for late attendance: " . $fcmException->getMessage());
+                }
             }
 
             // Handle Auto Open Shift
@@ -130,14 +150,16 @@ class AttendanceController extends Controller
                 if ($activeShift) {
                     $shiftData = $activeShift;
                     $shiftMessage = 'Shift sudah aktif sebelumnya.';
-                } else {
-                     // Determine Owner ID
+                }
+                else {
+                    // Determine Owner ID
                     $ownerId = null;
                     $user = Auth::user();
                     if ($user) {
                         if ($user->userDetail && $user->userDetail->jabatan == '1') {
                             $ownerId = $user->id;
-                        } else {
+                        }
+                        else {
                             $ownerId = $user->userDetail ? $user->userDetail->id_upline : null;
                         }
                     }
@@ -220,15 +242,15 @@ class AttendanceController extends Controller
 
         // Create attendance with status leave
         $attendance = Attendance::updateOrCreate(
-            [
-                'user_id' => $userId,
-                'attendance_date' => $date,
-            ],
-            [
-                'status' => $request->type,
-                'note' => $request->note,
-                'created_by' => $userId,
-            ]
+        [
+            'user_id' => $userId,
+            'attendance_date' => $date,
+        ],
+        [
+            'status' => $request->type,
+            'note' => $request->note,
+            'created_by' => $userId,
+        ]
         );
 
         return response()->json([
@@ -270,7 +292,8 @@ class AttendanceController extends Controller
                             'message' => 'Dimensi data wajah tidak sesuai. Expected: 192 atau 512, Got: ' . $totalDimension
                         ], 400);
                     }
-                } else if (count($embedding) !== $totalDimension) {
+                }
+                else if (count($embedding) !== $totalDimension) {
                     return response()->json([
                         'success' => false,
                         'message' => 'Dimensi embedding tidak konsisten'
@@ -345,13 +368,15 @@ class AttendanceController extends Controller
                     'diversity_score' => round($diversityScore, 4),
                 ]
             ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        }
+        catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Data tidak valid',
                 'errors' => $e->errors()
             ], 422);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             Log::error('Face registration error: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
             ]);
@@ -561,7 +586,7 @@ class AttendanceController extends Controller
 
                 if ($checkInTime->gt($scheduledTime)) {
                     $isLate = true;
-                    $lateMinutes = (int) $checkInTime->diffInMinutes($scheduledTime, true);
+                    $lateMinutes = (int)$checkInTime->diffInMinutes($scheduledTime, true);
                 }
 
                 if ($attendance) {
@@ -572,7 +597,8 @@ class AttendanceController extends Controller
                         'late_minutes' => $lateMinutes,
                         'location' => "Face Recognition",
                     ]);
-                } else {
+                }
+                else {
                     $attendance = Attendance::create([
                         'user_id' => $userId,
                         'attendance_date' => $today,
@@ -608,14 +634,16 @@ class AttendanceController extends Controller
                     if ($activeShift) {
                         $shiftData = $activeShift;
                         $shiftMessage = 'Shift sudah aktif sebelumnya.';
-                    } else {
+                    }
+                    else {
                         // Determine Owner ID
                         $ownerId = null;
                         $user = User::find($userId);
                         if ($user) {
                             if ($user->userDetail && $user->userDetail->jabatan == '1') {
                                 $ownerId = $user->id;
-                            } else {
+                            }
+                            else {
                                 $ownerId = $user->userDetail ? $user->userDetail->id_upline : null;
                             }
                         }
@@ -641,7 +669,8 @@ class AttendanceController extends Controller
                 if ($shiftMessage) {
                     $message .= " & $shiftMessage";
                 }
-            } else {
+            }
+            else {
                 if (!$attendance || !$attendance->check_in) {
                     return response()->json([
                         'success' => false,
@@ -679,7 +708,8 @@ class AttendanceController extends Controller
                     'is_pic' => $schedule ? (bool)$schedule->is_pic : false
                 ]
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             Log::error('Error in face attendance: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
@@ -699,7 +729,8 @@ class AttendanceController extends Controller
         $storedEmbedding,
         $currentEmbedding,
         $similarity
-    ) {
+        )
+    {
         // Weight: 70% old, 30% new
         // Semakin tinggi similarity, semakin kecil update (lebih konservatif)
         $oldWeight = 0.7 + ($similarity - 0.8) * 0.5; // 0.7-0.8 range
@@ -904,7 +935,8 @@ class AttendanceController extends Controller
                 'success' => true,
                 'message' => 'Data wajah berhasil dihapus. Anda perlu mendaftar ulang untuk menggunakan fitur absensi wajah.'
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             Log::error('Error deleting face data: ' . $e->getMessage());
 
             return response()->json([
@@ -942,7 +974,8 @@ class AttendanceController extends Controller
                     'total_verifications' => $userDetail->face_verification_count ?? 0,
                 ]
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage()

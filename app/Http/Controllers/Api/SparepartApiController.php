@@ -2323,6 +2323,11 @@ class SparepartApiController extends Controller
                 'kode_owner' => $this->getThisUser()->id_upline,
             ]);
 
+            if ($request->has('keterangan_teknisi')) {
+                $service->keterangan_teknisi = $request->keterangan_teknisi;
+                $service->save();
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Garansi berhasil ditambahkan',
@@ -2442,6 +2447,14 @@ class SparepartApiController extends Controller
                 'catatan_garansi' => $request->catatan_garansi ?? '-',
                 'user_input' => auth()->user()->id,
             ]);
+
+            if ($request->has('keterangan_teknisi')) {
+                $service = \App\Models\modelServices::where('kode_service', $data->kode_garansi)->first();
+                if ($service) {
+                    $service->keterangan_teknisi = $request->keterangan_teknisi;
+                    $service->save();
+                }
+            }
 
             \Log::info('Warranty Updated Successfully', [
                 'warranty_id' => $id,

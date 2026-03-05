@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Models\Penarikan;
 use App\Models\UserDetail;
 use App\Services\WhatsAppService;
+use App\Services\FCMService;
 use App\Traits\KategoriLaciTrait;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;// <-- Pastikan ini ada
+use Illuminate\Support\Facades\DB;
 use App\Traits\ManajemenKasTrait;
 
 class UserDataController extends Controller
@@ -162,13 +164,27 @@ class UserDataController extends Controller
                                 $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
                             }
                         }
-
                     } catch (\Exception $waException) {
                         \Log::error("Failed to send WhatsApp notification: " . $waException->getMessage());
                     }
                 }
 
-                // 4. Jika semua langkah di atas berhasil, simpan perubahan ke database
+                // 4. Tambahkan Notifikasi Push (FCM) untuk Admin
+                try {
+                    $adminUser = User::where('id', $pegawais->id_upline)->first();
+                    if ($adminUser && !empty($adminUser->fcm_token)) {
+                        FCMService::sendNotification(
+                            $adminUser->fcm_token,
+                            'Penarikan Baru!',
+                            "{$pegawais->fullname} melakukan penarikan sebesar Rp " . number_format($jumlahPenarikan, 0, ',', '.'),
+                            ['type' => 'withdrawal', 'id' => $create->id]
+                        );
+                    }
+                } catch (\Exception $fcmException) {
+                    \Log::error("Failed to send FCM notification: " . $fcmException->getMessage());
+                }
+
+                // 5. Jika semua langkah di atas berhasil, simpan perubahan ke database
                 DB::commit();
 
                 // 5. Kembalikan response sukses
@@ -825,5 +841,33 @@ class UserDataController extends Controller
         }
 
         return $numericAmount;
+    }
+    // TAMBAHAN: Update FCM Token untuk Push Notification
+    public function updateFcmToken(Request $request)
+    {
+        $request->validate([
+            'fcm_token' => 'required|string',
+        ]);
+
+        try {
+            $user = User::find(auth()->id());
+            if ($user) {
+                $user->update(['fcm_token' => $request->fcm_token]);
+                return response()->json([
+                    'success' => true,
+                    'message' => 'FCM Token berhasil diperbarui'
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'User tidak ditemukan'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }
