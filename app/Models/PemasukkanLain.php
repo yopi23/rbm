@@ -16,4 +16,28 @@ class PemasukkanLain extends Model
         'kode_owner',
         'shift_id'
     ];
+
+    /**
+     * Relasi polymorphic ke KasPerusahaan
+     */
+    public function kasPerusahaan()
+    {
+        return $this->morphOne(KasPerusahaan::class, 'sourceable');
+    }
+
+    /**
+     * Relasi ke Shift
+     */
+    public function shift()
+    {
+        return $this->belongsTo(Shift::class);
+    }
+
+    /**
+     * Relasi ke Owner (User)
+     */
+    public function owner()
+    {
+        return $this->belongsTo(User::class, 'kode_owner', 'id');
+    }
 }

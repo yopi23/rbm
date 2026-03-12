@@ -14,6 +14,8 @@ use App\Observers\SparepartSaleObserver;  // Perhatikan namespace yang benar
 use App\Observers\PartServiceObserver;
 use App\Models\PengeluaranOperasional;
 use App\Observers\PengeluaranOperasionalObserver;
+use App\Models\PemasukkanLain;
+use App\Observers\PemasukkanLainObserver;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Pagination\Paginator;
 
@@ -46,6 +48,7 @@ class AppServiceProvider extends ServiceProvider
         DetailSparepartPenjualan::observe(SparepartSaleObserver::class);
         DetailPartServices::observe(PartServiceObserver::class);
         PengeluaranOperasional::observe(PengeluaranOperasionalObserver::class);
+        PemasukkanLain::observe(PemasukkanLainObserver::class);
 
 
         Blade::directive('lateFormat', function ($minutes) {

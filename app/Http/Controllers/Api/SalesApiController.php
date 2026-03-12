@@ -949,6 +949,7 @@ public function search(Request $request)
                 'catatan_pemasukkan' => $request->catatan_pemasukan,
                 'jumlah_pemasukkan' => $request->jumlah_pemasukan,
                 'kode_owner' => $this->getThisUser()->id_upline,
+                'shift_id' => Shift::getActiveShift(auth()->user()->id)->id ?? null,
             ]);
 
             // Jika pemasukan berhasil dibuat, catat histori laci
