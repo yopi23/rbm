@@ -143,10 +143,12 @@ class ShiftApiController extends Controller
         // - Hutang (Dept Payment) → Pembayaran hutang, dari kas toko bukan laci
         //
         $cashIn = $shift->kasPerusahaan()
+            ->where('is_cash', true)
             ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
             ->sum('debit');
 
         $cashOut = $shift->kasPerusahaan()
+            ->where('is_cash', true)
             ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
             ->sum('kredit');
 
@@ -348,10 +350,12 @@ class ShiftApiController extends Controller
         $baseQuery = clone $shift->kasPerusahaan();
 
         $cashIn = (clone $baseQuery)
+            ->where('is_cash', true)
             ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
             ->sum('debit') ?? 0;
 
         $cashOut = (clone $baseQuery)
+            ->where('is_cash', true)
             ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
             ->sum('kredit') ?? 0;
 

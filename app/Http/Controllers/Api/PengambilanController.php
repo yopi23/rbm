@@ -28,10 +28,18 @@ class PengambilanController extends Controller
             $validator = Validator::make($request->all(), [
                 'nama_pengambilan' => 'required|string',
                 'tgl_pengambilan' => 'required|date',
-                'id_kategorilaci' => 'required|exists:kategori_lacis,id',
                 'service_ids' => 'required|array',
                 'service_ids.*' => 'exists:sevices,id'
             ]);
+
+            // Tambahkan validasi id_kategorilaci hanya jika ada pembayaran cash
+            $bayarCash = $request->input('bayar_cash', 0);
+            $bayarTransfer = $request->input('bayar_transfer', 0);
+            if ($bayarCash > 0) {
+                $validator->addRules([
+                    'id_kategorilaci' => 'required|exists:kategori_lacis,id'
+                ]);
+            }
 
             if ($validator->fails()) {
                 return response()->json([
@@ -95,6 +103,17 @@ class PengambilanController extends Controller
             }
             $shiftId = $activeShift->id;
 
+            $bayarCash = $request->input('bayar_cash', $total_bayar);
+            $bayarTransfer = $request->input('bayar_transfer', 0);
+
+            $metodeBayar = 'cash';
+            if ($bayarCash > 0 && $bayarTransfer > 0) {
+                $metodeBayar = 'split';
+            }
+            else if ($bayarTransfer > 0 && $bayarCash <= 0) {
+                $metodeBayar = 'transfer';
+            }
+
             // Insert ke table pengambilan
             $pengambilan = Pengambilan::create([
                 'kode_pengambilan' => $kode_pengambilan,
@@ -103,6 +122,9 @@ class PengambilanController extends Controller
                 'total_bayar' => $total_bayar, // menggunakan hasil perhitungan
                 'total_services' => $total_services, // menyimpan total sebelum dipotong DP
                 'dp' => $dp_amount, // menyimpan jumlah DP
+                'metode_bayar' => $metodeBayar,
+                'jumlah_cash' => $bayarCash,
+                'jumlah_transfer' => $bayarTransfer,
                 'user_input' => Auth::id(),
                 'status_pengambilan' => '1',
                 'kode_owner' => $this->getThisUser()->id_upline,
@@ -112,35 +134,37 @@ class PengambilanController extends Controller
             // Update status services
             Sevices::whereIn('id', $request->service_ids)
                 ->update([
-                    'status_services' => 'Diambil',
-                    'kode_pengambilan' => $pengambilan->id
-                ]);
+                'status_services' => 'Diambil',
+                'kode_pengambilan' => $pengambilan->id
+            ]);
 
-            // Catat histori laci
             $keterangan = 'Ngambil Unit oleh-' . $request->nama_pengambilan;
             if ($dp_amount > 0) {
                 $keterangan .= ' (Total: ' . number_format($total_services) . ', DP: ' . number_format($dp_amount) . ')';
             }
 
-            if ($total_bayar > 0) {
-                $this->catatKas(
-                    $pengambilan, // Model sumber
-                    $total_bayar, // Debit
-                    0, // Kredit
-                    'Pelunasan Service API #' . $pengambilan->kode_pengambilan,
-                    now()
+            if ($bayarCash > 0 && $request->has('id_kategorilaci')) {
+                $this->recordLaciHistory(
+                    $request->id_kategorilaci,
+                    $bayarCash, // yang masuk ke laci adalah setelah dipotong DP
+                    null,
+                    $keterangan . ' [Cash]',
+                    'Pengambilan',
+                    $pengambilan->id,
+                    $kode_pengambilan
                 );
             }
 
-            $this->recordLaciHistory(
-                $request->id_kategorilaci,
-                $total_bayar, // yang masuk ke laci adalah setelah dipotong DP
-                null,
-                $keterangan,
-                'Pengambilan',
-                $pengambilan->id,
-                $kode_pengambilan
-            );
+            if ($bayarTransfer > 0) {
+                $this->catatKas(
+                    $pengambilan, // Model sumber
+                    $bayarTransfer, // Debit
+                    0, // Kredit
+                    'Pelunasan Service API (Transfer) #' . $pengambilan->kode_pengambilan,
+                    now(),
+                    false // isCash = false
+                );
+            }
 
             DB::commit();
 
@@ -158,7 +182,8 @@ class PengambilanController extends Controller
                 ]
             ], 201);
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             DB::rollback();
             return response()->json([
                 'status' => false,
@@ -183,7 +208,8 @@ class PengambilanController extends Controller
                 'status' => true,
                 'data' => $services
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'status' => false,
                 'message' => 'Terjadi kesalahan',
@@ -202,7 +228,8 @@ class PengambilanController extends Controller
                 'status' => true,
                 'data' => $kategoriLaci
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'status' => false,
                 'message' => 'Terjadi kesalahan',

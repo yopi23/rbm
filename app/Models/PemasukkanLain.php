@@ -13,6 +13,9 @@ class PemasukkanLain extends Model
         'judul_pemasukan',
         'catatan_pemasukkan',
         'jumlah_pemasukkan',
+        'jumlah_cash',
+        'jumlah_transfer',
+        'metode_bayar',
         'kode_owner',
         'shift_id'
     ];
@@ -20,9 +23,9 @@ class PemasukkanLain extends Model
     /**
      * Relasi polymorphic ke KasPerusahaan
      */
-    public function kasPerusahaan()
+    public function kas()
     {
-        return $this->morphOne(KasPerusahaan::class, 'sourceable');
+        return $this->morphOne(KasPerusahaan::class , 'sourceable');
     }
 
     /**
@@ -38,6 +41,6 @@ class PemasukkanLain extends Model
      */
     public function owner()
     {
-        return $this->belongsTo(User::class, 'kode_owner', 'id');
+        return $this->belongsTo(User::class , 'kode_owner', 'id');
     }
 }

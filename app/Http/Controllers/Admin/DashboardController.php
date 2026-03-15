@@ -90,11 +90,13 @@ class DashboardController extends Controller
                         if ($item->created_at != $item->updated_at) {
                             // Jika berbeda, tambahkan dp ke total_service
                             $total_service += $item->total_biaya - $item->dp;
-                        } else {
+                        }
+                        else {
                             // Jika sama, tambahkan total_biaya
                             $total_service += $item->total_biaya;
                         }
-                    } else {
+                    }
+                    else {
                         $total_service += $item->dp;
                     }
                 }
@@ -129,9 +131,9 @@ class DashboardController extends Controller
 
             $totalPenarikan = Penarikan::join('user_details', 'penarikans.kode_user', '=', 'user_details.kode_user')
                 ->where([
-                    ['penarikans.status_penarikan', '=', '1'],
-                    ['penarikans.kode_owner', '=', $this->getThisUser()->id_upline],
-                ])
+                ['penarikans.status_penarikan', '=', '1'],
+                ['penarikans.kode_owner', '=', $this->getThisUser()->id_upline],
+            ])
                 ->whereDate('penarikans.created_at', '=', $today)
                 ->sum('penarikans.jumlah_penarikan');
 
@@ -173,8 +175,8 @@ class DashboardController extends Controller
                 // Ambil layanan berdasarkan pengambilan ID
                 $pengambilanServices = $this->getServices($pengambilanKode->id);
 
-                // Lakukan sesuatu dengan $services
-                // return response()->json($pengambilanServices);
+            // Lakukan sesuatu dengan $services
+            // return response()->json($pengambilanServices);
             }
             $done_service = $pengambilanServices['done_service'];
             // return response()->json(['message' => 'Pengambilan tidak ditemukan.'], 404);
@@ -269,6 +271,10 @@ class DashboardController extends Controller
         $validate = $request->validate([
             'tgl_pemasukan' => ['required'],
             'jumlah_pemasukan' => ['required'],
+            'jumlah_cash' => ['nullable', 'numeric', 'min:0'],
+            'jumlah_transfer' => ['nullable', 'numeric', 'min:0'],
+            'metode_bayar' => ['required', 'in:cash,transfer'],
+            'id_kategorilaci' => ['required_if:metode_bayar,cash'],
         ]);
 
         if ($validate) {
@@ -277,19 +283,23 @@ class DashboardController extends Controller
                 'judul_pemasukan' => $request->judul_pemasukan,
                 'catatan_pemasukkan' => $request->catatan_pemasukan,
                 'jumlah_pemasukkan' => $request->jumlah_pemasukan,
+                'jumlah_cash' => $request->jumlah_cash ?? 0,
+                'jumlah_transfer' => $request->jumlah_transfer ?? 0,
+                'metode_bayar' => $request->metode_bayar, // Added field
                 'kode_owner' => $this->getThisUser()->id_upline,
                 'shift_id' => Shift::getActiveShift(auth()->user()->id)->id ?? null,
             ]);
 
-            // laci
-            // Misalnya, ambil kategori dari request
-            $kategoriId = $request->input('id_kategorilaci');
-            $uangMasuk = $request->input('jumlah_pemasukan');
-            $keterangan = $request->input('judul_pemasukan') . "-" . $request->input('catatan_pemasukan');
+            // Record to laci history only for cash
+            if ($request->metode_bayar == 'cash') {
+                $kategoriId = $request->input('id_kategorilaci');
+                $uangMasuk = $request->input('jumlah_pemasukkan');
+                $keterangan = $request->input('judul_pemasukan') . "-" . $request->input('catatan_pemasukan');
 
-            // Catat histori laci
-            $this->recordLaciHistory($kategoriId, $uangMasuk, null, $keterangan);
-            //end laci
+                // Catat histori laci
+                $this->recordLaciHistory($kategoriId, $uangMasuk, null, $keterangan);
+            }
+            // For transfer, no laci history needed
 
             if ($create) {
                 return redirect()->back()->with('success', 'Tambah Pemasukkan Berhasil');
@@ -326,6 +336,10 @@ class DashboardController extends Controller
                 $shiftId = $activeShift->id;
             }
 
+            $dpMetode = $request->dp_metode ?? 'cash';
+            $dpCash = $request->dp_cash ?? ($dpMetode === 'transfer' ? 0 : ($request->dp ?? 0));
+            $dpTransfer = $request->dp_transfer ?? ($dpMetode === 'transfer' ? ($request->dp ?? 0) : 0);
+
             $create = modelServices::create([
                 'kode_service' => $request->kode_service,
                 'tgl_service' => $request->tgl_service,
@@ -335,6 +349,9 @@ class DashboardController extends Controller
                 'keterangan' => $request->ket,
                 'total_biaya' => $request->biaya_servis,
                 'dp' => $request->dp,
+                'dp_metode' => $dpMetode,
+                'dp_cash' => $dpCash,
+                'dp_transfer' => $dpTransfer,
                 'status_services' => 'Antri',
                 'kode_owner' => $this->getThisUser()->id_upline,
                 'shift_id' => $shiftId,
@@ -346,22 +363,37 @@ class DashboardController extends Controller
                     $kategoriId = $request->input('id_kategorilaci');
                     $keterangan = "DP Service: " . $kode_service . " - a/n " . $request->nama_pelanggan;
 
-                    $this->catatKas(
-                        $create, // Model sumbernya adalah service yang baru dibuat
-                        $dpAmount, // Debit (uang masuk)
-                        0, // Kredit
-                        "DP Service #" . $create->kode_service . " - " . $create->nama_pelanggan,
-                        now()
-                    );
+                    if ($dpCash > 0) {
+                        $this->catatKas(
+                            $create, // Model sumbernya adalah service yang baru dibuat
+                            $dpCash, // Debit (uang masuk)
+                            0, // Kredit
+                            "DP Service (Cash) #" . $create->kode_service . " - " . $create->nama_pelanggan,
+                            now(),
+                            true // is_cash
+                        );
 
-                    // Memanggil fungsi dari trait untuk mencatat histori
-                    $this->recordLaciHistory(
-                        $kategoriId,
-                        $dpAmount,
-                        null,
-                        $keterangan,
+                        if ($kategoriId) {
+                            // Memanggil fungsi dari trait untuk mencatat histori laci (hanya uang cash)
+                            $this->recordLaciHistory(
+                                $kategoriId,
+                                $dpCash,
+                                null,
+                                $keterangan,
+                            );
+                        }
+                    }
 
-                    );
+                    if ($dpTransfer > 0) {
+                        $this->catatKas(
+                            $create, // Model sumbernya adalah service yang baru dibuat
+                            $dpTransfer, // Debit (uang masuk)
+                            0, // Kredit
+                            "DP Service (Transfer) #" . $create->kode_service . " - " . $create->nama_pelanggan,
+                            now(),
+                            false // is_cash
+                        );
+                    }
                 }
                 if ($request->kode_sparepart != null) {
                     $data_service = modelServices::where([['kode_service', '=', $request->kode_service]])->get()->first();
@@ -659,7 +691,10 @@ class DashboardController extends Controller
             'total_biaya' => ['required', 'numeric', 'min:0'], // Ini adalah Grand Total dari part
             'biaya_servis' => ['nullable', 'numeric', 'min:0'], // Ini adalah biaya manual
             'dp' => ['nullable', 'numeric', 'min:0'],
-            'id_kategorilaci' => ['required_with:dp', 'nullable', 'integer'],
+            'dp_metode' => ['nullable', 'in:cash,transfer,split'],
+            'dp_cash' => ['nullable', 'numeric', 'min:0'],
+            'dp_transfer' => ['nullable', 'numeric', 'min:0'],
+            'id_kategorilaci' => ['nullable', 'integer'],
             'items' => ['nullable', 'array'],
             'items.*.product_variant_id' => ['required', 'integer', 'exists:product_variants,id'],
             'items.*.qty' => ['required', 'integer', 'min:1'],
@@ -684,7 +719,7 @@ class DashboardController extends Controller
             if (!$customerId) {
                 $newCustomer = customer_table::create([
                     'nama_kontak' => $request->nama_kontak,
-                    'nomor_telepon' => $request->nomor_telepon ??0,
+                    'nomor_telepon' => $request->nomor_telepon ?? 0,
                     'tipe_pelanggan' => $request->tipe_pelanggan,
                     'nama_toko' => $request->nama_toko ?? $request->nama_kontak, // Default nama toko
                     'alamat' => $request->alamat,
@@ -699,14 +734,15 @@ class DashboardController extends Controller
             $manualServiceCost = $request->input('biaya_servis', 0);
 
             // Jika total dari part lebih dari 0, gunakan itu. Jika tidak, gunakan biaya manual.
-            if ($manualServiceCost>0) {
-               $finalTotalBiaya=$manualServiceCost;
-            }else{
+            if ($manualServiceCost > 0) {
+                $finalTotalBiaya = $manualServiceCost;
+            }
+            else {
                 $finalTotalBiaya = $grandTotalFromParts > 0 ? $grandTotalFromParts : $manualServiceCost;
             }
 
             // --- 4. Buat Data Service Utama ---
-            
+
             // Get Active Shift
             $shiftId = null;
             $activeShift = Shift::getActiveShift(Auth::id());
@@ -714,18 +750,25 @@ class DashboardController extends Controller
                 $shiftId = $activeShift->id;
             }
 
+            $dpMetode = $request->dp_metode ?? 'cash';
+            $dpCash = $request->dp_cash ?? ($dpMetode === 'transfer' ? 0 : ($request->dp ?? 0));
+            $dpTransfer = $request->dp_transfer ?? ($dpMetode === 'transfer' ? ($request->dp ?? 0) : 0);
+
             $service = modelServices::create([
                 'kode_service' => $this->generateKodeService(),
                 'customer_id' => $customerId,
                 'tgl_service' => Carbon::now()->format('Y-m-d'),
                 // --- PERBAIKAN PENAMAAN KOLOM ---
                 'nama_pelanggan' => $request->nama_kontak,
-                'no_telp' => $request->nomor_telepon ??0,
+                'no_telp' => $request->nomor_telepon ?? 0,
                 // ---------------------------------
                 'type_unit' => $request->type_unit,
                 'keterangan' => $request->keterangan,
                 'total_biaya' => $finalTotalBiaya, // Gunakan biaya final yang sudah dihitung
                 'dp' => $request->dp ?? 0,
+                'dp_metode' => $dpMetode,
+                'dp_cash' => $dpCash,
+                'dp_transfer' => $dpTransfer,
                 'status_services' => 'Antri',
                 'kode_owner' => $userUpline,
                 'tipe_sandi' => $request->tipe_sandi,
@@ -761,9 +804,16 @@ class DashboardController extends Controller
 
             // --- 6. Catat DP ke Laci (jika ada) ---
             $dpAmount = $request->dp ?? 0;
-            if ($dpAmount > 0 && $request->id_kategorilaci) {
-                $this->catatKas($service, $dpAmount, 0, "DP Service #" . $service->kode_service, now());
-                $this->recordLaciHistory($request->id_kategorilaci, $dpAmount, null, "DP Service: " . $service->kode_service);
+            if ($dpAmount > 0) {
+                if ($dpCash > 0) {
+                    $this->catatKas($service, $dpCash, 0, "DP Service (Cash) #" . $service->kode_service, now(), true);
+                    if ($request->id_kategorilaci) {
+                        $this->recordLaciHistory($request->id_kategorilaci, $dpCash, null, "DP Service: " . $service->kode_service);
+                    }
+                }
+                if ($dpTransfer > 0) {
+                    $this->catatKas($service, $dpTransfer, 0, "DP Service (Transfer) #" . $service->kode_service, now(), false);
+                }
             }
 
             // --- 7. Commit Transaksi ---
@@ -775,10 +825,12 @@ class DashboardController extends Controller
                 'data' => $service
             ], 200);
 
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        }
+        catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
             return response()->json(['status' => 'error', 'message' => 'Data tidak valid', 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
@@ -806,18 +858,19 @@ class DashboardController extends Controller
     {
         return DB::transaction(function () use ($kodeOwner) {
             $lastCustomer = customer_table::where('kode_owner', $kodeOwner)
-                                ->whereDate('created_at', today())
-                                ->orderBy('id', 'desc')
-                                ->lockForUpdate()
-                                ->first();
+                ->whereDate('created_at', today())
+                ->orderBy('id', 'desc')
+                ->lockForUpdate()
+                ->first();
 
             $datePart = date('Ymd');
-            $baseCode = 'CST-' .'0'. $kodeOwner . $datePart . '-';
+            $baseCode = 'CST-' . '0' . $kodeOwner . $datePart . '-';
 
             if ($lastCustomer && Str::startsWith($lastCustomer->kode_toko, $baseCode)) {
-                $lastNumber = (int) Str::substr($lastCustomer->kode_toko, -4);
+                $lastNumber = (int)Str::substr($lastCustomer->kode_toko, -4);
                 $newNumber = $lastNumber + 1;
-            } else {
+            }
+            else {
                 $newNumber = 1;
             }
 
@@ -847,9 +900,9 @@ class DashboardController extends Controller
     {
         // Ambil data service dengan status 'Antri'
         $services = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
-        ->whereIn('status_services', ['Antri', 'Proses'])
-        ->latest()
-        ->get();
+            ->whereIn('status_services', ['Antri', 'Proses'])
+            ->latest()
+            ->get();
 
 
         // Cek apakah ada data

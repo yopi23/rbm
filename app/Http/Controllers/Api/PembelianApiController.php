@@ -44,23 +44,24 @@ class PembelianApiController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->get()
                 ->map(function ($pembelian) {
-                    return [
-                        'id' => $pembelian->id,
-                        'kode_pembelian' => $pembelian->kode_pembelian,
-                        'tanggal_pembelian' => $pembelian->tanggal_pembelian,
-                        'supplier' => $pembelian->supplier,
-                        'total_harga' => $pembelian->total_harga,
-                        'status' => $pembelian->status,
-                        'keterangan' => $pembelian->keterangan,
-                        'created_at' => $pembelian->created_at->toIso8601String(),
-                    ];
-                });
+                return [
+                'id' => $pembelian->id,
+                'kode_pembelian' => $pembelian->kode_pembelian,
+                'tanggal_pembelian' => $pembelian->tanggal_pembelian,
+                'supplier' => $pembelian->supplier,
+                'total_harga' => $pembelian->total_harga,
+                'status' => $pembelian->status,
+                'keterangan' => $pembelian->keterangan,
+                'created_at' => $pembelian->created_at->toIso8601String(),
+                ];
+            });
 
             return response()->json([
                 'success' => true,
                 'data' => $pembelians,
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal mengambil data pembelian: ' . $e->getMessage(),
@@ -82,7 +83,8 @@ class PembelianApiController extends Controller
             if ($lastPembelian) {
                 $lastNumber = intval(Str::substr($lastPembelian->kode_pembelian, -3));
                 $kode_pembelian .= str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
-            } else {
+            }
+            else {
                 $kode_pembelian .= '001';
             }
 
@@ -116,7 +118,8 @@ class PembelianApiController extends Controller
                     'status' => $pembelian->status,
                 ],
             ], 201);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal membuat pembelian: ' . $e->getMessage(),
@@ -141,30 +144,30 @@ class PembelianApiController extends Controller
                 ->where('pembelian_id', $id)
                 ->get()
                 ->map(function ($detail) {
-                    $variants = [];
-                    if ($detail->productVariant && $detail->productVariant->attributeValues) {
-                        foreach ($detail->productVariant->attributeValues as $attrValue) {
-                            $variants[] = [
-                                'attribute_name' => $attrValue->attribute->name ?? '',
-                                'value' => $attrValue->value,
-                            ];
-                        }
+                $variants = [];
+                if ($detail->productVariant && $detail->productVariant->attributeValues) {
+                    foreach ($detail->productVariant->attributeValues as $attrValue) {
+                        $variants[] = [
+                            'attribute_name' => $attrValue->attribute->name ?? '',
+                            'value' => $attrValue->value,
+                        ];
                     }
+                }
 
-                    return [
-                        'id' => $detail->id,
-                        'nama_item' => $detail->nama_item,
-                        'jumlah' => $detail->jumlah,
-                        'harga_beli' => $detail->harga_beli,
-                        'total' => $detail->total,
-                        'is_new_item' => $detail->is_new_item,
-                        'product_variant_id' => $detail->product_variant_id,
-                        'sparepart_id' => $detail->sparepart_id,
-                        'item_kategori' => $detail->item_kategori,
-                        'attributes' => $detail->attributes,
-                        'variants' => $variants,
-                    ];
-                });
+                return [
+                'id' => $detail->id,
+                'nama_item' => $detail->nama_item,
+                'jumlah' => $detail->jumlah,
+                'harga_beli' => $detail->harga_beli,
+                'total' => $detail->total,
+                'is_new_item' => $detail->is_new_item,
+                'product_variant_id' => $detail->product_variant_id,
+                'sparepart_id' => $detail->sparepart_id,
+                'item_kategori' => $detail->item_kategori,
+                'attributes' => $detail->attributes,
+                'variants' => $variants,
+                ];
+            });
 
             return response()->json([
                 'success' => true,
@@ -179,7 +182,8 @@ class PembelianApiController extends Controller
                     'details' => $details,
                 ],
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal mengambil detail pembelian: ' . $e->getMessage(),
@@ -225,7 +229,8 @@ class PembelianApiController extends Controller
                 'message' => 'Pembelian berhasil diperbarui',
                 'data' => $pembelian,
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal memperbarui pembelian: ' . $e->getMessage(),
@@ -286,7 +291,8 @@ class PembelianApiController extends Controller
             if ($validated['is_new_item']) {
                 $detailData['item_kategori'] = $validated['item_kategori'];
                 $detailData['attributes'] = json_encode($validated['attributes'] ?? []);
-            } else {
+            }
+            else {
                 $detailData['product_variant_id'] = $validated['product_variant_id'];
                 $detailData['item_kategori'] = $validated['item_kategori'];
                 $detailData['attributes'] = json_encode($validated['attributes'] ?? []);
@@ -309,7 +315,8 @@ class PembelianApiController extends Controller
                 'message' => 'Item berhasil ditambahkan',
                 'data' => $detail,
             ], 201);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'success' => false,
@@ -385,7 +392,8 @@ class PembelianApiController extends Controller
                 'message' => 'Item berhasil diperbarui',
                 'data' => $detail,
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'success' => false,
@@ -432,7 +440,8 @@ class PembelianApiController extends Controller
                 'success' => true,
                 'message' => 'Item berhasil dihapus',
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'success' => false,
@@ -501,24 +510,24 @@ class PembelianApiController extends Controller
                     }
 
                     $sparepart = Sparepart::firstOrCreate(
-                        [
-                            'nama_sparepart' => $detail->nama_item,
-                            'kode_kategori' => $detail->item_kategori
-                        ],
-                        [
-                            'kode_sparepart' => 'SP' . date('YmdHis') . rand(100, 999),
-                            'kode_owner' => $this->getOwnerId(),
-                            'kode_spl' => $validated['supplier'],
-                            'foto_sparepart' => '-',
-                            'desc_sparepart' => null,
-                            'stok_sparepart' => 0,
-                            'harga_beli' => $detail->harga_beli,
-                            'harga_jual' => $calculatedPrices['internal_price'],
-                            'harga_ecer' => $calculatedPrices['wholesale_price'],
-                            'harga_pasang' => $calculatedPrices['default_service_fee'] ?? 0,
-                            'kode_sub_kategori' => null,
-                            'stock_asli' => null,
-                        ]
+                    [
+                        'nama_sparepart' => $detail->nama_item,
+                        'kode_kategori' => $detail->item_kategori
+                    ],
+                    [
+                        'kode_sparepart' => 'SP' . date('YmdHis') . rand(100, 999),
+                        'kode_owner' => $this->getOwnerId(),
+                        'kode_spl' => $validated['supplier'],
+                        'foto_sparepart' => '-',
+                        'desc_sparepart' => null,
+                        'stok_sparepart' => 0,
+                        'harga_beli' => $detail->harga_beli,
+                        'harga_jual' => $calculatedPrices['internal_price'],
+                        'harga_ecer' => $calculatedPrices['wholesale_price'],
+                        'harga_pasang' => $calculatedPrices['default_service_fee'] ?? 0,
+                        'kode_sub_kategori' => null,
+                        'stock_asli' => null,
+                    ]
                     );
 
                     $variant = $sparepart->variants()->create([
@@ -546,7 +555,8 @@ class PembelianApiController extends Controller
                         $variant->id
                     );
 
-                } else {
+                }
+                else {
                     // Proses restock
                     $variant = ProductVariant::find($detail->product_variant_id);
 
@@ -596,7 +606,7 @@ class PembelianApiController extends Controller
                         $sparepart->harga_ecer = $calculatedPrices['wholesale_price'];
                         $sparepart->harga_pasang = $calculatedPrices['default_service_fee'] ?? 0;
                         // $sparepart->stok_sparepart will be updated by logStockChange
-                        
+
 
 
                         // Use logStockChange for centralized stock management
@@ -635,7 +645,8 @@ class PembelianApiController extends Controller
                     'tgl_jatuh_tempo' => $validated['tgl_jatuh_tempo'],
                     'status' => 'Belum Lunas',
                 ]);
-            } else {
+            }
+            else {
                 $pembelian->status_pembayaran = 'Lunas';
 
                 $this->catatKas(
@@ -643,7 +654,8 @@ class PembelianApiController extends Controller
                     0,
                     $pembelian->total_harga,
                     'Pembelian Lunas #' . $pembelian->kode_pembelian,
-                    now()
+                    now(),
+                    false // is_cash = false, tidak ambil dari laci
                 );
             }
 
@@ -656,7 +668,8 @@ class PembelianApiController extends Controller
                 'message' => 'Pembelian berhasil diselesaikan! Stok dan harga produk telah diperbarui.',
                 'data' => $pembelian,
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'success' => false,
@@ -669,98 +682,101 @@ class PembelianApiController extends Controller
      * GET /api/pembelian/search-variants
      * Pencarian varian produk
      */
-    public function searchVariants(Request $request)
-{
-    try {
-        $searchTerm = $request->input('search');
+    public function searchVariants(Request $request)    {
+        try {
+            $searchTerm = $request->input('search');
 
-        if (empty($searchTerm)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Parameter pencarian diperlukan'
-            ], 400);
-        }
+            if (empty($searchTerm)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Parameter pencarian diperlukan'
+                ], 400);
+            }
 
-        $ownerId = $this->getOwnerId();
+            $ownerId = $this->getOwnerId();
 
-        // 1. Pecah search term menjadi beberapa kata kunci (keywords)
-        $normalizedInput = str_replace(',', '.', $searchTerm);
-        $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
+            // 1. Pecah search term menjadi beberapa kata kunci (keywords)
+            $normalizedInput = str_replace(',', '.', $searchTerm);
+            $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
 
-        $variants = ProductVariant::query()
-            ->whereHas('sparepart', function ($q) use ($ownerId) {
+            $variants = ProductVariant::query()
+                ->whereHas('sparepart', function ($q) use ($ownerId) {
                 $q->where('kode_owner', $ownerId);
             })
-            // Eager loading Anda sudah benar
-            ->with(['sparepart.kategori', 'attributeValues.attribute'])
+                // Eager loading Anda sudah benar
+                ->with(['sparepart.kategori', 'attributeValues.attribute'])
 
-            // =================================================================
-            // ✅ PERBAIKAN LOGIKA PENCARIAN AKURAT DI SINI
-            // =================================================================
-            ->where(function ($query) use ($keywords) {
+                // =================================================================
+                // ✅ PERBAIKAN LOGIKA PENCARIAN AKURAT DI SINI
+                // =================================================================
+                ->where(function ($query) use ($keywords) {
 
                 // KONDISI 1 (ATAU): Semua keyword ada di NAMA SPAREPART
                 $query->orWhere(function ($nameQuery) use ($keywords) {
-                    foreach ($keywords as $keyword) {
-                        $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
-                        $nameQuery->whereHas('sparepart', function ($subQ) use ($pattern) {
-                            $subQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'REGEXP', $pattern);
-                        });
-                    }
-                });
+                        foreach ($keywords as $keyword) {
+                            $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
+                            $nameQuery->whereHas('sparepart', function ($subQ) use ($pattern) {
+                                        $subQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'REGEXP', $pattern);
+                                    }
+                                    );
+                                }
+                            }
+                            );
 
-                // KONDISI 2 (ATAU): Semua keyword ada di NILAI ATRIBUT
-                $query->orWhere(function ($attributeQuery) use ($keywords) {
-                    foreach ($keywords as $keyword) {
-                        $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
-                        $attributeQuery->whereHas('attributeValues', function ($subQ) use ($pattern) {
-                            $subQ->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
-                        });
-                    }
-                });
+                            // KONDISI 2 (ATAU): Semua keyword ada di NILAI ATRIBUT
+                            $query->orWhere(function ($attributeQuery) use ($keywords) {
+                        foreach ($keywords as $keyword) {
+                            $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
+                            $attributeQuery->whereHas('attributeValues', function ($subQ) use ($pattern) {
+                                        $subQ->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
+                                    }
+                                    );
+                                }
+                            }
+                            );
 
-            })
-            // =================================================================
-            // AKHIR PERBAIKAN
-            // =================================================================
+                        })
+                // =================================================================
+                // AKHIR PERBAIKAN
+                // =================================================================
 
-            ->take(10)
-            ->get()
-            ->map(function ($variant) {
+                ->take(10)
+                ->get()
+                ->map(function ($variant) {
                 // Sisa dari logika 'map' Anda sudah benar dan tidak diubah
                 if (!$variant->sparepart) {
                     return null;
                 }
 
                 return [
-                    'id' => $variant->id,
-                    'sparepart' => [
-                        'id' => $variant->sparepart->id,
-                        'nama_sparepart' => $variant->sparepart->nama_sparepart,
-                        'kode_kategori' => $variant->sparepart->kode_kategori,
-                        'nama_kategori' => $variant->sparepart->kategori->nama_kategori ?? 'N/A',
-                    ],
-                    'sku' => $variant->sku,
-                    'stock' => $variant->stock,
-                    'purchase_price' => $variant->purchase_price,
-                    'wholesale_price' => $variant->wholesale_price,
-                    'retail_price' => $variant->retail_price,
-                    'internal_price' => $variant->internal_price,
-                    'attribute_values' => $variant->attributeValues,
+                'id' => $variant->id,
+                'sparepart' => [
+                'id' => $variant->sparepart->id,
+                'nama_sparepart' => $variant->sparepart->nama_sparepart,
+                'kode_kategori' => $variant->sparepart->kode_kategori,
+                'nama_kategori' => $variant->sparepart->kategori->nama_kategori ?? 'N/A',
+                ],
+                'sku' => $variant->sku,
+                'stock' => $variant->stock,
+                'purchase_price' => $variant->purchase_price,
+                'wholesale_price' => $variant->wholesale_price,
+                'retail_price' => $variant->retail_price,
+                'internal_price' => $variant->internal_price,
+                'attribute_values' => $variant->attributeValues,
                 ];
             })->filter();
 
-        return response()->json([
-            'success' => true,
-            'results' => $variants->values(),
-        ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-        ], 500);
-    }
-}
+            return response()->json([
+                'success' => true,
+                'results' => $variants->values(),
+            ]);
+        }
+        catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }    }
 
     /**
      * GET /api/suppliers
@@ -777,7 +793,8 @@ class PembelianApiController extends Controller
                 'success' => true,
                 'data' => $suppliers,
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal mengambil data supplier: ' . $e->getMessage(),
@@ -800,7 +817,8 @@ class PembelianApiController extends Controller
                 'success' => true,
                 'data' => $categories,
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal mengambil data kategori: ' . $e->getMessage(),
@@ -808,14 +826,12 @@ class PembelianApiController extends Controller
         }
     }
 
-    public function getAttributesByCategory(KategoriSparepart $kategori)
-{
-    // Pastikan user hanya bisa mengakses kategori miliknya
-    if ($kategori->kode_owner != $this->getOwnerId()) {
-        return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
-    }
+    public function getAttributesByCategory(KategoriSparepart $kategori)    {
+        // Pastikan user hanya bisa mengakses kategori miliknya
+        if ($kategori->kode_owner != $this->getOwnerId()) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
+        }
 
-    $attributes = $kategori->attributes()->with('values')->get();
-    return response()->json($attributes);
-}
+        $attributes = $kategori->attributes()->with('values')->get();
+        return response()->json($attributes);    }
 }

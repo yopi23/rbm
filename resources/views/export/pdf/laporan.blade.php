@@ -488,32 +488,45 @@
                 <th>#</th>
                 <th>Tanggal</th>
                 <th>Karyawan</th>
+                <th>Jenis</th>
                 <th>Keterangan</th>
-                <th>Jumlah</th>
+                <th>Metode</th>
+                <th>Cash</th>
+                <th>Transfer</th>
+                <th>Total</th>
             </tr>
         </thead>
         <tbody>
             @php
-                $final_penarikan = 0;
+                $final_penarikan_cash = 0;
+                $final_penarikan_transfer = 0;
+                $final_penarikan_total = 0;
             @endphp
             @foreach ($penarikan as $item)
                 @php
-                    $final_penarikan += $item->jumlah_penarikan;
+                    $final_penarikan_cash += $item->jumlah_cash ?? 0;
+                    $final_penarikan_transfer += $item->jumlah_transfer ?? 0;
+                    $final_penarikan_total += $item->jumlah_penarikan;
                 @endphp
                 <tr>
                     <td>{{ $loop->index + 1 }}</td>
                     <td>{{ $item->created_at }}</td>
                     <td>{{ $item->fullname }}</td>
+                    <td>{{ $item->admin_withdrawal ? 'Admin' : 'Karyawan' }}</td>
                     <td>{{ $item->catatan_penarikan }}</td>
+                    <td>{{ ucfirst($item->metode_penarikan ?? 'N/A') }}</td>
+                    <td>Rp.{{ number_format($item->jumlah_cash ?? 0) }},-</td>
+                    <td>Rp.{{ number_format($item->jumlah_transfer ?? 0) }},-</td>
                     <td>Rp.{{ number_format($item->jumlah_penarikan) }},-</td>
-
                 </tr>
             @endforeach
         </tbody>
         <tfoot class="font-weight-bold">
             <tr>
-                <td colspan="4" class="text-center text-uppercase">Total</td>
-                <td>Rp.{{ number_format($final_penarikan) }},-</td>
+                <td colspan="6" class="text-center text-uppercase">Total</td>
+                <td>Rp.{{ number_format($final_penarikan_cash) }},-</td>
+                <td>Rp.{{ number_format($final_penarikan_transfer) }},-</td>
+                <td>Rp.{{ number_format($final_penarikan_total) }},-</td>
             </tr>
         </tfoot>
     </table>

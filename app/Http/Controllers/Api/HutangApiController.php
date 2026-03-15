@@ -39,7 +39,8 @@ class HutangApiController extends Controller
                 'hutang' => $hutang
             ]);
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             Log::error('Gagal mengambil data hutang: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
@@ -65,7 +66,7 @@ class HutangApiController extends Controller
 
             // Cek jika sudah lunas untuk mencegah pembayaran ganda
             if ($hutang->status === 'Lunas') {
-                 return response()->json([
+                return response()->json([
                     'success' => false,
                     'message' => 'Hutang ini sudah dilunasi sebelumnya.'
                 ], 422); // 422 Unprocessable Entity
@@ -74,11 +75,12 @@ class HutangApiController extends Controller
             // 1. Catat pengeluaran di kas perusahaan
             // Menggunakan $hutang sebagai source agar terdata sebagai "Pembayaran Hutang" di laporan
             $this->catatKas(
-                $hutang, 
+                $hutang,
                 0,
                 $hutang->total_hutang,
                 'Pembayaran Hutang #' . $hutang->kode_nota,
-                now()
+                now(),
+                false // is_cash = false, tidak ambil dari laci
             );
 
             // 2. Update status hutang & pembelian
@@ -95,7 +97,8 @@ class HutangApiController extends Controller
                 'message' => 'Hutang berhasil dibayar.'
             ]);
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             DB::rollBack();
             Log::error('Gagal membayar hutang #' . $id . ': ' . $e->getMessage());
 

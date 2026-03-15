@@ -26,11 +26,29 @@
         <div class="input-group my-2">
             <span class="input-group-text">Jumlah</span>
             <input type="number" name="jumlah_pemasukan" id="jumlah_pemasukan_lain" class="form-control"
-                placeholder="Rp. (pemasukan)" autofocus>
+                placeholder="Rp. (total pemasukan)" autofocus>
+        </div>
+        <div class="input-group my-2">
+            <span class="input-group-text">Jumlah Cash</span>
+            <input type="number" name="jumlah_cash" id="jumlah_cash_lain" class="form-control"
+                placeholder="Rp. (cash)" step="0.01">
+        </div>
+        <div class="input-group my-2">
+            <span class="input-group-text">Jumlah Transfer</span>
+            <input type="number" name="jumlah_transfer" id="jumlah_transfer_lain" class="form-control"
+                placeholder="Rp. (transfer)" step="0.01">
         </div>
         <div class="input-group my-2" id="keteranganGrup">
             <span class="input-group-text">Keterangan</span>
             <textarea class="form-control" name="catatan_pemasukan" id="catatan_pemasukan_lain" aria-label="With textarea">-</textarea>
+        </div>
+        <div class="input-group my-2">
+            <label class="input-group-text" for="metode_bayar">Metode Pembayaran</label>
+            <select name="metode_bayar" class="form-control" required>
+                <option value="" disabled selected>--Pilih Metode Pembayaran--</option>
+                <option value="cash">Cash</option>
+                <option value="transfer">Transfer</option>
+            </select>
         </div>
 
 
@@ -38,4 +56,18 @@
             <button type="submit" class="btn btn-primary form-control">Simpan</button>
         </div>
     </div>
+
+    <script>
+        document.getElementById('metode_bayar').addEventListener('change', function() {
+            const metodeBayar = this.value;
+            const kategoriLaci = document.querySelector('select[name="id_kategorilaci"]');
+            if (metodeBayar === 'transfer') {
+                kategoriLaci.required = false;
+                kategoriLaci.closest('.input-group').style.display = 'none';
+            } else {
+                kategoriLaci.required = true;
+                kategoriLaci.closest('.input-group').style.display = 'flex';
+            }
+        });
+    </script>
 </form>

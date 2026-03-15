@@ -99,6 +99,41 @@ class FinancialReportApiController extends Controller
                 ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
                 ->sum('jumlah_pemasukkan');
 
+            // Breakdown pemasukan lainnya cash dan transfer
+            $totalCashInOtherCash = PemasukkanLain::where('kode_owner', $kode_owner)
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                ->sum('jumlah_cash');
+
+            $totalCashInOtherTransfer = PemasukkanLain::where('kode_owner', $kode_owner)
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                ->sum('jumlah_transfer');
+
+            // Uang real di laci dan bank dari penjualan, pengambilan, dan DP service
+            $uangRealDiLaciPenjualan = Penjualan::where('kode_owner', $kode_owner)
+                ->where('status_penjualan', '1')
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                ->sum('jumlah_cash');
+            $uangRealDiBankPenjualan = Penjualan::where('kode_owner', $kode_owner)
+                ->where('status_penjualan', '1')
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                ->sum('jumlah_transfer');
+
+            $uangRealDiLaciPengambilan = \App\Models\Pengambilan::where('kode_owner', $kode_owner)
+                ->where('status_pengambilan', '1')
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                ->sum('jumlah_cash');
+            $uangRealDiBankPengambilan = \App\Models\Pengambilan::where('kode_owner', $kode_owner)
+                ->where('status_pengambilan', '1')
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                ->sum('jumlah_transfer');
+
+            $uangRealDiLaciDP = Sevices::where('kode_owner', $kode_owner)
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                ->sum('dp_cash');
+            $uangRealDiBankDP = Sevices::where('kode_owner', $kode_owner)
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                ->sum('dp_transfer');
+
             $totalCashIn = $totalCashInService + $totalCashInDP + $totalCashInSales + $totalCashInOther;
 
             // Cash Out
@@ -114,6 +149,21 @@ class FinancialReportApiController extends Controller
                 ->where('status_penarikan', '1')
                 ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
                 ->sum('jumlah_penarikan');
+
+            // Breakdown penarikan cash dan transfer
+            $totalCashOutWithdrawalCash = Penarikan::where('kode_owner', $kode_owner)
+                ->where('status_penarikan', '1')
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                ->sum('jumlah_cash');
+
+            $totalCashOutWithdrawalTransfer = Penarikan::where('kode_owner', $kode_owner)
+                ->where('status_penarikan', '1')
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
+                ->sum('jumlah_transfer');
+
+            // Hitung uang real di laci dan bank setelah dikurangi penarikan
+                $uangRealDiLaci = $uangRealDiLaciPenjualan + $uangRealDiLaciPengambilan + $uangRealDiLaciDP - $totalCashOutWithdrawalCash + $totalCashInOtherCash;
+                $uangRealDiBank = $uangRealDiBankPenjualan + $uangRealDiBankPengambilan + $uangRealDiBankDP - $totalCashOutWithdrawalTransfer + $totalCashInOtherTransfer;
             
             // NEW: Pembelian Stok (Tunai)
             // Status pembayaran 'Lunas' berarti bayar tunai/transfer saat pembelian
@@ -173,11 +223,6 @@ class FinancialReportApiController extends Controller
                            $totalCashOutPartsLuar;
 
             $netCashFlow = $totalCashIn - $totalCashOut;
-            
-            // Uang Real di Laci (Drawer Balance)
-            // Logic: In - (Withdrawal + Ops + Store + Part Luar)
-            // We assume these are paid from the drawer during the shift.
-            $uangRealDiLaci = $totalCashIn - ($totalCashOutWithdrawal + $totalCashOutStore + $totalCashOutOperational + $totalCashOutPartsLuar);
 
              // 3. Service Stats
             $serviceStats = Sevices::where('kode_owner', $kode_owner)
@@ -185,6 +230,8 @@ class FinancialReportApiController extends Controller
                 ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
                 ->selectRaw('COUNT(*) as total, SUM(CASE WHEN total_biaya < 0 THEN 1 ELSE 0 END) as rugi_count')
                 ->first();
+
+            
             
             // Response data structure mapping
             $reportData = [
@@ -193,6 +240,7 @@ class FinancialReportApiController extends Controller
                 'total_pengeluaran' => $totalCashOut,
                 'saldo_kas' => $netCashFlow,
                 'uang_real_di_laci' => $uangRealDiLaci,
+                'uang_real_di_bank' => $uangRealDiBank,
                 'part_toko_belum_dibayar' => 0,
 
                 // CASH FLOW DETAIL
@@ -200,11 +248,15 @@ class FinancialReportApiController extends Controller
                 'dp_service' => $totalCashInDP,
                 'total_penjualan' => $totalCashInSales,
                 'total_pemasukkan_lain' => $totalCashInOther,
+                'total_pemasukkan_lain_cash' => $totalCashInOtherCash,
+                'total_pemasukkan_lain_transfer' => $totalCashInOtherTransfer,
                 
                 // Expenses Breakdown
                 'total_pengeluaran_toko' => $totalCashOutStore,
                 'total_pengeluaran_operasional' => $totalCashOutOperational,
                 'total_penarikan' => $totalCashOutWithdrawal,
+                'total_penarikan_cash' => $totalCashOutWithdrawalCash,
+                'total_penarikan_transfer' => $totalCashOutWithdrawalTransfer,
                 'total_pembelian_tunai' => $totalPembelianTunai, // NEW
                 'total_bayar_hutang' => $totalBayarHutang, // NEW
                 'total_part_luar' => $totalCashOutPartsLuar, // NEW (Replacing total_part_service mix)
@@ -568,6 +620,7 @@ class FinancialReportApiController extends Controller
                             $item->type = 'Pengeluaran Operasional';
                             return $item;
                         });
+                        break;
                     break;
 
                 case 'pembelian_tunai':
@@ -1098,150 +1151,167 @@ class FinancialReportApiController extends Controller
         }
     }
 
+    /**
+     * Preview profit allocation.
+     */
+    public function previewProfitAllocation(Request $request)
+    {
+        try {
+            // Placeholder logic for previewing profit allocation
+            return response()->json([
+                'message' => 'Preview Profit Allocation endpoint is working.',
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     //report service
 
 /**
  * Get device statistics report with custom date range
  * Shows completed devices by type with revenue breakdown
  */
-    public function getDeviceStatistics(Request $request)
-    {
-        try {
-            $validator = Validator::make($request->all(), [
-                'tgl_awal' => 'required|date',
-                'tgl_akhir' => 'required|date|after_or_equal:tgl_awal',
-                'group_by' => 'sometimes|in:day,week,month',
-                'limit' => 'sometimes|integer|min:1|max:100',
-                'sort_by' => 'sometimes|in:count,revenue,avg_revenue',
-                'sort_order' => 'sometimes|in:asc,desc'
-            ]);
+    // public function getDeviceStatistics(Request $request)
+    // {
+    //     try {
+    //         $validator = Validator::make($request->all(), [
+    //             'tgl_awal' => 'required|date',
+    //             'tgl_akhir' => 'required|date|after_or_equal:tgl_awal',
+    //             'group_by' => 'sometimes|in:day,week,month',
+    //             'limit' => 'sometimes|integer|min:1|max:100',
+    //             'sort_by' => 'sometimes|in:count,revenue,avg_revenue',
+    //             'sort_order' => 'sometimes|in:asc,desc'
+    //         ]);
 
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validation error',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
+    //         if ($validator->fails()) {
+    //             return response()->json([
+    //                 'success' => false,
+    //                 'message' => 'Validation error',
+    //                 'errors' => $validator->errors()
+    //             ], 422);
+    //         }
 
-            $startDate = $request->tgl_awal;
-            $endDate = $request->tgl_akhir;
-            $limit = $request->get('limit', 50);
-            $sortBy = $request->get('sort_by', 'revenue');
-            $sortOrder = $request->get('sort_order', 'desc');
+    //         $startDate = $request->tgl_awal;
+    //         $endDate = $request->tgl_akhir;
+    //         $limit = $request->get('limit', 50);
+    //         $sortBy = $request->get('sort_by', 'revenue');
+    //         $sortOrder = $request->get('sort_order', 'desc');
 
-            // Get user's owner ID
-            $kodeOwner = $this->getThisUser()->id_upline;
+    //         // Get user's owner ID
+    //         $kodeOwner = $this->getThisUser()->id_upline;
 
-            Log::info('Device Statistics Request', [
-                'user_id' => auth()->user()->id,
-                'period' => $startDate . ' to ' . $endDate,
-                'sort_by' => $sortBy
-            ]);
+    //         Log::info('Device Statistics Request', [
+    //             'user_id' => auth()->user()->id,
+    //             'period' => $startDate . ' to ' . $endDate,
+    //             'sort_by' => $sortBy
+    //         ]);
 
-            // Base query untuk service yang SELESAI dalam periode
-            // Menggunakan tgl_service untuk filter periode selesai
-            $baseQuery = DB::table('sevices')
-                ->where('kode_owner', $kodeOwner)
-                ->whereIn('status_services', ['Selesai', 'Diambil'])
-                ->whereBetween('tgl_service', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+    //         // Base query untuk service yang SELESAI dalam periode
+    //         // Menggunakan tgl_service untuk filter periode selesai
+    //         $baseQuery = DB::table('sevices')
+    //             ->where('kode_owner', $kodeOwner)
+    //             ->whereIn('status_services', ['Selesai', 'Diambil'])
+    //                 ->whereBetween('sevices.tgl_service', [$startDate, $endDate]); // Filter berdasarkan tanggal selesai;
+    //         // Get device type statistics
+    //         $deviceStats = $baseQuery
+    //             ->select([
+    //                 'type_unit',
+    //                 DB::raw('COUNT(*) as total_services'),
+    //                 DB::raw('SUM(total_biaya) as total_revenue'),
+    //                 DB::raw('AVG(total_biaya) as avg_revenue'),
+    //                 DB::raw('SUM(dp) as total_dp'),
+    //                 DB::raw('SUM(total_biaya - dp) as total_remaining'),
+    //                 DB::raw('MIN(total_biaya) as min_revenue'),
+    //                 DB::raw('MAX(total_biaya) as max_revenue'),
+    //                 DB::raw('SUM(harga_sp) as total_parts_cost')
+    //             ])
+    //             ->groupBy('type_unit')
+    //             ->orderBy($this->getSortColumn($sortBy), $sortOrder)
+    //             ->limit($limit)
+    //             ->get();
 
-            // Get device type statistics
-            $deviceStats = $baseQuery
-                ->select([
-                    'type_unit',
-                    DB::raw('COUNT(*) as total_services'),
-                    DB::raw('SUM(total_biaya) as total_revenue'),
-                    DB::raw('AVG(total_biaya) as avg_revenue'),
-                    DB::raw('SUM(dp) as total_dp'),
-                    DB::raw('SUM(total_biaya - dp) as total_remaining'),
-                    DB::raw('MIN(total_biaya) as min_revenue'),
-                    DB::raw('MAX(total_biaya) as max_revenue'),
-                    DB::raw('SUM(harga_sp) as total_parts_cost')
-                ])
-                ->groupBy('type_unit')
-                ->orderBy($this->getSortColumn($sortBy), $sortOrder)
-                ->limit($limit)
-                ->get();
+    //         // Calculate profit margin for each device type
+    //         $deviceStats = $deviceStats->map(function ($item) {
+    //             $item->profit_margin = $item->total_revenue > 0
+    //                 ? round((($item->total_revenue - $item->total_parts_cost) / $item->total_revenue) * 100, 2)
+    //                 : 0;
+    //             $item->avg_revenue = round($item->avg_revenue, 2);
+    //             return $item;
+    //         });
 
-            // Calculate profit margin for each device type
-            $deviceStats = $deviceStats->map(function ($item) {
-                $item->profit_margin = $item->total_revenue > 0
-                    ? round((($item->total_revenue - $item->total_parts_cost) / $item->total_revenue) * 100, 2)
-                    : 0;
-                $item->avg_revenue = round($item->avg_revenue, 2);
-                return $item;
-            });
+    //         // Get overall summary
+    //         $summary = $baseQuery
+    //             ->select([
+    //                 DB::raw('COUNT(*) as total_services'),
+    //                 DB::raw('COUNT(DISTINCT type_unit) as unique_device_types'),
+    //                 DB::raw('SUM(total_biaya) as total_revenue'),
+    //                 DB::raw('AVG(total_biaya) as avg_revenue_per_service'),
+    //                 DB::raw('SUM(dp) as total_dp_collected'),
+    //                 DB::raw('SUM(total_biaya - dp) as total_remaining_payments'),
+    //                 DB::raw('SUM(harga_sp) as total_parts_cost')
+    //             ])
+    //             ->first();
 
-            // Get overall summary
-            $summary = $baseQuery
-                ->select([
-                    DB::raw('COUNT(*) as total_services'),
-                    DB::raw('COUNT(DISTINCT type_unit) as unique_device_types'),
-                    DB::raw('SUM(total_biaya) as total_revenue'),
-                    DB::raw('AVG(total_biaya) as avg_revenue_per_service'),
-                    DB::raw('SUM(dp) as total_dp_collected'),
-                    DB::raw('SUM(total_biaya - dp) as total_remaining_payments'),
-                    DB::raw('SUM(harga_sp) as total_parts_cost')
-                ])
-                ->first();
+    //         // Calculate additional metrics
+    //         $summary->total_profit = $summary->total_revenue - $summary->total_parts_cost;
+    //         $summary->overall_profit_margin = $summary->total_revenue > 0
+    //             ? round(($summary->total_profit / $summary->total_revenue) * 100, 2)
+    //             : 0;
+    //         $summary->avg_revenue_per_service = round($summary->avg_revenue_per_service, 2);
+    //         $summary->dp_collection_rate = $summary->total_revenue > 0
+    //             ? round(($summary->total_dp_collected / $summary->total_revenue) * 100, 2)
+    //             : 0;
 
-            // Calculate additional metrics
-            $summary->total_profit = $summary->total_revenue - $summary->total_parts_cost;
-            $summary->overall_profit_margin = $summary->total_revenue > 0
-                ? round(($summary->total_profit / $summary->total_revenue) * 100, 2)
-                : 0;
-            $summary->avg_revenue_per_service = round($summary->avg_revenue_per_service, 2);
-            $summary->dp_collection_rate = $summary->total_revenue > 0
-                ? round(($summary->total_dp_collected / $summary->total_revenue) * 100, 2)
-                : 0;
+    //         // Get top performing technicians for this period (berdasarkan tgl_service)
+    //         $topTechnicians = $baseQuery
+    //             ->join('users', 'sevices.id_teknisi', '=', 'users.id')
+    //             ->select([
+    //                 'users.name as teknisi_name',
+    //                 'users.id as teknisi_id',
+    //                 DB::raw('COUNT(*) as services_completed'),
+    //                 DB::raw('SUM(sevices.total_biaya) as total_revenue'),
+    //                 DB::raw('AVG(sevices.total_biaya) as avg_revenue'),
+    //                 DB::raw('COUNT(DISTINCT sevices.type_unit) as device_types_handled')
+    //             ])
+    //             ->groupBy('users.id', 'users.name')
+    //             ->orderByDesc('total_revenue')
+    //             ->limit(10)
+    //             ->get();
 
-            // Get top performing technicians for this period (berdasarkan tgl_service)
-            $topTechnicians = $baseQuery
-                ->join('users', 'sevices.id_teknisi', '=', 'users.id')
-                ->select([
-                    'users.name as teknisi_name',
-                    'users.id as teknisi_id',
-                    DB::raw('COUNT(*) as services_completed'),
-                    DB::raw('SUM(sevices.total_biaya) as total_revenue'),
-                    DB::raw('AVG(sevices.total_biaya) as avg_revenue'),
-                    DB::raw('COUNT(DISTINCT sevices.type_unit) as device_types_handled')
-                ])
-                ->groupBy('users.id', 'users.name')
-                ->orderByDesc('total_revenue')
-                ->limit(10)
-                ->get();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Device statistics retrieved successfully',
-                'data' => [
-                    'device_statistics' => $deviceStats,
-                    'summary' => $summary,
-                    'top_technicians' => $topTechnicians,
-                    'metadata' => [
-                        'date_range' => [
-                            'start' => $startDate,
-                            'end' => $endDate,
-                            'days' => Carbon::parse($startDate)->diffInDays(Carbon::parse($endDate)) + 1
-                        ],
-                        'sort_by' => $sortBy,
-                        'sort_order' => $sortOrder,
-                        'limit' => $limit
-                    ]
-                ]
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error("Get Device Statistics Error: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Error retrieving device statistics',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
-        }
-    }
-
+    //         return response()->json([
+    //             'success' => true,
+    //             'message' => 'Device statistics retrieved successfully',
+    //             'data' => [
+    //                 'device_statistics' => $deviceStats,
+    //                 'summary' => $summary,
+    //                 'top_technicians' => $topTechnicians,
+    //                 'metadata' => [
+    //                     'date_range' => [
+    //                         'start' => $startDate,
+    //                         'end' => $endDate,
+    //                         'days' => Carbon::parse($startDate)->diffInDays(Carbon::parse($endDate)) + 1
+    //                     ],
+    //                     'sort_by' => $sortBy,
+    //                     'sort_order' => $sortOrder,
+    //                     'limit' => $limit
+    //                 ]
+    //             ]
+    //         ]);
+        
+    //     } catch (\Exception $e) {
+    //         Log::error("Get Device Statistics Error: " . $e->getMessage());
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Error retrieving device statistics',
+    //             'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+    //         ], 500);
+    //     }
+        
+    // }
+    
     /**
      * Get device trends over time
      */
@@ -1352,6 +1422,7 @@ class FinancialReportApiController extends Controller
                 'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
         }
+    
     }
 
     /**
@@ -1899,6 +1970,7 @@ class FinancialReportApiController extends Controller
                     'message' => 'Service not found'
                 ], 404);
             }
+            
 
             // Update based on action
             $updateData = [];
@@ -1945,7 +2017,6 @@ class FinancialReportApiController extends Controller
                     'action' => $action
                 ]
             ]);
-
         } catch (\Exception $e) {
             Log::error('Update Device Pickup Status Error', [
                 'user_id' => auth()->user()->id ?? null,
@@ -2292,9 +2363,10 @@ class FinancialReportApiController extends Controller
             ], 500);
         }
     }
-// ==============================================================
-// logic baru
-// ==============================================================
+
+    // ==============================================================
+    // logic baru
+    // ==============================================================
     public function getProfitAllocationPreview(Request $request)
     {
         try {
@@ -2538,5 +2610,4 @@ class FinancialReportApiController extends Controller
             return response()->json(['success' => false, 'message' => 'Terjadi kesalahan: ' . $e->getMessage()], 500);
         }
     }
-
-}
+    }

@@ -153,7 +153,7 @@ class PenjualanController extends Controller
             ]);
             if ($cek) {
                 $update = Sparepart::findOrFail($request->kode_sparepart);
-                
+
                 // Use logStockChange to update stock and variant
                 $update->logStockChange(
                     -$request->qty_sparepart,
@@ -165,12 +165,13 @@ class PenjualanController extends Controller
 
                 return redirect()->back();
             }
-        } else {
+        }
+        else {
             $update = Sparepart::findOrFail($request->kode_sparepart);
             // Cek apakah ada harga kustom di request
             $hargaJual = $request->has('custom_harga') && $request->custom_harga > 0
                 ? $request->custom_harga // Jika ada, gunakan harga kustom
-                : $update->harga_ecer; // Jika tidak, gunakan harga jual default
+                 : $update->harga_ecer; // Jika tidak, gunakan harga jual default
 
             // Get Variant ID
             $variant = $update->variants->first();
@@ -204,7 +205,7 @@ class PenjualanController extends Controller
         $data = DetailSparepartPenjualan::findOrFail($id);
         if ($data) {
             $update = Sparepart::findOrFail($data->kode_sparepart);
-            
+
             // Use model method to handle stock restore (sparepart + variant) and logging
             $update->logStockChange(
                 $data->qty_sparepart, // Positive because restored
@@ -242,7 +243,8 @@ class PenjualanController extends Controller
                 ]);
                 return redirect()->back();
             }
-        } else {
+        }
+        else {
             $update = Handphone::findOrFail($request->kode_barang);
             $create = DetailBarangPenjualan::create([
                 'kode_penjualan' => $request->kode_penjualan,
@@ -356,7 +358,8 @@ class PenjualanController extends Controller
         }
 
         $data_update = [];
-        if ($request->total_penjualan <= 0) return redirect()->route('penjualan')->with('error', 'Penjualan Tidak Boleh Kosong');
+        if ($request->total_penjualan <= 0)
+            return redirect()->route('penjualan')->with('error', 'Penjualan Tidak Boleh Kosong');
 
         // Get Active Shift for finalization
         $shiftId = $penjualan->shift_id; // Default to existing
@@ -382,15 +385,7 @@ class PenjualanController extends Controller
             ];
 
 
-            // laci
-            // Misalnya, ambil kategori dari request
-            $kategoriId = $request->input('id_kategorilaci');
-            $uangMasuk = $request->input('total_penjualan');
-            $keterangan = $request->input('nama_customer') . "-" . $request->input('catatan_customer');
-
-            // Catat histori laci
-            $this->recordLaciHistory($kategoriId, $uangMasuk, null, $keterangan);
-            //end laci
+        // laci handling moved to centralized block below
         }
         // Menangani form baru
         if ($request->simpan == 'newbayar') {
@@ -407,15 +402,7 @@ class PenjualanController extends Controller
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
             ];
-            // laci
-            // Misalnya, ambil kategori dari request
-            $kategoriId = $request->input('id_kategorilaci');
-            $uangMasuk = $request->input('total_penjualan');
-            $keterangan = $request->input('nama_customer') . "-" . $request->input('catatan_customer');
-
-            // Catat histori laci
-            $this->recordLaciHistory($kategoriId, $uangMasuk, null, $keterangan);
-            //end laci
+        // laci handling moved to centralized block below
         }
         if ($request->simpan == 'simpan') {
             $data_update = [
@@ -433,13 +420,36 @@ class PenjualanController extends Controller
         $penjualan->update($data_update);
 
         if ($isPaid && $penjualan) {
-            $this->catatKas(
-                $penjualan,                                  // Model sumber
-                $penjualan->total_penjualan,                // Debit (uang masuk)
-                0,                                           // Kredit (tidak ada)
-                'Penjualan Produk #' . $penjualan->kode_penjualan, // Deskripsi
-                $penjualan->tgl_penjualan                     // Tanggal
-            );
+            $bayarCash = $request->input('bayar_cash', $penjualan->total_penjualan);
+            $bayarTransfer = $request->input('bayar_transfer', 0);
+            $kategoriId = $request->input('id_kategorilaci');
+
+            if ($bayarCash > 0) {
+                $this->catatKas(
+                    $penjualan, // Model sumber
+                    $bayarCash, // Debit (uang masuk)
+                    0, // Kredit (tidak ada)
+                    'Penjualan Produk (Cash) #' . $penjualan->kode_penjualan, // Deskripsi
+                    $penjualan->tgl_penjualan, // Tanggal
+                    true // isCash
+                );
+
+                if ($kategoriId) {
+                    $keterangan = ($request->nama_customer ?? '-') . " - " . ($request->catatan_customer ?? '-') . ' [Cash]';
+                    $this->recordLaciHistory($kategoriId, $bayarCash, null, $keterangan, 'penjualan', $penjualan->id, $penjualan->kode_penjualan);
+                }
+            }
+
+            if ($bayarTransfer > 0) {
+                $this->catatKas(
+                    $penjualan, // Model sumber
+                    $bayarTransfer, // Debit
+                    0, // Kredit
+                    'Penjualan Produk (Transfer) #' . $penjualan->kode_penjualan, // Deskripsi
+                    $penjualan->tgl_penjualan, // Tanggal
+                    false // isCash
+                );
+            }
         }
 
         if ($penjualan) {
@@ -455,10 +465,10 @@ class PenjualanController extends Controller
             ->where('detail_sparepart_penjualans.kode_penjualan', $id)
             ->get([
 
-                'detail_sparepart_penjualans.id as id_detail',
-                'detail_sparepart_penjualans.*',
-                'spareparts.*'
-            ]);
+            'detail_sparepart_penjualans.id as id_detail',
+            'detail_sparepart_penjualans.*',
+            'spareparts.*'
+        ]);
 
         $total_part_penjualan = 0;
         $totalitem = 0;

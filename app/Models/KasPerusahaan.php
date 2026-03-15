@@ -22,7 +22,12 @@ class KasPerusahaan extends Model
         'debit',
         'kredit',
         'saldo',
+        'is_cash',
         'shift_id',
+    ];
+
+    protected $casts = [
+        'is_cash' => 'boolean',
     ];
 
     /**
@@ -39,7 +44,7 @@ class KasPerusahaan extends Model
      */
     public function owner()
     {
-        return $this->belongsTo(User::class, 'kode_owner', 'id');
+        return $this->belongsTo(User::class , 'kode_owner', 'id');
     }
 
     public function shift()

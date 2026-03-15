@@ -26,6 +26,9 @@ class Sevices extends Model
         'data_unit',
         'total_biaya',
         'dp',
+        'dp_metode',
+        'dp_cash',
+        'dp_transfer',
         'harga_sp',
         'id_teknisi',
         'kode_pengambilan',
@@ -78,10 +81,12 @@ class Sevices extends Model
         return $this->hasMany(Sevices::class , 'claimed_from_service_id');
     }
 
-    public function variants()    {
+    public function variants()
+    {
         // Parameter ke-4 diubah menjadi 'kode_sparepart'
         return $this->belongsToMany(ProductVariant::class , 'detail_part_services', 'kode_services', 'kode_sparepart')
             ->withPivot('qty_part', 'jasa', 'harga_garansi', 'user_input')
-            ->withTimestamps();    }
+            ->withTimestamps();
+    }
 
 }

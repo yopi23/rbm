@@ -18,14 +18,15 @@ trait ManajemenKasTrait
      * @param float $kredit - Jumlah pengeluaran (isi 0 jika pemasukan)
      * @param string $deskripsi - Keterangan yang akan muncul di buku besar
      * @param string|null $tanggal - Tanggal transaksi. Jika null, akan memakai waktu sekarang.
+     * @param bool $isCash - true = transaksi cash (masuk/keluar laci), false = transfer/non-cash
      * @return void
      */
-    protected function catatKas(Model $sumberModel, float $debit, float $kredit, string $deskripsi, $tanggal = null)
+    protected function catatKas(Model $sumberModel, float $debit, float $kredit, string $deskripsi, $tanggal = null, bool $isCash = true)
     {
         // Menggunakan DB::transaction untuk memastikan jika ada error,
         // semua proses di dalamnya akan dibatalkan (rollback).
         // Ini mencegah data korup (misal: penjualan tercatat tapi kas tidak).
-        DB::transaction(function () use ($sumberModel, $debit, $kredit, $deskripsi, $tanggal) {
+        DB::transaction(function () use ($sumberModel, $debit, $kredit, $deskripsi, $tanggal, $isCash) {
 
             // Ambil ID owner dari model sumber (Penjualan, Service, dll).
             // Ini memastikan setiap model sumber WAJIB punya kolom 'kode_owner'.
@@ -33,10 +34,10 @@ trait ManajemenKasTrait
 
             // Dapatkan saldo terakhir dari kas milik owner ini secara aman (mengunci baris terakhir).
             $lastKas = KasPerusahaan::where('kode_owner', $ownerId)
-                                ->latest('id')
-                                ->lockForUpdate() // Mencegah race condition jika ada 2 transaksi bersamaan
-                                ->first();
-            
+                ->latest('id')
+                ->lockForUpdate() // Mencegah race condition jika ada 2 transaksi bersamaan
+                ->first();
+
             $saldoTerakhir = $lastKas ? $lastKas->saldo : 0;
 
             // Hitung saldo baru
@@ -46,7 +47,7 @@ trait ManajemenKasTrait
             // Prioritaskan Shift Aktif dari User yang sedang login/melakukan aksi
             $shiftId = null;
             $currentUser = Auth::id();
-            
+
             if ($currentUser) {
                 $activeShift = Shift::getActiveShift($currentUser);
                 if ($activeShift) {
@@ -61,13 +62,14 @@ trait ManajemenKasTrait
 
             // Siapkan data untuk entri kas baru
             $dataKas = [
-                'kode_owner'      => $ownerId,
-                'tanggal'         => $tanggal ?? now(),
-                'deskripsi'       => $deskripsi,
-                'debit'           => $debit,
-                'kredit'          => $kredit,
-                'saldo'           => $saldoBaru,
-                'shift_id'        => $shiftId,
+                'kode_owner' => $ownerId,
+                'tanggal' => $tanggal ?? now(),
+                'deskripsi' => $deskripsi,
+                'debit' => $debit,
+                'kredit' => $kredit,
+                'saldo' => $saldoBaru,
+                'is_cash' => $isCash,
+                'shift_id' => $shiftId,
             ];
 
             // Simpan entri kas dan tautkan ke model sumbernya via relasi polimorfik.

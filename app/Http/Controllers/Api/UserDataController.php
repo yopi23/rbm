@@ -31,6 +31,20 @@ class UserDataController extends Controller
             ->whereYear('tgl_penarikan', date('Y'))
             ->sum('jumlah_penarikan');
 
+        // Hitung total penarikan cash dalam satu bulan
+        $total_penarikan_cash = DB::table('penarikans')
+            ->where('kode_user', $kode_user)
+            ->whereMonth('tgl_penarikan', date('m'))
+            ->whereYear('tgl_penarikan', date('Y'))
+            ->sum('jumlah_cash');
+
+        // Hitung total penarikan transfer dalam satu bulan
+        $total_penarikan_transfer = DB::table('penarikans')
+            ->where('kode_user', $kode_user)
+            ->whereMonth('tgl_penarikan', date('m'))
+            ->whereYear('tgl_penarikan', date('Y'))
+            ->sum('jumlah_transfer');
+
         // Hitung total komisi dalam satu bulan dari tabel profit_presentases
         $total_komisi = DB::table('profit_presentases')
             ->where('kode_user', $kode_user)
@@ -43,6 +57,8 @@ class UserDataController extends Controller
             'kode_user' => $kode_user,
             'saldo' =>  $saldo,
             'total_penarikan' => ($total_penarikan ?? 0),
+            'total_penarikan_cash' => ($total_penarikan_cash ?? 0),
+            'total_penarikan_transfer' => ($total_penarikan_transfer ?? 0),
             'total_komisi' =>  ($total_komisi ?? 0),
         ]);
     }
@@ -86,50 +102,51 @@ class UserDataController extends Controller
     }
 
     public function store_penarikan(Request $request)
-    {
-        $user = $this->getThisUser();
-        $pegawais = UserDetail::where([['kode_user', '=', $user->kode_user]])->get()->first();
-
-        $request->validate([
-            'jumlah_penarikan' => 'required|numeric|min:1',
-            'catatan_penarikan' => 'nullable|string|max:255',
+{
+    $user = $this->getThisUser();
+    $pegawais = UserDetail::where([['kode_user', '=', $user->kode_user]])->get()->first();
+    $request->validate([
+        'jumlah_penarikan' => 'required|numeric|min:1',
+        'penarikan_cash' => 'nullable|numeric',
+        'penarikan_transfer' => 'nullable|numeric',
+        'metode_penarikan' => 'nullable|string|in:cash,transfer,split',
+        'catatan_penarikan' => 'nullable|string|max:255',
+    ]);
+    $jumlahPenarikan = (float) $request->jumlah_penarikan;
+    $cashAmount = (float) ($request->penarikan_cash ?? ($request->metode_penarikan == 'transfer' ? 0 : $jumlahPenarikan));
+    $transferAmount = (float) ($request->penarikan_transfer ?? ($request->metode_penarikan == 'cash' ? 0 : ($jumlahPenarikan - $cashAmount)));
+    $metodePenarikan = $request->metode_penarikan ?? ($transferAmount > 0 ? ($cashAmount > 0 ? 'split' : 'transfer') : 'cash');
+    if ($pegawais->saldo < $jumlahPenarikan) {
+        return response()->json(['status' => 'error', 'message' => 'Saldo tidak mencukupi'], 400);
+    }
+    DB::beginTransaction();
+    try {
+        $kode = 'PEN' . date('Ymd') . $this->getThisUser()->id_upline . $this->getThisUser()->kode_user;
+        $create = Penarikan::create([
+            'tgl_penarikan' => date('Y-m-d H:i:s'),
+            'kode_penarikan' => $kode,
+            'kode_user' => $this->getThisUser()->kode_user,
+            'kode_owner' => $user->id_upline,
+            'jumlah_penarikan' => $jumlahPenarikan,
+            'jumlah_cash' => $cashAmount,
+            'jumlah_transfer' => $transferAmount,
+            'metode_penarikan' => $metodePenarikan,
+            'catatan_penarikan' => $request->catatan_penarikan ?? '-',
+            'status_penarikan' => '1',
+            'dari_saldo' => $user->saldo,
         ]);
+        if ($create) {
+            $new_saldo = $user->saldo - $jumlahPenarikan;
+            $pegawais->update(['saldo' => $new_saldo]);
+            // Catat Kas (Cash)
+            if ($cashAmount > 0) {
+                $this->catatKas($create, 0, $cashAmount, 'Penarikan Saldo API (Cash) oleh: ' . $pegawais->fullname, null, true);
+            }
+            // Catat Kas (Transfer)
+            if ($transferAmount > 0) {
+                $this->catatKas($create, 0, $transferAmount, 'Penarikan Saldo API (Transfer) oleh: ' . $pegawais->fullname, null, false);
+            }
 
-        $jumlahPenarikan = (float) preg_replace('/[^0-9.]/', '', $request->jumlah_penarikan);
-
-        if ($pegawais->saldo < $jumlahPenarikan) {
-            return response()->json(['status' => 'error', 'message' => 'Saldo tidak mencukupi'], 400);
-        }
-
-        // Mulai Transaction untuk memastikan semua proses aman
-        DB::beginTransaction();
-        try {
-            $kode = 'PEN' . date('Ymd') . $this->getThisUser()->id_upline . $this->getThisUser()->kode_user;
-
-            $create = Penarikan::create([
-                'tgl_penarikan' => date('Y-m-d H:i:s'),
-                'kode_penarikan' => $kode,
-                'kode_user' => $this->getThisUser()->kode_user,
-                'kode_owner' => $user->id_upline,
-                'jumlah_penarikan' => $jumlahPenarikan,
-                'catatan_penarikan' => $request->catatan_penarikan ?? '-',
-                'status_penarikan' => '1',
-                'dari_saldo' => $user->saldo,
-            ]);
-
-            // Lanjutkan hanya jika penarikan berhasil dibuat
-            if ($create) {
-                // 1. Update saldo user
-                $new_saldo = $user->saldo - $jumlahPenarikan;
-                $pegawais->update(['saldo' => $new_saldo]);
-
-                // 2. Integrasi pencatatan kas perusahaan
-                $this->catatKas(
-                    $create,                                        // Model sumber
-                    0,                                              // Debit (tidak ada uang masuk)
-                    $jumlahPenarikan,                               // Kredit (uang keluar)
-                    'Penarikan Saldo API oleh: ' . $pegawais->fullname // Deskripsi
-                );
 
                 // 3. Logika Notifikasi WhatsApp (tetap sama)
                 $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
@@ -185,127 +202,93 @@ class UserDataController extends Controller
                 }
 
                 // 5. Jika semua langkah di atas berhasil, simpan perubahan ke database
-                DB::commit();
-
-                // 5. Kembalikan response sukses
-                return response()->json([
-                    'status' => 'success',
-                    'message' => 'Penarikan berhasil dibuat dan kas perusahaan telah diperbarui.',
-                    'data' => [
-                        'id' => (int) $create->id,
-                        'kode_penarikan' => $create->kode_penarikan,
-                        'jumlah_penarikan' => (float) $create->jumlah_penarikan,
-                        'dari_saldo' => (float) $create->dari_saldo,
-                        'saldo_setelah' => (float) $new_saldo,
-                        'tgl_penarikan' => $create->tgl_penarikan,
-                        'catatan_penarikan' => $create->catatan_penarikan,
-                    ]
-                ], 201);
-            }
-            // Jika $create gagal karena suatu alasan
-            DB::rollBack();
-            return response()->json(['status' => 'error', 'message' => 'Gagal membuat data penarikan.'], 500);
-
-        } catch (\Exception $e) {
-            // Jika terjadi error di salah satu proses (update saldo, catat kas), batalkan semua
-            DB::rollBack();
-            \Log::error("API Penarikan error: " . $e->getMessage());
-            return response()->json(['status' => 'error', 'message' => 'Terjadi kesalahan server: ' . $e->getMessage()], 500);
+                 DB::commit();
+            return response()->json(['status' => 'success', 'data' => $create], 201);
         }
+        DB::rollBack();
+        return response()->json(['status' => 'error', 'message' => 'Gagal membuat data penarikan.'], 500);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json(['status' => 'error', 'message' => 'Terjadi kesalahan server: ' . $e->getMessage()], 500);
+    }
+}
+    public function adminWithdrawEmployee(Request $request)
+{
+    $user = $this->getThisUser();
+    // Pastikan admin/owner (jabatan 0 atau 1)
+    if (!in_array($user->jabatan, [0, 1])) {
+        return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
     }
 
-    public function adminWithdrawEmployee(Request $request)
-    {
-        $user = $this->getThisUser();
-        if ($user->jabatan != '1') {
-            return response()->json(['success' => false, 'message' => 'Unauthorized. Hanya admin yang dapat melakukan penarikan saldo karyawan.'], 403);
-        }
+    $request->validate([
+        'kode_user' => 'required|numeric',
+        'jumlah_penarikan' => 'required|numeric|min:1',
+        'penarikan_cash' => 'nullable|numeric',
+        'penarikan_transfer' => 'nullable|numeric',
+        'metode_penarikan' => 'nullable|string|in:cash,transfer,split',
+        'catatan_penarikan' => 'nullable|string|max:255',
+        'id_kategorilaci' => 'nullable|numeric|exists:kategori_lacis,id',
+    ]);
 
-        $request->validate([
-            'kode_user' => 'required|numeric',
-            'jumlah_penarikan' => 'required|numeric|min:1',
-            'catatan_penarikan' => 'nullable|string|max:255',
-            'id_kategorilaci' => 'required|numeric|exists:kategori_lacis,id',
+    $jumlahPenarikan = (float) $request->jumlah_penarikan;
+    $cashAmount = (float) ($request->penarikan_cash ?? ($request->metode_penarikan == 'transfer' ? 0 : $jumlahPenarikan));
+    $transferAmount = (float) ($request->penarikan_transfer ?? ($request->metode_penarikan == 'cash' ? 0 : ($jumlahPenarikan - $cashAmount)));
+    $metodePenarikan = $request->metode_penarikan ?? ($transferAmount > 0 ? ($cashAmount > 0 ? 'split' : 'transfer') : 'cash');
+
+    // Validasi laci jika ada pengeluaran cash
+    if ($cashAmount > 0 && !$request->id_kategorilaci) {
+        return response()->json(['success' => false, 'message' => 'Laci wajib dipilih untuk penarikan tunai'], 422);
+    }
+
+    $targetEmployee = UserDetail::where('kode_user', $request->kode_user)->first();
+    $kode = 'ADM' . date('Ymd') . $user->kode_user . $request->kode_user;
+
+    DB::beginTransaction();
+    try {
+        $create = Penarikan::create([
+            'tgl_penarikan' => date('Y-m-d H:i:s'),
+            'kode_penarikan' => $kode,
+            'kode_user' => $request->kode_user,
+            'kode_owner' => $user->kode_user,
+            'jumlah_penarikan' => $jumlahPenarikan,
+            'jumlah_cash' => $cashAmount,
+            'jumlah_transfer' => $transferAmount,
+            'metode_penarikan' => $metodePenarikan,
+            'catatan_penarikan' => $request->catatan_penarikan ?? "Penarikan oleh admin untuk {$targetEmployee->fullname}",
+            'status_penarikan' => '1',
+            'dari_saldo' => $targetEmployee->saldo,
+            'admin_withdrawal' => true,
+            'admin_id' => $user->id,
         ]);
 
-        $jumlahPenarikan = (float) preg_replace('/[^0-9.]/', '', $request->jumlah_penarikan);
-        $targetEmployee = UserDetail::where('kode_user', $request->kode_user)->first();
+        if ($create) {
+            $newSaldo = $targetEmployee->saldo - $jumlahPenarikan;
+            $targetEmployee->update(['saldo' => $newSaldo]);
 
-        if (!$targetEmployee) {
-            return response()->json(['success' => false, 'message' => 'Karyawan tidak ditemukan'], 404);
-        }
-
-        $kode = 'ADM' . date('Ymd') . $user->kode_user . $request->kode_user;
-
-        // Mulai Transaction
-        DB::beginTransaction();
-        try {
-            $create = Penarikan::create([
-                'tgl_penarikan' => date('Y-m-d H:i:s'),
-                'kode_penarikan' => $kode,
-                'kode_user' => $request->kode_user,
-                'kode_owner' => $user->kode_user,
-                'jumlah_penarikan' => $jumlahPenarikan,
-                'catatan_penarikan' => $request->catatan_penarikan ?? "Penarikan oleh admin untuk {$targetEmployee->fullname}",
-                'status_penarikan' => '1',
-                'dari_saldo' => $targetEmployee->saldo,
-            ]);
-
-            if ($create) {
-                // 1. Update saldo karyawan
-                $newSaldo = $targetEmployee->saldo - $jumlahPenarikan;
-                $targetEmployee->update(['saldo' => $newSaldo]);
-
-                // 2. Catat ke Laci
-                $keterangan = "Penarikan admin untuk {$targetEmployee->fullname} oleh {$user->fullname} - " . ($request->catatan_penarikan ?? '-');
-                $this->recordLaciHistory(
-                    $request->id_kategorilaci,
-                    null,
-                    $jumlahPenarikan,
-                    $keterangan,
-                    'penarikan',
-                    $create->id,
-                    $kode
-                );
-
-                // 3. Integrasi pencatatan kas perusahaan
-                $this->catatKas(
-                    $create,                                                            // Model sumber
-                    0,                                                                  // Debit
-                    $jumlahPenarikan,                                                   // Kredit
-                    "Penarikan oleh admin ({$user->fullname}) untuk {$targetEmployee->fullname}" // Deskripsi
-                );
-                // 5. Simpan semua perubahan
-                DB::commit();
-
-                // 6. Beri response sukses
-                return response()->json([
-                    'success' => true,
-                    'message' => "Penarikan berhasil untuk {$targetEmployee->fullname}",
-                    'data' => [
-                        'id' => (int) $create->id,
-                        'kode_penarikan' => $kode,
-                        'employee_name' => $targetEmployee->fullname,
-                        'amount' => (float) $jumlahPenarikan,
-                        'old_balance' => (float) ($targetEmployee->saldo + $jumlahPenarikan),
-                        'new_balance' => (float) $newSaldo,
-                        'admin_name' => $user->fullname,
-                        'laci_id' => (int) $request->id_kategorilaci,
-                    ]
-                ], 201);
+            // History Laci (Hanya untuk jumlah Cash)
+            if ($cashAmount > 0) {
+                $this->recordLaciHistory($request->id_kategorilaci, null, $cashAmount, "Penarikan admin untuk {$targetEmployee->fullname}", 'penarikan', $create->id, $kode);
+                
+                // Catat Kas Perusahaan (Cash)
+                $this->catatKas($create, 0, $cashAmount, "Penarikan admin untuk {$targetEmployee->fullname} [Cash]", null, true);
+            }
+            
+            // Catat Kas Perusahaan (Transfer)
+            if ($transferAmount > 0) {
+                $this->catatKas($create, 0, $transferAmount, "Penarikan admin untuk {$targetEmployee->fullname} [Transfer]", null, false);
             }
 
-            // Jika $create gagal
-            DB::rollBack();
-            return response()->json(['success' => false, 'message' => 'Gagal menyimpan data penarikan'], 500);
-
-        } catch (\Exception $e) {
-            // Jika ada error di tengah jalan, batalkan semua
-            DB::rollBack();
-            \Log::error("Admin withdrawal error", ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Terjadi kesalahan saat memproses penarikan: ' . $e->getMessage()], 500);
+            DB::commit();
+            return response()->json(['success' => true, 'data' => $create], 201);
         }
+        DB::rollBack();
+        return response()->json(['success' => false, 'message' => 'Gagal menyimpan.'], 500);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
     }
+}
+
 
 
     // Method untuk admin melihat semua history penarikan dengan info laci

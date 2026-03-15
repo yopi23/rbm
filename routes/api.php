@@ -67,6 +67,8 @@ Route::middleware('auth:sanctum')->group(function () {
     
 
 
+
+
     
 });
 
@@ -142,6 +144,7 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::get('/laci-breakdown/export', [FinancialReportApiController::class , 'exportLaciBreakdown']);
 
     // Financial & Reports (existing, tetap sama)
+    Route::get('/accumulated-funds', [AccumulatedFundsApiController::class , 'index']); // Financial & Reports (existing, tetap sama)
     Route::get('/accumulated-funds', [AccumulatedFundsApiController::class , 'index']); // New Accumulated Funds
     Route::get('/financial-report', [FinancialReportApiController::class , 'getFinancialReport']);
     Route::get('/profit-allocation/preview', [FinancialReportApiController::class , 'getProfitAllocationPreview']);

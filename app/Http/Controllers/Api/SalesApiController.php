@@ -33,9 +33,9 @@ class SalesApiController extends Controller
     {
         try {
             $categories = KategoriSparepart::where('kode_owner', $this->getThisUser()->id_upline)
-                ->with(['subKategoris' => function($query) {
-                    $query->where('kode_owner', $this->getThisUser()->id_upline);
-                }])
+                ->with(['subKategoris' => function ($query) {
+                $query->where('kode_owner', $this->getThisUser()->id_upline);
+            }])
                 ->get();
 
             return response()->json([
@@ -43,7 +43,8 @@ class SalesApiController extends Controller
                 'message' => 'Categories retrieved successfully',
                 'data' => $categories
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve categories',
@@ -67,7 +68,8 @@ class SalesApiController extends Controller
                 'message' => 'Subcategories retrieved successfully',
                 'data' => $subCategories
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve subcategories',
@@ -75,315 +77,322 @@ class SalesApiController extends Controller
             ], 500);
         }
     }
+    public function searchSuggestions(Request $request)
+    {
+        try {
+            $request->validate(['query' => 'required|string|min:2|max:255']);
 
-public function searchSuggestions(Request $request)
-{
-    try {
-        $request->validate(['query' => 'required|string|min:2|max:255']);
+            $originalQuery = trim($request->input('query'));
+            $userId = $this->getThisUser()->id_upline;
 
-        $originalQuery = trim($request->input('query'));
-        $userId = $this->getThisUser()->id_upline;
+            // Normalisasi input dan pecah menjadi kata kunci (keywords)
+            $normalizedInput = str_replace(',', '.', $originalQuery);
+            $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
 
-        // Normalisasi input dan pecah menjadi kata kunci (keywords)
-        $normalizedInput = str_replace(',', '.', $originalQuery);
-        $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
-
-        // =================================================================
-        // PENDEKATAN ELOQUENT YANG BERSIH DAN CEPAT
-        // =================================================================
-        $query = Sparepart::query()
-            // Eager load semua relasi yang dibutuhkan untuk performa tinggi.
-            ->with([
+            // =================================================================
+            // PENDEKATAN ELOQUENT YANG BERSIH DAN CEPAT
+            // =================================================================
+            $query = Sparepart::query()
+                // Eager load semua relasi yang dibutuhkan untuk performa tinggi.
+                ->with([
                 'kategori',
                 'subKategori',
                 'variants.attributeValues',
                 'hargaKhusus'
             ])
-            ->where('kode_owner', $userId)
-            ->where('stok_sparepart', '>', 0);
+                ->where('kode_owner', $userId)
+                ->where('stok_sparepart', '>', 0);
 
-        // Filter opsional berdasarkan kategori
-        if ($request->filled('category_id')) {
-            $query->where('kode_kategori', $request->input('category_id'));
-        }
-        if ($request->filled('subcategory_id')) {
-            $query->where('kode_sub_kategori', $request->input('subcategory_id'));
-        }
+            // Filter opsional berdasarkan kategori
+            if ($request->filled('category_id')) {
+                $query->where('kode_kategori', $request->input('category_id'));
+            }
+            if ($request->filled('subcategory_id')) {
+                $query->where('kode_sub_kategori', $request->input('subcategory_id'));
+            }
 
-        // =================================================================
-        // ✅ LOGIKA PENCARIAN AKURAT DENGAN REGEXP (seperti fungsi search)
-        // =================================================================
-        $query->where(function ($q) use ($keywords) {
-            // Buat ekspresi kolom yang dinormalisasi untuk digunakan kembali
-            $normalizedNameColumn = DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')");
+            // =================================================================
+            // ✅ LOGIKA PENCARIAN AKURAT DENGAN REGEXP (seperti fungsi search)
+            // =================================================================
+            $query->where(function ($q) use ($keywords) {
+                // Buat ekspresi kolom yang dinormalisasi untuk digunakan kembali
+                $normalizedNameColumn = DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')");
 
-            // KONDISI 1: SEMUA keyword harus ada sebagai KATA UTUH di `nama_sparepart`
-            $q->where(function ($nameQuery) use ($keywords, $normalizedNameColumn) {
-                foreach ($keywords as $keyword) {
-                    // [[:<:]] dan [[:>:]] adalah penanda batas kata (whole word) di MySQL
-                    // FIX: MySQL 8.0.4+ uses \\b
-                    $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
-                    $nameQuery->where($normalizedNameColumn, 'REGEXP', $pattern);
-                }
-            });
+                // KONDISI 1: SEMUA keyword harus ada sebagai KATA UTUH di `nama_sparepart`
+                $q->where(function ($nameQuery) use ($keywords, $normalizedNameColumn) {
+                        foreach ($keywords as $keyword) {
+                            // [[:<:]] dan [[:>:]] adalah penanda batas kata (whole word) di MySQL
+                            // FIX: MySQL 8.0.4+ uses \\b
+                            $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
+                            $nameQuery->where($normalizedNameColumn, 'REGEXP', $pattern);
+                        }
+                    }
+                    );
 
-            // KONDISI 2 (ATAU): SEMUA keyword ada di `attribute value`
-            $q->orWhereHas('variants.attributeValues', function ($attrQuery) use ($keywords) {
-                foreach ($keywords as $keyword) {
-                    $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
-                    $attrQuery->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
-                }
-            });
+                    // KONDISI 2 (ATAU): SEMUA keyword ada di `attribute value`
+                    $q->orWhereHas('variants.attributeValues', function ($attrQuery) use ($keywords) {
+                        foreach ($keywords as $keyword) {
+                            $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
+                            $attrQuery->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
+                        }
+                    }
+                    );
 
-            // KONDISI 3 (ATAU): SEMUA keyword ada di `kode_sparepart`
-            $q->orWhere(function ($codeQuery) use ($keywords) {
-                foreach ($keywords as $keyword) {
-                    $codeQuery->where(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%');
-                }
-            });
-        });
-        // =================================================================
-        // AKHIR PERUBAHAN LOGIKA
-        // =================================================================
+                    // KONDISI 3 (ATAU): SEMUA keyword ada di `kode_sparepart`
+                    $q->orWhere(function ($codeQuery) use ($keywords) {
+                        foreach ($keywords as $keyword) {
+                            $codeQuery->where(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%');
+                        }
+                    }
+                    );
+                });
+            // =================================================================
+            // AKHIR PERUBAHAN LOGIKA
+            // =================================================================
 
-        // Pengurutan dan pengambilan data
-        $exactMatchForOrder = implode('%', $keywords);
-        $suggestions = $query->orderByRaw("
+            // Pengurutan dan pengambilan data
+            $exactMatchForOrder = implode('%', $keywords);
+            $suggestions = $query->orderByRaw("
             CASE
                 WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE ? THEN 1
                 WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE ? THEN 2
                 ELSE 3
             END, nama_sparepart ASC
         ", [$exactMatchForOrder . "%", "%" . $exactMatchForOrder . "%"])
-        ->limit(15)
-        ->get();
+                ->limit(15)
+                ->get();
 
-        // Transformasi data yang cepat karena semua relasi sudah di-load
-        $data = $suggestions->map(function($item) {
-            // 1. Tambahkan data lain yang Anda butuhkan
-            $item->kategori_nama = optional($item->kategori)->nama_kategori;
-            $item->sub_kategori_nama = optional($item->subKategori)->nama_sub_kategori;
-            $item->stock_status = $item->stok_sparepart > 0 ? 'available' : 'out_of_stock';
-            $item->low_stock = $item->stok_sparepart > 0 && $item->stok_sparepart <= 5;
+            // Transformasi data yang cepat karena semua relasi sudah di-load
+            $data = $suggestions->map(function ($item) {
+                // 1. Tambahkan data lain yang Anda butuhkan
+                $item->kategori_nama = optional($item->kategori)->nama_kategori;
+                $item->sub_kategori_nama = optional($item->subKategori)->nama_sub_kategori;
+                $item->stock_status = $item->stok_sparepart > 0 ? 'available' : 'out_of_stock';
+                $item->low_stock = $item->stok_sparepart > 0 && $item->stok_sparepart <= 5;
 
-            // 2. Logika untuk mengubah format harga khusus (CONTEK DARI search)
-            $hargaKhususPertama = $item->hargaKhusus->first();
-            if ($hargaKhususPertama) {
-                $item->harga_khusus = [
-                    'harga_toko'   => (int) $hargaKhususPertama->harga_toko,
-                    'harga_satuan' => (int) $hargaKhususPertama->harga_satuan,
-                ];
-            } else {
-                $item->harga_khusus = null;
-            }
+                // 2. Logika untuk mengubah format harga khusus (CONTEK DARI search)
+                $hargaKhususPertama = $item->hargaKhusus->first();
+                if ($hargaKhususPertama) {
+                    $item->harga_khusus = [
+                        'harga_toko' => (int)$hargaKhususPertama->harga_toko,
+                        'harga_satuan' => (int)$hargaKhususPertama->harga_satuan,
+                    ];
+                }
+                else {
+                    $item->harga_khusus = null;
+                }
 
-            // 3. Logic tambahan khusus suggestion (display_text & attributes string)
-            $attributes = $item->variants->pluck('attributeValues')->flatten()->pluck('value')->unique()->implode(', ');
-            $item->attributes_text = $attributes; // Simpan di property baru jika perlu
-            
-            $displayText = $item->nama_sparepart;
-            if (!empty($attributes)) {
-                $displayText .= ' (' . $attributes . ')';
-            }
-            $item->display_text = $displayText;
+                // 3. Logic tambahan khusus suggestion (display_text & attributes string)
+                $attributes = $item->variants->pluck('attributeValues')->flatten()->pluck('value')->unique()->implode(', ');
+                $item->attributes_text = $attributes; // Simpan di property baru jika perlu
 
-            // 4. Bersihkan relasi yang tidak perlu di output JSON (variants DIBIARKAN agar muncul)
-            unset($item->hargaKhusus);
-            unset($item->kategori); 
-            unset($item->subKategori);
+                $displayText = $item->nama_sparepart;
+                if (!empty($attributes)) {
+                    $displayText .= ' (' . $attributes . ')';
+                }
+                $item->display_text = $displayText;
 
-            return $item;
-        });
+                // 4. Bersihkan relasi yang tidak perlu di output JSON (variants DIBIARKAN agar muncul)
+                unset($item->hargaKhusus);
+                unset($item->kategori);
+                unset($item->subKategori);
 
-        return response()->json([
-            'status' => 'success',
-            'data' => $data
-        ]);
+                return $item;
+            });
 
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Failed to get suggestions',
-            'error' => $e->getMessage()
-        ], 500);
-    }
-}
+            return response()->json([
+                'status' => 'success',
+                'data' => $data
+            ]);
 
-public function getSparepartDetail($id)
-{
-    try {
-        $userId = $this->getThisUser()->id_upline;
-
-        $sparepart = Sparepart::with([
-            'variants.attributeValues',
-            'hargaKhusus',
-            'kategori',
-            'subKategori'
-        ])
-        ->where('id', $id)
-        ->where('kode_owner', $userId)
-        ->first();
-
-        if (!$sparepart) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Sparepart not found'
-            ], 404);
+                'message' => 'Failed to get suggestions',
+                'error' => $e->getMessage()
+            ], 500);
         }
+    }
+    public function getSparepartDetail($id)
+    {
+        try {
+            $userId = $this->getThisUser()->id_upline;
 
-        // Transform data sesuai format yang dibutuhkan
-        $data = [
-            'id' => $sparepart->id,
-            'kode_sparepart' => $sparepart->kode_sparepart,
-            'nama_sparepart' => $sparepart->nama_sparepart,
-            'kode_kategori' => $sparepart->kode_kategori,
-            'kode_sub_kategori' => $sparepart->kode_sub_kategori,
-            'harga_beli' => $sparepart->harga_beli,
-            'harga_jual' => $sparepart->harga_jual,
-            'harga_ecer' => $sparepart->harga_ecer,
-            'harga_pasang' => $sparepart->harga_pasang,
-            'stok_sparepart' => (int) $sparepart->stok_sparepart,
-            'deskripsi' => $sparepart->deskripsi,
-            'created_at' => $sparepart->created_at,
-            'updated_at' => $sparepart->updated_at,
-            'kategori_nama' => optional($sparepart->kategori)->nama_kategori,
-            'sub_kategori_nama' => optional($sparepart->subKategori)->nama_sub_kategori,
-            'stock_status' => $sparepart->stok_sparepart > 0 ? 'available' : 'out_of_stock',
-            'low_stock' => $sparepart->stok_sparepart > 0 && $sparepart->stok_sparepart <= 5,
-        ];
+            $sparepart = Sparepart::with([
+                'variants.attributeValues',
+                'hargaKhusus',
+                'kategori',
+                'subKategori'
+            ])
+                ->where('id', $id)
+                ->where('kode_owner', $userId)
+                ->first();
 
-        // Tambahkan variants jika ada
-        if ($sparepart->variants->isNotEmpty()) {
-            $data['variants'] = $sparepart->variants->map(function($variant) {
-                return [
+            if (!$sparepart) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Sparepart not found'
+                ], 404);
+            }
+
+            // Transform data sesuai format yang dibutuhkan
+            $data = [
+                'id' => $sparepart->id,
+                'kode_sparepart' => $sparepart->kode_sparepart,
+                'nama_sparepart' => $sparepart->nama_sparepart,
+                'kode_kategori' => $sparepart->kode_kategori,
+                'kode_sub_kategori' => $sparepart->kode_sub_kategori,
+                'harga_beli' => $sparepart->harga_beli,
+                'harga_jual' => $sparepart->harga_jual,
+                'harga_ecer' => $sparepart->harga_ecer,
+                'harga_pasang' => $sparepart->harga_pasang,
+                'stok_sparepart' => (int)$sparepart->stok_sparepart,
+                'deskripsi' => $sparepart->deskripsi,
+                'created_at' => $sparepart->created_at,
+                'updated_at' => $sparepart->updated_at,
+                'kategori_nama' => optional($sparepart->kategori)->nama_kategori,
+                'sub_kategori_nama' => optional($sparepart->subKategori)->nama_sub_kategori,
+                'stock_status' => $sparepart->stok_sparepart > 0 ? 'available' : 'out_of_stock',
+                'low_stock' => $sparepart->stok_sparepart > 0 && $sparepart->stok_sparepart <= 5,
+            ];
+
+            // Tambahkan variants jika ada
+            if ($sparepart->variants->isNotEmpty()) {
+                $data['variants'] = $sparepart->variants->map(function ($variant) {
+                    return [
                     'id' => $variant->id,
-                    'attribute_values' => $variant->attributeValues->map(function($attrValue) {
-                        return [
+                    'attribute_values' => $variant->attributeValues->map(function ($attrValue) {
+                            return [
                             'id' => $attrValue->id,
                             'value' => $attrValue->value
+                            ];
+                        }
+                        )
                         ];
-                    })
+                    });
+            }
+
+            // Tambahkan harga khusus jika ada
+            $hargaKhususPertama = $sparepart->hargaKhusus->first();
+            if ($hargaKhususPertama) {
+                $data['harga_khusus'] = [
+                    'harga_toko' => (int)$hargaKhususPertama->harga_toko,
+                    'harga_satuan' => (int)$hargaKhususPertama->harga_satuan,
                 ];
-            });
+            }
+            else {
+                $data['harga_khusus'] = null;
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $data
+            ]);
+
+        }
+        catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to retrieve sparepart',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    } /**
+  * Helper method untuk membangun kondisi semua keywords cocok
+  */
+    private function buildAllKeywordsMatch($keywords)
+    {
+        if (empty($keywords) || count($keywords) <= 1) {
+            return "1=0"; // False condition
         }
 
-        // Tambahkan harga khusus jika ada
-        $hargaKhususPertama = $sparepart->hargaKhusus->first();
-        if ($hargaKhususPertama) {
-            $data['harga_khusus'] = [
-                'harga_toko' => (int) $hargaKhususPertama->harga_toko,
-                'harga_satuan' => (int) $hargaKhususPertama->harga_satuan,
-            ];
-        } else {
-            $data['harga_khusus'] = null;
+        $conditions = [];
+        foreach ($keywords as $keyword) {
+            if (strlen($keyword) >= 2) {
+                $conditions[] = "LOWER(nama_sparepart) LIKE '%{$keyword}%'";
+            }
         }
 
-        return response()->json([
-            'status' => 'success',
-            'data' => $data
-        ]);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Failed to retrieve sparepart',
-            'error' => $e->getMessage()
-        ], 500);
+        return empty($conditions) ? "1=0" : "(" . implode(" AND ", $conditions) . ")";
     }
-}
-/**
- * Helper method untuk membangun kondisi semua keywords cocok
- */
-private function buildAllKeywordsMatch($keywords)
-{
-    if (empty($keywords) || count($keywords) <= 1) {
-        return "1=0"; // False condition
-    }
-
-    $conditions = [];
-    foreach ($keywords as $keyword) {
-        if (strlen($keyword) >= 2) {
-            $conditions[] = "LOWER(nama_sparepart) LIKE '%{$keyword}%'";
-        }
-    }
-
-    return empty($conditions) ? "1=0" : "(" . implode(" AND ", $conditions) . ")";
-}
 
     /**
      * Pencarian detail sparepart
      * Dipanggil ketika user menekan tombol cari atau memilih dari suggestion
-     */
-public function search(Request $request)
-{
-    try {
-        $request->validate(['search' => 'required|string|max:255']);
+     */public function search(Request $request)
+    {
+        try {
+            $request->validate(['search' => 'required|string|max:255']);
 
-        $searchInput = trim($request->input('search'));
-        $categoryId = $request->input('category_id');
-        $subcategoryId = $request->input('subcategory_id');
-        $limit = $request->input('limit', 20);
-        $userId = $this->getThisUser()->id_upline;
+            $searchInput = trim($request->input('search'));
+            $categoryId = $request->input('category_id');
+            $subcategoryId = $request->input('subcategory_id');
+            $limit = $request->input('limit', 20);
+            $userId = $this->getThisUser()->id_upline;
 
-        // Normalisasi input untuk konsistensi (misal: 6,7 -> 6.7)
-        $normalizedInput = str_replace(',', '.', $searchInput);
-        $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
+            // Normalisasi input untuk konsistensi (misal: 6,7 -> 6.7)
+            $normalizedInput = str_replace(',', '.', $searchInput);
+            $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
 
-        // Query Utama (Ini sudah benar)
-        $query = Sparepart::query()
-            ->with([
+            // Query Utama (Ini sudah benar)
+            $query = Sparepart::query()
+                ->with([
                 'variants.attributeValues',
                 'hargaKhusus'
             ]);
 
-        // Filter utama (Ini sudah benar)
-        $query->where('kode_owner', $userId);
-        if ($categoryId) {
-            $query->where('kode_kategori', $categoryId);
-        }
-        if ($subcategoryId) {
-            $query->where('kode_sub_kategori', $subcategoryId);
-        }
+            // Filter utama (Ini sudah benar)
+            $query->where('kode_owner', $userId);
+            if ($categoryId) {
+                $query->where('kode_kategori', $categoryId);
+            }
+            if ($subcategoryId) {
+                $query->where('kode_sub_kategori', $subcategoryId);
+            }
 
-        // =================================================================
-        // ✅ LOGIKA PENCARIAN BARU DENGAN WHOLE WORD MATCHING
-        // =================================================================
-        $query->where(function ($q) use ($keywords) {
-            // Buat ekspresi kolom yang dinormalisasi untuk digunakan kembali
-            $normalizedNameColumn = DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')");
+            // =================================================================
+            // ✅ LOGIKA PENCARIAN BARU DENGAN WHOLE WORD MATCHING
+            // =================================================================
+            $query->where(function ($q) use ($keywords) {
+                // Buat ekspresi kolom yang dinormalisasi untuk digunakan kembali
+                $normalizedNameColumn = DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')");
 
-            // KONDISI 1: SEMUA keyword harus ada sebagai KATA UTUH di `nama_sparepart`
-            $q->where(function ($nameQuery) use ($keywords, $normalizedNameColumn) {
-                foreach ($keywords as $keyword) {
-                    // [[:<:]] dan [[:>:]] adalah penanda batas kata di MySQL REGEXP
-                    // FIX: MySQL 8.0.4+ uses \\b
-                    $pattern = '\\b' . $keyword . '\\b';
-                    $nameQuery->where($normalizedNameColumn, 'REGEXP', $pattern);
-                }
-            });
+                // KONDISI 1: SEMUA keyword harus ada sebagai KATA UTUH di `nama_sparepart`
+                $q->where(function ($nameQuery) use ($keywords, $normalizedNameColumn) {
+                        foreach ($keywords as $keyword) {
+                            // [[:<:]] dan [[:>:]] adalah penanda batas kata di MySQL REGEXP
+                            // FIX: MySQL 8.0.4+ uses \\b
+                            $pattern = '\\b' . $keyword . '\\b';
+                            $nameQuery->where($normalizedNameColumn, 'REGEXP', $pattern);
+                        }
+                    }
+                    );
 
-            // KONDISI 2 (ATAU): SEMUA keyword harus ada sebagai KATA UTUH di `attribute value`
-            $q->orWhereHas('variants.attributeValues', function ($attrQuery) use ($keywords) {
-                foreach ($keywords as $keyword) {
-                    $pattern = '\\b' . $keyword . '\\b';
-                    $attrQuery->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
-                }
-            });
+                    // KONDISI 2 (ATAU): SEMUA keyword harus ada sebagai KATA UTUH di `attribute value`
+                    $q->orWhereHas('variants.attributeValues', function ($attrQuery) use ($keywords) {
+                        foreach ($keywords as $keyword) {
+                            $pattern = '\\b' . $keyword . '\\b';
+                            $attrQuery->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
+                        }
+                    }
+                    );
 
-            // KONDISI 3 (ATAU): SEMUA keyword ada di `kode_sparepart` (LIKE masih cocok di sini)
-            $q->orWhere(function ($codeQuery) use ($keywords) {
-                foreach ($keywords as $keyword) {
-                    $codeQuery->where(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%');
-                }
-            });
-        });
-        // =================================================================
-        // AKHIR PERUBAHAN LOGIKA
-        // =================================================================
+                    // KONDISI 3 (ATAU): SEMUA keyword ada di `kode_sparepart` (LIKE masih cocok di sini)
+                    $q->orWhere(function ($codeQuery) use ($keywords) {
+                        foreach ($keywords as $keyword) {
+                            $codeQuery->where(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%');
+                        }
+                    }
+                    );
+                });
+            // =================================================================
+            // AKHIR PERUBAHAN LOGIKA
+            // =================================================================
 
-        // Pengurutan hasil (ini sudah bagus, kita pertahankan)
-        $exactMatchForOrder = implode('%', $keywords);
-        $results = $query->orderByRaw("
+            // Pengurutan hasil (ini sudah bagus, kita pertahankan)
+            $exactMatchForOrder = implode('%', $keywords);
+            $results = $query->orderByRaw("
             CASE
                 WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE '{$exactMatchForOrder}%' THEN 1
                 WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE '%{$exactMatchForOrder}%' THEN 2
@@ -392,60 +401,62 @@ public function search(Request $request)
         ")->paginate($limit);
 
 
-        $results->getCollection()->transform(function ($item) {
-            // 1. Tambahkan data lain yang Anda butuhkan
-            $item->kategori_nama = optional(KategoriSparepart::find($item->kode_kategori))->nama_kategori;
-            $item->sub_kategori_nama = optional(SubKategoriSparepart::find($item->kode_sub_kategori))->nama_sub_kategori;
-            $item->stock_status = $item->stok_sparepart > 0 ? 'available' : 'out_of_stock';
-            $item->low_stock = $item->stok_sparepart > 0 && $item->stok_sparepart <= 5;
+            $results->getCollection()->transform(function ($item) {
+                // 1. Tambahkan data lain yang Anda butuhkan
+                $item->kategori_nama = optional(KategoriSparepart::find($item->kode_kategori))->nama_kategori;
+                $item->sub_kategori_nama = optional(SubKategoriSparepart::find($item->kode_sub_kategori))->nama_sub_kategori;
+                $item->stock_status = $item->stok_sparepart > 0 ? 'available' : 'out_of_stock';
+                $item->low_stock = $item->stok_sparepart > 0 && $item->stok_sparepart <= 5;
 
-            // 2. Logika untuk mengubah format harga khusus
-            // Ambil data harga khusus pertama dari relasi yang sudah di-load
-            $hargaKhususPertama = $item->hargaKhusus->first();
+                // 2. Logika untuk mengubah format harga khusus
+                // Ambil data harga khusus pertama dari relasi yang sudah di-load
+                $hargaKhususPertama = $item->hargaKhusus->first();
 
-            // Cek jika ada harga khusus
-            if ($hargaKhususPertama) {
-                // Buat properti baru 'harga_khusus' dengan format objek
-                $item->harga_khusus = [
-                    'harga_toko'   => (int) $hargaKhususPertama->harga_toko,
-                    'harga_satuan' => (int) $hargaKhususPertama->harga_satuan,
-                ];
-            } else {
-                // Jika tidak ada, kembalikan null atau objek dengan nilai default
-                $item->harga_khusus = null;
-            }
+                // Cek jika ada harga khusus
+                if ($hargaKhususPertama) {
+                    // Buat properti baru 'harga_khusus' dengan format objek
+                    $item->harga_khusus = [
+                        'harga_toko' => (int)$hargaKhususPertama->harga_toko,
+                        'harga_satuan' => (int)$hargaKhususPertama->harga_satuan,
+                    ];
+                }
+                else {
+                    // Jika tidak ada, kembalikan null atau objek dengan nilai default
+                    $item->harga_khusus = null;
+                }
 
-            // 3. Hapus relasi asli agar tidak ikut tampil di JSON
-            unset($item->hargaKhusus);
+                // 3. Hapus relasi asli agar tidak ikut tampil di JSON
+                unset($item->hargaKhusus);
 
-            return $item;
-        });
+                return $item;
+            });
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Data retrieved successfully',
-            'data' => $results->items(),
-            // Informasi pagination sudah disediakan oleh Laravel
-            'pagination' => [
-                'current_page' => $results->currentPage(),
-                'total_items' => $results->total(),
-                'per_page' => $results->perPage(),
-                'total_pages' => $results->lastPage(),
-                'has_more' => $results->hasMorePages()
-            ],
-            'search_info' => [
-                'search_terms' => $keywords,
-                'original_query' => $searchInput
-            ]
-        ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Failed to retrieve data',
-            'error' => $e->getMessage()
-        ], 500);
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Data retrieved successfully',
+                'data' => $results->items(),
+                // Informasi pagination sudah disediakan oleh Laravel
+                'pagination' => [
+                    'current_page' => $results->currentPage(),
+                    'total_items' => $results->total(),
+                    'per_page' => $results->perPage(),
+                    'total_pages' => $results->lastPage(),
+                    'has_more' => $results->hasMorePages()
+                ],
+                'search_info' => [
+                    'search_terms' => $keywords,
+                    'original_query' => $searchInput
+                ]
+            ]);
+        }
+        catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to retrieve data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
-}
 
     /**
      * Mendapatkan sparepart berdasarkan ID spesifik
@@ -458,19 +469,19 @@ public function search(Request $request)
                 ->where('id', $id)
                 ->where('kode_owner', $this->getThisUser()->id_upline)
                 ->select([
-                    'id',
-                    'kode_sparepart',
-                    'nama_sparepart',
-                    'kode_kategori',
-                    'kode_sub_kategori',
-                    'harga_beli',
-                    'harga_jual',
-                    'harga_ecer',
-                    'harga_pasang',
-                    'stok_sparepart',
-                    'created_at',
-                    'updated_at'
-                ])
+                'id',
+                'kode_sparepart',
+                'nama_sparepart',
+                'kode_kategori',
+                'kode_sub_kategori',
+                'harga_beli',
+                'harga_jual',
+                'harga_ecer',
+                'harga_pasang',
+                'stok_sparepart',
+                'created_at',
+                'updated_at'
+            ])
                 ->first();
 
             if (!$sparepart) {
@@ -502,7 +513,8 @@ public function search(Request $request)
                 'data' => $sparepart
             ]);
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve sparepart',
@@ -526,12 +538,12 @@ public function search(Request $request)
                 ->where('p.created_at', '>=', now()->subDays(30)) // 30 hari terakhir
                 ->where('sp.stok_sparepart', '>', 0) // Yang masih ada stok
                 ->select([
-                    'sp.id',
-                    'sp.nama_sparepart',
-                    'sp.kode_sparepart',
-                    DB::raw('COUNT(dsp.id) as total_sold'),
-                    DB::raw('SUM(dsp.qty_sparepart) as total_qty')
-                ])
+                'sp.id',
+                'sp.nama_sparepart',
+                'sp.kode_sparepart',
+                DB::raw('COUNT(dsp.id) as total_sold'),
+                DB::raw('SUM(dsp.qty_sparepart) as total_qty')
+            ])
                 ->groupBy('sp.id', 'sp.nama_sparepart', 'sp.kode_sparepart')
                 ->orderBy('total_sold', 'desc')
                 ->limit(10)
@@ -539,8 +551,8 @@ public function search(Request $request)
 
             return response()->json([
                 'status' => 'success',
-                'data' => $popularItems->map(function($item) {
-                    return [
+                'data' => $popularItems->map(function ($item) {
+                return [
                         'id' => $item->id,
                         'nama_sparepart' => $item->nama_sparepart,
                         'kode_sparepart' => $item->kode_sparepart,
@@ -548,10 +560,11 @@ public function search(Request $request)
                         'badge' => 'Populer',
                         'sales_count' => $item->total_sold
                     ];
-                })
+            })
             ]);
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'status' => 'success',
                 'data' => []
@@ -569,7 +582,7 @@ public function search(Request $request)
 
             // Ekstrak keywords
             $keywords = array_filter(explode(' ', strtolower(trim($request->input('search')))));
-             $categoryId = $request->input('category_id');
+            $categoryId = $request->input('category_id');
             $subcategoryId = $request->input('subcategory_id');
 
             // Ambil owner_code dari request, dengan fallback ke user saat ini
@@ -581,7 +594,7 @@ public function search(Request $request)
             $query = DB::table('spareparts')
                 ->where('kode_owner', '=', $ownerCode);
 
-                // Filter by category if provided
+            // Filter by category if provided
             if ($categoryId) {
                 $query->where('kode_kategori', $categoryId);
             }
@@ -609,7 +622,7 @@ public function search(Request $request)
             ])->get();
 
             // Enhance data with category and subcategory names
-            $enhancedData = $data->map(function($item) {
+            $enhancedData = $data->map(function ($item) {
                 $category = KategoriSparepart::find($item->kode_kategori);
                 $subcategory = SubKategoriSparepart::find($item->kode_sub_kategori);
 
@@ -627,7 +640,8 @@ public function search(Request $request)
                 // 'data' => $data
                 'data' => $enhancedData
             ], 200);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             // Log error detail
             // Log::error('Sparepart search error: ' . $e->getMessage());
             // Log::error($e->getTraceAsString());
@@ -717,11 +731,12 @@ public function search(Request $request)
                     // Use custom price if provided and it's not less than the original 'harga_ecer'
                     // Assuming 'harga_ecer' is the base counter price
                     if ($customPrice >= $sparepart->harga_ecer) {
-                        $finalSellingPrice = (int) $customPrice;
-                    } else {
-                        // Optionally, add a warning or handle cases where customPrice is too low
-                        // For now, it will just use the calculatedPrice if customPrice is less than harga_ecer
-                        // You might want to log this or return a specific error
+                        $finalSellingPrice = (int)$customPrice;
+                    }
+                    else {
+                    // Optionally, add a warning or handle cases where customPrice is too low
+                    // For now, it will just use the calculatedPrice if customPrice is less than harga_ecer
+                    // You might want to log this or return a specific error
                     }
                 }
 
@@ -752,7 +767,8 @@ public function search(Request $request)
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
-            } catch (\Exception $e) {
+            }
+            catch (\Exception $e) {
                 $stockErrors[] = [
                     'id' => $sparepartId,
                     'error' => $e->getMessage()
@@ -760,27 +776,58 @@ public function search(Request $request)
             }
         }
 
+        $bayarCash = $request->has('bayar_cash') ? $request->input('bayar_cash') : (($statusPenjualan == '1') ? $totalBayar : 0);
+        $bayarTransfer = $request->input('bayar_transfer', 0);
+
+        $metodeBayar = 'cash';
+        if ($bayarCash > 0 && $bayarTransfer > 0) {
+            $metodeBayar = 'split';
+        }
+        else if ($bayarTransfer > 0 && $bayarCash <= 0) {
+            $metodeBayar = 'transfer';
+        }
+
         // Update total penjualan
         $sale->update([
             'total_penjualan' => $totalPenjualan,
             'total_bayar' => ($statusPenjualan == '1') ? $totalBayar : 0, // Hanya update jika bukan draft
+            'metode_bayar' => $metodeBayar,
+            'jumlah_cash' => $bayarCash,
+            'jumlah_transfer' => $bayarTransfer,
         ]);
 
         // Jika status bukan draft (status 1), maka tambahkan ke laci
         if ($statusPenjualan == '1') {
-            $this->catatKas(
-                $sale,
-                $totalBayar,
-                0,
-                'Penjualan API #' . $sale->kode_penjualan,
-                $sale->tgl_penjualan
-            );
-            $this->recordLaciHistory(
-                $request->kategori_laci_id,
-                $totalBayar, // Uang masuk
-                null, // Tidak ada uang keluar
-                'Penjualan: ' . $sale->kode_penjualan . '- customer: ' . ($request->nama_customer ?? '-')
-            );
+
+
+            if ($bayarCash > 0) {
+                $this->catatKas(
+                    $sale,
+                    $bayarCash,
+                    0,
+                    'Penjualan API (Cash) #' . $sale->kode_penjualan,
+                    $sale->tgl_penjualan,
+                    true // isCash = true
+                );
+
+                $this->recordLaciHistory(
+                    $request->kategori_laci_id,
+                    $bayarCash, // Uang masuk (Hanya Cash ke Laci)
+                    null, // Tidak ada uang keluar
+                    'Penjualan: ' . $sale->kode_penjualan . '- customer: ' . ($request->nama_customer ?? '-') . ' [Cash]'
+                );
+            }
+
+            if ($bayarTransfer > 0) {
+                $this->catatKas(
+                    $sale,
+                    $bayarTransfer,
+                    0,
+                    'Penjualan API (Transfer) #' . $sale->kode_penjualan,
+                    $sale->tgl_penjualan,
+                    false // isCash = false
+                );
+            }
         }
 
         return response()->json([
@@ -824,27 +871,56 @@ public function search(Request $request)
             ], 400);
         }
 
+        $bayarCash = $request->has('bayar_cash') ? $request->input('bayar_cash') : $sale->total_penjualan;
+        $bayarTransfer = $request->input('bayar_transfer', 0);
+
+        $metodeBayar = 'cash';
+        if ($bayarCash > 0 && $bayarTransfer > 0) {
+            $metodeBayar = 'split';
+        }
+        else if ($bayarTransfer > 0 && $bayarCash <= 0) {
+            $metodeBayar = 'transfer';
+        }
+
         // Update status menjadi lunas (1)
         $sale->update([
             'status_penjualan' => '1',
             'total_bayar' => $sale->total_penjualan, // Update total bayar
+            'metode_bayar' => $metodeBayar,
+            'jumlah_cash' => $bayarCash,
+            'jumlah_transfer' => $bayarTransfer,
             'updated_at' => now(),
         ]);
-        $this->catatKas(
-            $sale,
-            $sale->total_penjualan,
-            0,
-            'Pelunasan Penjualan #' . $sale->kode_penjualan,
-            now() // Dicatat saat dilunasi
-        );
 
-        // Catat ke laci jika dibutuhkan
-        $this->recordLaciHistory(
-            $request->kategori_laci_id,
-            $sale->total_penjualan, // Uang masuk
-            null,
-            'Pelunasan: ' . $sale->kode_penjualan . ' - Customer: ' . ($sale->nama_customer ?? '-')
-        );
+        if ($bayarCash > 0) {
+            $this->catatKas(
+                $sale,
+                $bayarCash,
+                0,
+                'Pelunasan Penjualan (Cash) #' . $sale->kode_penjualan,
+                now(), // Dicatat saat dilunasi
+                true // isCash = true
+            );
+
+            // Catat ke laci jika dibutuhkan (Hanya Cash)
+            $this->recordLaciHistory(
+                $request->kategori_laci_id,
+                $bayarCash, // Uang masuk
+                null,
+                'Pelunasan: ' . $sale->kode_penjualan . ' - Customer: ' . ($sale->nama_customer ?? '-') . ' [Cash]'
+            );
+        }
+
+        if ($bayarTransfer > 0) {
+            $this->catatKas(
+                $sale,
+                $bayarTransfer,
+                0,
+                'Pelunasan Penjualan (Transfer) #' . $sale->kode_penjualan,
+                now(),
+                false // isCash = false
+            );
+        }
 
         return response()->json([
             'status' => 'success',
@@ -860,21 +936,27 @@ public function search(Request $request)
         if ($selectedCustomerType == 'ecer') {
             if ($finalPrice < 15000) {
                 $finalPrice += $finalPrice * 0.1;
-            } elseif ($finalPrice >= 15000 && $finalPrice <= 200000) {
+            }
+            elseif ($finalPrice >= 15000 && $finalPrice <= 200000) {
                 $finalPrice += 10000;
-            } else {
+            }
+            else {
                 $finalPrice += 20000;
             }
-        } elseif ($selectedCustomerType == 'glosir') {
+        }
+        elseif ($selectedCustomerType == 'glosir') {
             if ($finalPrice >= 5000 && $finalPrice < 15000) {
                 $finalPrice -= 1000;
-            } elseif ($finalPrice >= 50000 && $finalPrice < 200000) {
+            }
+            elseif ($finalPrice >= 50000 && $finalPrice < 200000) {
                 $finalPrice -= 5000;
             }
-        } elseif ($selectedCustomerType == 'jumbo') {
+        }
+        elseif ($selectedCustomerType == 'jumbo') {
             if ($finalPrice >= 5000 && $finalPrice < 15000) {
                 $finalPrice -= 2000;
-            } elseif ($finalPrice >= 50000 && $finalPrice < 200000) {
+            }
+            elseif ($finalPrice >= 50000 && $finalPrice < 200000) {
                 $finalPrice -= 10000;
             }
         }
@@ -939,40 +1021,119 @@ public function search(Request $request)
     {
         // Validasi input request
         $request->validate([
-            'jumlah_pemasukan' => ['required', 'numeric'],
+            'jumlah_pemasukkan' => ['required', 'numeric'],
+            'metode_bayar' => ['nullable', 'in:cash,transfer,split'],
+            'jumlah_cash' => ['nullable', 'numeric'],
+            'jumlah_transfer' => ['nullable', 'numeric'],
         ]);
+
+        $metodeBayar = $request->metode_bayar ?? 'cash';
+
         try {
-            // Buat record pemasukan baru
-            $create = PemasukkanLain::create([
-                'tgl_pemasukkan' => date('Y-m-d'),
-                'judul_pemasukan' => $request->judul_pemasukan,
-                'catatan_pemasukkan' => $request->catatan_pemasukan,
-                'jumlah_pemasukkan' => $request->jumlah_pemasukan,
-                'kode_owner' => $this->getThisUser()->id_upline,
-                'shift_id' => Shift::getActiveShift(auth()->user()->id)->id ?? null,
-            ]);
+            DB::beginTransaction();
 
-            // Jika pemasukan berhasil dibuat, catat histori laci
-            if ($create) {
-                $kategoriId = $request->id_kategorilaci;
-                $uangMasuk = $request->input('jumlah_pemasukan');
-                $keterangan = $request->input('judul_pemasukan') . "-" . $request->input('catatan_pemasukan');
+            $createdRecords = [];
+            $shiftId = Shift::getActiveShift(auth()->user()->id)->id ?? null;
+            $ownerId = $this->getThisUser()->id_upline;
 
-                $this->recordLaciHistory($kategoriId, $uangMasuk, null, $keterangan);
+            if ($metodeBayar === 'split') {
+                $jumlahCash = $request->jumlah_cash ?? 0;
+                $jumlahTransfer = $request->jumlah_transfer ?? 0;
 
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Pemasukkan berhasil ditambahkan',
-                    'data' => $create,
-                ], 201);
+                if ($jumlahCash > 0) {
+                    $cashRecord = PemasukkanLain::create([
+                        'tgl_pemasukkan' => date('Y-m-d'),
+                        'judul_pemasukan' => $request->judul_pemasukan . ' [Split Cash]',
+                        'catatan_pemasukkan' => $request->catatan_pemasukkan,
+                        'jumlah_pemasukkan' => $jumlahCash,
+                        'jumlah_cash' => $jumlahCash,
+                        'jumlah_transfer' => 0,
+                        'metode_bayar' => 'cash',
+                        'kode_owner' => $ownerId,
+                        'shift_id' => $shiftId,
+                    ]);
+
+                    $this->catatKas(
+                        $cashRecord,
+                        $jumlahCash,
+                        0,
+                        'Pemasukkan Lain: ' . $cashRecord->judul_pemasukan,
+                        now(),
+                        true // is_cash
+                    );
+
+                    if ($request->id_kategorilaci) {
+                        $keterangan = $cashRecord->judul_pemasukan . "-" . $request->catatan_pemasukan . " [Cash]";
+                        $this->recordLaciHistory($request->id_kategorilaci, $jumlahCash, null, $keterangan);
+                    }
+                    $createdRecords[] = $cashRecord;
+                }
+
+                if ($jumlahTransfer > 0) {
+                    $tfRecord = PemasukkanLain::create([
+                        'tgl_pemasukkan' => date('Y-m-d'),
+                        'judul_pemasukan' => $request->judul_pemasukan . ' [Split Transfer]',
+                        'catatan_pemasukkan' => $request->catatan_pemasukkan,
+                        'jumlah_pemasukkan' => $jumlahTransfer,
+                        'jumlah_cash' => 0,
+                        'jumlah_transfer' => $jumlahTransfer,
+                        'metode_bayar' => 'transfer',
+                        'kode_owner' => $ownerId,
+                        'shift_id' => $shiftId,
+                    ]);
+
+                    $this->catatKas(
+                        $tfRecord,
+                        $jumlahTransfer,
+                        0,
+                        'Pemasukkan Lain: ' . $tfRecord->judul_pemasukan,
+                        now(),
+                        false // is_cash
+                    );
+                    $createdRecords[] = $tfRecord;
+                }
+            }
+            else {
+                $create = PemasukkanLain::create([
+                    'tgl_pemasukkan' => date('Y-m-d'),
+                    'judul_pemasukan' => $request->judul_pemasukan,
+                    'catatan_pemasukkan' => $request->catatan_pemasukkan,
+                    'jumlah_pemasukkan' => $request->jumlah_pemasukkan,
+                    'jumlah_cash' => $request->jumlah_cash ?? 0,
+                    'jumlah_transfer' => $request->jumlah_transfer ?? 0,
+                    'metode_bayar' => $metodeBayar,
+                    'kode_owner' => $ownerId,
+                    'shift_id' => $shiftId,
+                ]);
+
+                $this->catatKas(
+                    $create,
+                    $create->jumlah_pemasukkan,
+                    0,
+                    'Pemasukkan Lain: ' . $create->judul_pemasukan,
+                    now(),
+                    $metodeBayar === 'cash' // is_cash
+                );
+
+                if ($metodeBayar === 'cash' && $request->id_kategorilaci) {
+                    $keterangan = $request->judul_pemasukan . "-" . $request->catatan_pemasukkan . " [$metodeBayar]";
+                    $this->recordLaciHistory($request->id_kategorilaci, $create->jumlah_pemasukkan, null, $keterangan);
+                }
+
+                $createdRecords[] = $create;
             }
 
-            // Jika gagal, kirim response gagal
+            DB::commit();
+
             return response()->json([
-                'success' => false,
-                'message' => 'Gagal menambahkan pemasukkan, ada kendala teknis',
-            ], 500);
-        } catch (\Exception $e) {
+                'success' => true,
+                'message' => 'Pemasukkan berhasil ditambahkan',
+                'data' => count($createdRecords) > 0 ? $createdRecords[0] : null,
+            ], 201);
+
+        }
+        catch (\Exception $e) {
+            DB::rollBack();
             // Handle exception dan kirim response error
             return response()->json([
                 'success' => false,
@@ -994,7 +1155,8 @@ public function search(Request $request)
 
             if ($startDate && $endDate) {
                 $query->whereBetween('tgl_pemasukkan', [$startDate, $endDate]);
-            } elseif ($startDate) {
+            }
+            elseif ($startDate) {
                 $query->where('tgl_pemasukkan', '>=', $startDate);
             }
 
@@ -1007,7 +1169,8 @@ public function search(Request $request)
                 'message' => 'List pemasukan berhasil diambil',
                 'data' => $pemasukan
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal mengambil data pemasukan',
@@ -1099,7 +1262,8 @@ public function search(Request $request)
                         'new_stock' => $sparepart->stok_sparepart,
                         'update_success' => true
                     ];
-                } else {
+                }
+                else {
                     // \Log::error('Sparepart not found with ID: ' . $detail->kode_sparepart);
                     $stockUpdates[] = [
                         'sparepart_id' => $detail->kode_sparepart,
@@ -1135,7 +1299,8 @@ public function search(Request $request)
                 ]
             ]);
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             DB::rollBack();
             // \Log::error('=== CANCEL SALE ERROR ===');
             // \Log::error('Error type: ' . get_class($e));

@@ -13,6 +13,11 @@ class Pengambilan extends Model
         'tgl_pengambilan',
         'nama_pengambilan',
         'total_bayar',
+        'total_services',
+        'dp',
+        'metode_bayar',
+        'jumlah_cash',
+        'jumlah_transfer',
         'kode_owner',
         'user_input',
         'status_pengambilan',
@@ -20,6 +25,6 @@ class Pengambilan extends Model
     ];
     public function kas()
     {
-        return $this->morphOne(KasPerusahaan::class, 'sourceable');
+        return $this->morphOne(KasPerusahaan::class , 'sourceable');
     }
 }

@@ -17,6 +17,9 @@ class Penjualan extends Model
         'nama_customer',
         'catatan_customer',
         'total_bayar',
+        'metode_bayar',
+        'jumlah_cash',
+        'jumlah_transfer',
         'total_penjualan',
         'user_input',
         'status_penjualan',
@@ -25,15 +28,15 @@ class Penjualan extends Model
     ];
     public function detailBarang()
     {
-        return $this->hasMany(DetailBarangPenjualan::class, 'kode_penjualan', 'id');
+        return $this->hasMany(DetailBarangPenjualan::class , 'kode_penjualan', 'id');
     }
 
     public function detailSparepart()
     {
-        return $this->hasMany(DetailSparepartPenjualan::class, 'kode_penjualan', 'id');
+        return $this->hasMany(DetailSparepartPenjualan::class , 'kode_penjualan', 'id');
     }
     public function kas()
     {
-        return $this->morphOne(KasPerusahaan::class, 'sourceable');
+        return $this->morphOne(KasPerusahaan::class , 'sourceable');
     }
 }
