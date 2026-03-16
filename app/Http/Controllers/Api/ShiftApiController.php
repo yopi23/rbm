@@ -216,6 +216,22 @@ class ShiftApiController extends Controller
             \Illuminate\Support\Facades\Log::error("Failed to send FCM notification for closed shift: " . $e->getMessage());
         }
 
+        $mutasiDetails = $shift->kasPerusahaan()
+            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+            ->orderBy('tanggal', 'asc')
+            ->get()
+            ->map(function ($kas) {
+            return [
+            'id' => $kas->id,
+            'tanggal' => date('Y-m-d H:i:s', strtotime($kas->tanggal)),
+            'deskripsi' => $kas->deskripsi,
+            'debit' => $kas->debit,
+            'kredit' => $kas->kredit,
+            'is_cash' => $kas->is_cash,
+            'type' => class_basename($kas->sourceable_type)
+            ];
+        });
+
         return response()->json([
             'success' => true,
             'message' => 'Shift closed successfully',
@@ -228,7 +244,8 @@ class ShiftApiController extends Controller
                     'expected_cash' => $expectedCash,
                     'actual_cash' => $saldoAkhirAktual,
                     'difference' => $selisih,
-                    'sparepart_analysis' => $sparepartReport
+                    'sparepart_analysis' => $sparepartReport,
+                    'transactions' => $mutasiDetails
                 ]
             ]
         ]);
