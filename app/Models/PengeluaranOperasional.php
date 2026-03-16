@@ -8,6 +8,12 @@ use Illuminate\Database\Eloquent\Model;
 class PengeluaranOperasional extends Model
 {
     use HasFactory;
+
+    protected function serializeDate(\DateTimeInterface $date)
+    {
+        return $date->format('Y-m-d H:i:s');
+    }
+
     protected $fillable = [
         'tgl_pengeluaran',
         'beban_operasional_id',
@@ -31,7 +37,7 @@ class PengeluaranOperasional extends Model
      */
     public function owner()
     {
-        return $this->belongsTo(User::class, 'kode_owner', 'id');
+        return $this->belongsTo(User::class , 'kode_owner', 'id');
     }
 
     /**
@@ -39,7 +45,7 @@ class PengeluaranOperasional extends Model
      */
     public function pegawai()
     {
-        return $this->belongsTo(User::class, 'kode_pegawai', 'id');
+        return $this->belongsTo(User::class , 'kode_pegawai', 'id');
     }
 
     /**
@@ -71,9 +77,9 @@ class PengeluaranOperasional extends Model
      */
     public function scopeSearch($query, $search)
     {
-        return $query->where(function($q) use ($search) {
+        return $query->where(function ($q) use ($search) {
             $q->where('nama_pengeluaran', 'LIKE', "%{$search}%")
-              ->orWhere('desc_pengeluaran', 'LIKE', "%{$search}%");
+                ->orWhere('desc_pengeluaran', 'LIKE', "%{$search}%");
         });
     }
 
@@ -99,7 +105,7 @@ class PengeluaranOperasional extends Model
     }
     public function kas()
     {
-        return $this->morphOne(KasPerusahaan::class, 'sourceable');
+        return $this->morphOne(KasPerusahaan::class , 'sourceable');
     }
 
 }

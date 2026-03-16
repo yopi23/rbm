@@ -9,6 +9,11 @@ class Penarikan extends Model
 {
     use HasFactory;
 
+    protected function serializeDate(\DateTimeInterface $date)
+    {
+        return $date->format('Y-m-d H:i:s');
+    }
+
     protected $table = 'penarikans'; // Sesuai dengan tabel yang sudah ada
 
     protected $fillable = [

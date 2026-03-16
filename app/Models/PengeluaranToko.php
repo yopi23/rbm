@@ -8,6 +8,12 @@ use Illuminate\Database\Eloquent\Model;
 class PengeluaranToko extends Model
 {
     use HasFactory;
+
+    protected function serializeDate(\DateTimeInterface $date)
+    {
+        return $date->format('Y-m-d H:i:s');
+    }
+
     protected $fillable = [
         'tanggal_pengeluaran',
         'nama_pengeluaran',
@@ -18,6 +24,6 @@ class PengeluaranToko extends Model
     ];
     public function kas()
     {
-        return $this->morphOne(KasPerusahaan::class, 'sourceable');
+        return $this->morphOne(KasPerusahaan::class , 'sourceable');
     }
 }

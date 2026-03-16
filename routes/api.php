@@ -55,6 +55,28 @@ Route::middleware('auth:sanctum')->group(function () {
         );
         Route::post('/update-fcm-token', [UserDataController::class , 'updateFcmToken']);
 
+        // Test FCM Notification (untuk debugging)
+        Route::post('/test-fcm', function (Request $request) {
+            $user = $request->user();
+            if (empty($user->fcm_token)) {
+                return response()->json(['success' => false, 'message' => 'User tidak memiliki FCM token. Login ulang dari HP terlebih dahulu.']);
+            }
+
+            $result = \App\Services\FCMService::sendNotification(
+                $user->fcm_token,
+                'Test Notifikasi 🔔',
+                'Ini adalah test notifikasi dari server. Jika Anda melihat ini, notifikasi berfungsi dengan baik!',
+            ['type' => 'test']
+            );
+
+            return response()->json([
+            'success' => $result,
+            'message' => $result ? 'Notifikasi berhasil dikirim!' : 'Gagal mengirim notifikasi. Cek log server.',
+            'fcm_token_preview' => substr($user->fcm_token, 0, 20) . '...',
+            ]);
+        }
+        );
+
         // Untuk mendapatkan daftar tagihan pending
         Route::get('/pending-payments', [App\Http\Controllers\Api\SubscriptionApiController::class , 'getPendingPayments']);
         // Untuk memproses aktivasi via token
@@ -65,6 +87,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/payments/{payment}/cancel', [App\Http\Controllers\Api\SubscriptionApiController::class , 'cancelPayment']);
     // --------------------
     
+
+
+
 
 
 

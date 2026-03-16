@@ -253,6 +253,30 @@ class AttendanceController extends Controller
         ]
         );
 
+        // Kirim notifikasi FCM ke Admin
+        try {
+            $currentUserDetail = UserDetail::where('kode_user', $userId)->first();
+            if ($currentUserDetail) {
+                $adminUser = User::find($currentUserDetail->id_upline);
+                if ($adminUser && !empty($adminUser->fcm_token)) {
+                    $typeLabel = ucfirst($request->type); // izin -> Izin, sakit -> Sakit
+                    FCMService::sendNotification(
+                        $adminUser->fcm_token,
+                        "Pengajuan $typeLabel 📋",
+                        "{$currentUserDetail->fullname} mengajukan $typeLabel pada " . $date->format('d M Y') . ".\nAlasan: {$request->note}",
+                    [
+                        'type' => 'attendance_late',
+                        'user_id' => (string)$userId,
+                        'leave_type' => $request->type,
+                    ]
+                    );
+                }
+            }
+        }
+        catch (\Exception $fcmException) {
+            Log::error("Failed to send FCM notification for leave request: " . $fcmException->getMessage());
+        }
+
         return response()->json([
             'success' => 'sukses',
         ]);
@@ -621,6 +645,25 @@ class AttendanceController extends Controller
                         'status' => 'pending',
                         'created_by' => $userId,
                     ]);
+
+                    // Notifikasi Push (FCM) ke Admin jika terlambat lebih dari 30 menit
+                    try {
+                        $currentUserDetail = UserDetail::where('kode_user', $userId)->first();
+                        if ($currentUserDetail) {
+                            $adminUser = User::find($currentUserDetail->id_upline);
+                            if ($adminUser && !empty($adminUser->fcm_token)) {
+                                FCMService::sendNotification(
+                                    $adminUser->fcm_token,
+                                    'Karyawan Terlambat! ⚠️',
+                                    "{$currentUserDetail->fullname} terlambat absen ($lateMinutes menit) via Face Recognition",
+                                ['type' => 'attendance_late', 'user_id' => (string)$userId]
+                                );
+                            }
+                        }
+                    }
+                    catch (\Exception $fcmException) {
+                        Log::error("Failed to send FCM notification for late face attendance: " . $fcmException->getMessage());
+                    }
                 }
 
                 // Handle Auto Open Shift

@@ -8,6 +8,12 @@ use Illuminate\Database\Eloquent\Model;
 class PemasukkanLain extends Model
 {
     use HasFactory;
+
+    protected function serializeDate(\DateTimeInterface $date)
+    {
+        return $date->format('Y-m-d H:i:s');
+    }
+
     protected $fillable = [
         'tgl_pemasukkan',
         'judul_pemasukan',

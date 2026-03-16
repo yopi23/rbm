@@ -76,13 +76,13 @@ class PemasukkanLainObserver
     protected function catatKas($pemasukkanLain)
     {
         $ownerId = $pemasukkanLain->kode_owner;
-        
+
         // Cek saldo terakhir
         $lastKas = KasPerusahaan::where('kode_owner', $ownerId)
             ->latest('id')
             ->first();
         $saldoTerakhir = $lastKas ? $lastKas->saldo : 0;
-        
+
         $debit = $pemasukkanLain->jumlah_pemasukkan;
         $saldoBaru = $saldoTerakhir + $debit;
 
@@ -95,16 +95,25 @@ class PemasukkanLainObserver
             }
         }
 
+        $tanggalKas = $pemasukkanLain->created_at ?? now();
+        if (!empty($pemasukkanLain->tgl_pemasukkan)) {
+            $parsedDate = \Carbon\Carbon::parse($pemasukkanLain->tgl_pemasukkan);
+            if (!$parsedDate->isToday()) {
+                $tanggalKas = $parsedDate->format('Y-m-d') . ' ' . $tanggalKas->format('H:i:s');
+            }
+        }
+
         KasPerusahaan::create([
-            'kode_owner'      => $ownerId,
-            'tanggal'         => $pemasukkanLain->tgl_pemasukkan ?? now(),
-            'deskripsi'       => $pemasukkanLain->judul_pemasukan . ($pemasukkanLain->catatan_pemasukkan ? ' - ' . $pemasukkanLain->catatan_pemasukkan : ''),
-            'debit'           => $debit,
-            'kredit'          => 0,
-            'saldo'           => $saldoBaru,
-            'shift_id'        => $shiftId,
-            'sourceable_id'   => $pemasukkanLain->id,
-            'sourceable_type' => PemasukkanLain::class,
+            'kode_owner' => $ownerId,
+            'tanggal' => $tanggalKas,
+            'deskripsi' => $pemasukkanLain->judul_pemasukan . ($pemasukkanLain->catatan_pemasukkan ? ' - ' . $pemasukkanLain->catatan_pemasukkan : ''),
+            'debit' => $debit,
+            'kredit' => 0,
+            'saldo' => $saldoBaru,
+            'is_cash' => $pemasukkanLain->metode_bayar === 'cash',
+            'shift_id' => $shiftId,
+            'sourceable_id' => $pemasukkanLain->id,
+            'sourceable_type' => PemasukkanLain::class ,
         ]);
     }
 }

@@ -1053,14 +1053,7 @@ class SalesApiController extends Controller
                         'shift_id' => $shiftId,
                     ]);
 
-                    $this->catatKas(
-                        $cashRecord,
-                        $jumlahCash,
-                        0,
-                        'Pemasukkan Lain: ' . $cashRecord->judul_pemasukan,
-                        now(),
-                        true // is_cash
-                    );
+                    // Ditangani oleh PemasukkanLainObserver untuk menghindari log ganda
 
                     if ($request->id_kategorilaci) {
                         $keterangan = $cashRecord->judul_pemasukan . "-" . $request->catatan_pemasukan . " [Cash]";
@@ -1082,14 +1075,7 @@ class SalesApiController extends Controller
                         'shift_id' => $shiftId,
                     ]);
 
-                    $this->catatKas(
-                        $tfRecord,
-                        $jumlahTransfer,
-                        0,
-                        'Pemasukkan Lain: ' . $tfRecord->judul_pemasukan,
-                        now(),
-                        false // is_cash
-                    );
+                    // Ditangani oleh PemasukkanLainObserver untuk menghindari log ganda
                     $createdRecords[] = $tfRecord;
                 }
             }
@@ -1106,14 +1092,7 @@ class SalesApiController extends Controller
                     'shift_id' => $shiftId,
                 ]);
 
-                $this->catatKas(
-                    $create,
-                    $create->jumlah_pemasukkan,
-                    0,
-                    'Pemasukkan Lain: ' . $create->judul_pemasukan,
-                    now(),
-                    $metodeBayar === 'cash' // is_cash
-                );
+                // Ditangani oleh PemasukkanLainObserver untuk menghindari log ganda
 
                 if ($metodeBayar === 'cash' && $request->id_kategorilaci) {
                     $keterangan = $request->judul_pemasukan . "-" . $request->catatan_pemasukkan . " [$metodeBayar]";
