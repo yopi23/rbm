@@ -72,17 +72,17 @@ class ServiceController extends Controller
             ->orderBy('sevices.id', 'desc')
             ->latest()
             ->get([
-                'sevices.id as id_service',
-                'sevices.*',
-                'users.name as nama_teknisi',
-                'detail_part_services.detail_harga_part_service',
-                'detail_part_services.qty_part as qty_part_toko',
-                'detail_part_luar_services.qty_part as qty_part_luar',
-                'detail_part_luar_services.created_at as dpl_created_at',
-                'detail_part_luar_services.harga_part'
-            ]);
+            'sevices.id as id_service',
+            'sevices.*',
+            'users.name as nama_teknisi',
+            'detail_part_services.detail_harga_part_service',
+            'detail_part_services.qty_part as qty_part_toko',
+            'detail_part_luar_services.qty_part as qty_part_luar',
+            'detail_part_luar_services.created_at as dpl_created_at',
+            'detail_part_luar_services.harga_part'
+        ]);
         foreach ($data_service as $item) {
-            $teknisi = $item->id_teknisi != null || $item->id_teknisi != '' ? User::where([['id', '=', $item->id_teknisi]])->get(['name'])->first()->name : '-';
+            $teknisi = $item->id_teknisi != null || $item->id_teknisi != '' ?User::where([['id', '=', $item->id_teknisi]])->get(['name'])->first()->name : '-';
             $qr = DNS1DFacade::getBarcodeHTML($item->kode_service, "C39", 1, 100);
             $tbody .= '<tr>
                         <td>' . $no++ . '</td>
@@ -92,7 +92,7 @@ class ServiceController extends Controller
                         <td>' . $item->type_unit . '</td>
                         <td>' . $item->keterangan . '</td>
                         <td>Rp.' . number_format($item->total_biaya) . ',-</td>
-                        <td>Rp.' . number_format(($item->detail_harga_part_service * $item->qty_part_toko) + ($item->harga_part * $item->qty_part_luar))  . ',-</td>
+                        <td>Rp.' . number_format(($item->detail_harga_part_service * $item->qty_part_toko) + ($item->harga_part * $item->qty_part_luar)) . ',-</td>
                         <td>' . $item->status_services . '</td>
                         <td>' . $item->updated_at . '</td>
                         <td>
@@ -151,7 +151,7 @@ class ServiceController extends Controller
             //     return redirect()->route('job');
             // } else {
             return redirect()->route('todolist')->with('success', 'Update Data Service Berhasil');
-            // }
+        // }
         }
     }
     public function update_service(Request $request, $id)
@@ -314,7 +314,7 @@ class ServiceController extends Controller
             ]);
             if ($update) {
                 $update_sparepart = Sparepart::findOrFail($update->kode_sparepart);
-                
+
                 // Logic Existing:
                 // $stok_awal_logic = $update_sparepart->stok_sparepart + $cek->qty_part; // Logic lama untuk restore stock virtual
                 // $stok_baru = $stok_awal_logic - $qty_baru;
@@ -322,7 +322,7 @@ class ServiceController extends Controller
                 // Simplified Logic:
                 // We are adding $request->qty_part to the usage.
                 // So we deduct $request->qty_part from current stock.
-                
+
                 // Use model method to handle stock update (sparepart + variant) and logging
                 // This handles the "Update" case where Observer is not triggered
                 $update_sparepart->logStockChange(
@@ -335,7 +335,8 @@ class ServiceController extends Controller
 
                 return redirect()->back();
             }
-        } else {
+        }
+        else {
             $update_sparepart = Sparepart::findOrFail($request->kode_sparepart);
             $create = DetailPartServices::create([
                 'kode_services' => $request->kode_services,
@@ -363,7 +364,7 @@ class ServiceController extends Controller
         $data = DetailPartServices::findOrFail($id);
         if ($data) {
             $update_sparepart = Sparepart::findOrFail($data->kode_sparepart);
-            
+
             // Use model method to handle stock update (sparepart + variant) and logging
             // Positive value to restore stock
             $update_sparepart->logStockChange(
@@ -470,41 +471,41 @@ class ServiceController extends Controller
             ->leftJoin(DB::raw('(SELECT kode_services, SUM(qty_part * detail_harga_part_service) AS part_toko FROM detail_part_services GROUP BY kode_services) AS part_toko'), 'sevices.id', '=', 'part_toko.kode_services')
             ->leftjoin('users', 'sevices.id_teknisi', '=', 'users.id')
             ->select([
-                'sevices.id as id_service',
-                'sevices.kode_service',
-                'sevices.tgl_service',
-                'sevices.nama_pelanggan',
-                'sevices.no_telp',
-                'sevices.type_unit',
-                'sevices.keterangan',
-                'sevices.total_biaya',
-                'sevices.dp',
-                'sevices.id_teknisi',
-                'sevices.kode_pengambilan',
-                'sevices.status_services',
-                'sevices.kode_owner',
-                DB::raw('COALESCE(SUM(part_luar_services.part_luar), 0) + COALESCE(SUM(part_toko.part_toko), 0) AS total_harga_part'),
-                'users.id as user_id', // Adjust this line according to your needs
-                'users.name'
-            ])
+            'sevices.id as id_service',
+            'sevices.kode_service',
+            'sevices.tgl_service',
+            'sevices.nama_pelanggan',
+            'sevices.no_telp',
+            'sevices.type_unit',
+            'sevices.keterangan',
+            'sevices.total_biaya',
+            'sevices.dp',
+            'sevices.id_teknisi',
+            'sevices.kode_pengambilan',
+            'sevices.status_services',
+            'sevices.kode_owner',
+            DB::raw('COALESCE(SUM(part_luar_services.part_luar), 0) + COALESCE(SUM(part_toko.part_toko), 0) AS total_harga_part'),
+            'users.id as user_id', // Adjust this line according to your needs
+            'users.name'
+        ])
             ->where([['status_services', '=', 'Diproses']])
             ->groupBy(
-                'sevices.id',
-                'sevices.kode_service',
-                'sevices.tgl_service',
-                'sevices.nama_pelanggan',
-                'sevices.no_telp',
-                'sevices.type_unit',
-                'sevices.keterangan',
-                'sevices.total_biaya',
-                'sevices.dp',
-                'sevices.id_teknisi',
-                'sevices.kode_pengambilan',
-                'sevices.status_services',
-                'sevices.kode_owner',
-                'users.id',
-                'users.name',
-            )
+            'sevices.id',
+            'sevices.kode_service',
+            'sevices.tgl_service',
+            'sevices.nama_pelanggan',
+            'sevices.no_telp',
+            'sevices.type_unit',
+            'sevices.keterangan',
+            'sevices.total_biaya',
+            'sevices.dp',
+            'sevices.id_teknisi',
+            'sevices.kode_pengambilan',
+            'sevices.status_services',
+            'sevices.kode_owner',
+            'users.id',
+            'users.name',
+        )
             ->get();
         $selesai = modelServices::join('users', 'sevices.id_teknisi', '=', 'users.id')->where([['status_services', '=', 'Selesai']])->get(['sevices.id as id_service', 'sevices.*', 'users.*']);
         $batal = modelServices::join('users', 'sevices.id_teknisi', '=', 'users.id')->where([['status_services', '=', 'Cancel']])->get(['sevices.id as id_service', 'sevices.*', 'users.*']);
@@ -531,7 +532,8 @@ class ServiceController extends Controller
         // Menggunakan ID teknisi dari request hanya jika status yang dikirim adalah 'Diproses'
         if ($request->status_services == 'Diproses') {
             $id_teknisi = $request->teknisi; // Mengambil ID teknisi dari request
-        } else {
+        }
+        else {
             $id_teknisi = $update->id_teknisi; // Gunakan ID teknisi yang sudah ada
         }
         $update->update([
@@ -563,6 +565,40 @@ class ServiceController extends Controller
             }
 
             if ($request->status_services == 'Cancel') {
+                // Refund DP ke kas jika ada
+                $dpAmount = $update->dp ?? 0;
+                if ($dpAmount > 0) {
+                    $dpCash = $update->dp_cash ?? $dpAmount;
+                    $dpTransfer = $update->dp_transfer ?? 0;
+
+                    // Jika tidak ada kolom dp_cash/dp_transfer, anggap semua DP adalah cash
+                    if ($dpCash == 0 && $dpTransfer == 0) {
+                        $dpCash = $dpAmount;
+                    }
+
+                    if ($dpCash > 0) {
+                        $this->catatKas(
+                            $update,
+                            0, // Debit = 0
+                            $dpCash, // Kredit = refund
+                            'Refund DP Service Cancel (Cash) #' . $update->kode_service . ' - ' . $update->nama_pelanggan,
+                            now(),
+                            true // isCash
+                        );
+                    }
+                    if ($dpTransfer > 0) {
+                        $this->catatKas(
+                            $update,
+                            0,
+                            $dpTransfer,
+                            'Refund DP Service Cancel (Transfer) #' . $update->kode_service . ' - ' . $update->nama_pelanggan,
+                            now(),
+                            false
+                        );
+                    }
+                }
+
+                // Restore stock sparepart
                 $data = DetailPartServices::where([['kode_services', '=', $id]])->get();
                 foreach ($data as $i) {
                     $update_sparepart = Sparepart::findOrFail($i->kode_sparepart);
@@ -601,16 +637,16 @@ class ServiceController extends Controller
                 }
                 // **Menambahkan total part ke kolom `part` di tabel `sevices`**
                 $update->update([
-                    'harga_sp' => $total_part  // Menambahkan total_part ke kolom 'part'
+                    'harga_sp' => $total_part // Menambahkan total_part ke kolom 'part'
                 ]);
 
-                if ($presentase->compensation_type =='percentage') {
+                if ($presentase->compensation_type == 'percentage') {
 
                     $profit = $update->total_biaya - $total_part;
-                    $fix_profit =  $profit * $presentase->percentage_value / 100;
+                    $fix_profit = $profit * $presentase->percentage_value / 100;
 
                     //
-                    $pegawais = UserDetail::where([['kode_user', '=', $id_teknisi,]])->get()->first();
+                    $pegawais = UserDetail::where([['kode_user', '=', $id_teknisi, ]])->get()->first();
 
 
                     $komisi = ProfitPresentase::create([
@@ -641,7 +677,8 @@ class ServiceController extends Controller
                     // Validasi nomor telepon terlebih dahulu
                     if (!$whatsAppService->isValidPhoneNumber($update->no_telp)) {
                         $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak valid';
-                    } else {
+                    }
+                    else {
                         try {
                             // Kirim notifikasi
                             $waResult = $whatsAppService->sendServiceCompletionNotification([
@@ -652,10 +689,12 @@ class ServiceController extends Controller
 
                             if ($waResult['status']) {
                                 $whatsappStatus = 'Pesan WhatsApp berhasil dikirim';
-                            } else {
+                            }
+                            else {
                                 $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
                             }
-                        } catch (\Exception $waException) {
+                        }
+                        catch (\Exception $waException) {
                             // Log error tapi jangan batalkan transaksi utama
                             \Log::error("Failed to send WhatsApp notification: " . $waException->getMessage(), [
                                 'service_id' => $id,
@@ -666,7 +705,7 @@ class ServiceController extends Controller
                         }
                     }
                 }
-                // }
+            // }
             }
             return redirect()->route('todolist');
         }
@@ -735,7 +774,8 @@ class ServiceController extends Controller
             DB::commit();
 
             return redirect()->back()->with('success', 'Komisi berhasil dipindahkan');
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             // Rollback transaksi jika terjadi kesalahan
             DB::rollback();
 
@@ -753,50 +793,50 @@ class ServiceController extends Controller
             ->leftJoin(DB::raw('(SELECT kode_services, SUM(qty_part * detail_harga_part_service) AS part_toko FROM detail_part_services GROUP BY kode_services) AS part_toko'), 'sevices.id', '=', 'part_toko.kode_services')
             ->leftjoin('users', 'sevices.id_teknisi', '=', 'users.id')
             ->select([
-                'sevices.id as id_service',
-                'sevices.kode_service',
-                'sevices.tgl_service',
-                'sevices.updated_at',
-                'sevices.nama_pelanggan',
-                'sevices.no_telp',
-                'sevices.type_unit',
-                'sevices.keterangan',
-                'sevices.total_biaya',
-                'sevices.dp',
-                'sevices.id_teknisi',
-                'sevices.kode_pengambilan',
-                'sevices.status_services',
-                'sevices.kode_owner',
-                DB::raw('COALESCE(SUM(part_luar_services.part_luar), 0) + COALESCE(SUM(part_toko.part_toko), 0) AS total_harga_part'),
-                'users.id as teknisi_id',
-                'users.name as teknisi_name'
-            ])
+            'sevices.id as id_service',
+            'sevices.kode_service',
+            'sevices.tgl_service',
+            'sevices.updated_at',
+            'sevices.nama_pelanggan',
+            'sevices.no_telp',
+            'sevices.type_unit',
+            'sevices.keterangan',
+            'sevices.total_biaya',
+            'sevices.dp',
+            'sevices.id_teknisi',
+            'sevices.kode_pengambilan',
+            'sevices.status_services',
+            'sevices.kode_owner',
+            DB::raw('COALESCE(SUM(part_luar_services.part_luar), 0) + COALESCE(SUM(part_toko.part_toko), 0) AS total_harga_part'),
+            'users.id as teknisi_id',
+            'users.name as teknisi_name'
+        ])
             ->where([
-                ['kode_owner', '=', $this->getThisUser()->id_upline],
-                ['sevices.status_services', '=', 'Antri'],
-            ])
+            ['kode_owner', '=', $this->getThisUser()->id_upline],
+            ['sevices.status_services', '=', 'Antri'],
+        ])
             ->orwhere([
-                ['kode_owner', '=', $this->getThisUser()->id_upline],
-                ['sevices.status_services', '=', 'Diproses'],
-            ])
+            ['kode_owner', '=', $this->getThisUser()->id_upline],
+            ['sevices.status_services', '=', 'Diproses'],
+        ])
             ->groupBy(
-                'sevices.id',
-                'sevices.kode_service',
-                'sevices.tgl_service',
-                'sevices.updated_at',
-                'sevices.nama_pelanggan',
-                'sevices.no_telp',
-                'sevices.type_unit',
-                'sevices.keterangan',
-                'sevices.total_biaya',
-                'sevices.dp',
-                'sevices.id_teknisi',
-                'sevices.kode_pengambilan',
-                'sevices.status_services',
-                'sevices.kode_owner',
-                'users.id',
-                'users.name',
-            )
+            'sevices.id',
+            'sevices.kode_service',
+            'sevices.tgl_service',
+            'sevices.updated_at',
+            'sevices.nama_pelanggan',
+            'sevices.no_telp',
+            'sevices.type_unit',
+            'sevices.keterangan',
+            'sevices.total_biaya',
+            'sevices.dp',
+            'sevices.id_teknisi',
+            'sevices.kode_pengambilan',
+            'sevices.status_services',
+            'sevices.kode_owner',
+            'users.id',
+            'users.name',
+        )
             ->get();
         // Ambil data selesai hari ini
         $data_selesai_hari_ini = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
@@ -848,10 +888,10 @@ class ServiceController extends Controller
             $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
                 ->where('kode_services', $service_id['id_service'])
                 ->get([
-                    'detail_part_services.detail_harga_part_service as harga_modal',
-                    'detail_part_services.qty_part',
-                    // 'spareparts.harga_jual'
-                ]);
+                'detail_part_services.detail_harga_part_service as harga_modal',
+                'detail_part_services.qty_part',
+                // 'spareparts.harga_jual'
+            ]);
 
             $part_luar_toko_service = DetailPartLuarService::where('kode_services', $service_id['id_service'])->get();
 
@@ -866,10 +906,10 @@ class ServiceController extends Controller
             $presentase = PresentaseUser::where('kode_user', $id_teknisi)->first();
             if ($presentase) {
                 $profit = $service->total_biaya - $total_part;
-                $fix_profit =  $profit * $presentase->presentase / 100;
+                $fix_profit = $profit * $presentase->presentase / 100;
 
                 $service->update([
-                    'harga_sp' => $total_part  // Menambahkan total_part ke kolom 'part'
+                    'harga_sp' => $total_part // Menambahkan total_part ke kolom 'part'
                 ]);
 
                 // Periksa apakah data komisi sudah ada
@@ -880,7 +920,7 @@ class ServiceController extends Controller
                     ->first();
 
                 if (!$existingProfit) {
-                    $user_detail = UserDetail::where('kode_user',  $id_teknisi)->first();
+                    $user_detail = UserDetail::where('kode_user', $id_teknisi)->first();
 
                     // Simpan data komisi ke tabel profit_presentases
                     ProfitPresentase::create([
@@ -897,7 +937,8 @@ class ServiceController extends Controller
 
                     $user_detail->saldo += $fix_profit;
                     $user_detail->save();
-                } else {
+                }
+                else {
                     // Jika data sudah ada, mungkin lakukan logging atau berikan feedback
                     Log::info('Data komisi sudah ada untuk user ' . $id_teknisi . ' pada tanggal ' . date('Y-m-d'));
                 }

@@ -75,15 +75,9 @@ class PengambilanController extends Controller
             $total_bayar = $total_services - $dp_amount;
 
             // Pastikan total bayar tidak negatif
+            // Jika DP >= total, artinya sudah lunas, set ke 0
             if ($total_bayar < 0) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'DP tidak boleh lebih besar dari total harga services',
-                    'data' => [
-                        'total_services' => $total_services,
-                        'dp' => $dp_amount
-                    ]
-                ], 422);
+                $total_bayar = 0;
             }
 
             // Generate kode pengambilan
@@ -143,16 +137,29 @@ class PengambilanController extends Controller
                 $keterangan .= ' (Total: ' . number_format($total_services) . ', DP: ' . number_format($dp_amount) . ')';
             }
 
-            if ($bayarCash > 0 && $request->has('id_kategorilaci')) {
-                $this->recordLaciHistory(
-                    $request->id_kategorilaci,
-                    $bayarCash, // yang masuk ke laci adalah setelah dipotong DP
-                    null,
-                    $keterangan . ' [Cash]',
-                    'Pengambilan',
-                    $pengambilan->id,
-                    $kode_pengambilan
+            if ($bayarCash > 0) {
+                // Catat ke kas_perusahaan agar muncul di perhitungan shift
+                $this->catatKas(
+                    $pengambilan,
+                    $bayarCash,
+                    0,
+                    'Pelunasan Service API (Cash) #' . $pengambilan->kode_pengambilan,
+                    now(),
+                    true // isCash = true
                 );
+
+                // Juga catat ke laci
+                if ($request->has('id_kategorilaci')) {
+                    $this->recordLaciHistory(
+                        $request->id_kategorilaci,
+                        $bayarCash,
+                        null,
+                        $keterangan . ' [Cash]',
+                        'Pengambilan',
+                        $pengambilan->id,
+                        $kode_pengambilan
+                    );
+                }
             }
 
             if ($bayarTransfer > 0) {

@@ -66,7 +66,7 @@ class Sevices extends Model
     }
     public function kas()
     {
-        return $this->morphOne(KasPerusahaan::class , 'sourceable');
+        return $this->morphMany(KasPerusahaan::class , 'sourceable');
     }
     public function originalService()
     {

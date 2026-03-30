@@ -73,7 +73,7 @@ trait ManajemenKasTrait
             ];
 
             // Simpan entri kas dan tautkan ke model sumbernya via relasi polimorfik.
-            // $sumberModel->kas() adalah referensi ke relasi morphOne yang sudah Anda buat.
+            // $sumberModel->kas() adalah referensi ke relasi morphMany pada model sumber.
             $sumberModel->kas()->create($dataKas);
         });
     }

@@ -37,6 +37,6 @@ class Penjualan extends Model
     }
     public function kas()
     {
-        return $this->morphOne(KasPerusahaan::class , 'sourceable');
+        return $this->morphMany(KasPerusahaan::class , 'sourceable');
     }
 }

@@ -810,12 +810,14 @@ class SalesApiController extends Controller
                     true // isCash = true
                 );
 
-                $this->recordLaciHistory(
-                    $request->kategori_laci_id,
-                    $bayarCash, // Uang masuk (Hanya Cash ke Laci)
-                    null, // Tidak ada uang keluar
-                    'Penjualan: ' . $sale->kode_penjualan . '- customer: ' . ($request->nama_customer ?? '-') . ' [Cash]'
-                );
+                if ($request->kategori_laci_id) {
+                    $this->recordLaciHistory(
+                        $request->kategori_laci_id,
+                        $bayarCash, // Uang masuk (Hanya Cash ke Laci)
+                        null, // Tidak ada uang keluar
+                        'Penjualan: ' . $sale->kode_penjualan . '- customer: ' . ($request->nama_customer ?? '-') . ' [Cash]'
+                    );
+                }
             }
 
             if ($bayarTransfer > 0) {
@@ -882,13 +884,14 @@ class SalesApiController extends Controller
             $metodeBayar = 'transfer';
         }
 
-        // Update status menjadi lunas (1)
+        // Update status menjadi lunas (1) dan link ke shift aktif saat ini
         $sale->update([
             'status_penjualan' => '1',
             'total_bayar' => $sale->total_penjualan, // Update total bayar
             'metode_bayar' => $metodeBayar,
             'jumlah_cash' => $bayarCash,
             'jumlah_transfer' => $bayarTransfer,
+            'shift_id' => $activeShift->id, // Update ke shift aktif saat pelunasan
             'updated_at' => now(),
         ]);
 
@@ -903,12 +906,14 @@ class SalesApiController extends Controller
             );
 
             // Catat ke laci jika dibutuhkan (Hanya Cash)
-            $this->recordLaciHistory(
-                $request->kategori_laci_id,
-                $bayarCash, // Uang masuk
-                null,
-                'Pelunasan: ' . $sale->kode_penjualan . ' - Customer: ' . ($sale->nama_customer ?? '-') . ' [Cash]'
-            );
+            if ($request->kategori_laci_id) {
+                $this->recordLaciHistory(
+                    $request->kategori_laci_id,
+                    $bayarCash, // Uang masuk
+                    null,
+                    'Pelunasan: ' . $sale->kode_penjualan . ' - Customer: ' . ($sale->nama_customer ?? '-') . ' [Cash]'
+                );
+            }
         }
 
         if ($bayarTransfer > 0) {
