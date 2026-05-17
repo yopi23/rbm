@@ -57,7 +57,7 @@ class SubscriptionApiController extends Controller
         }
 
         $qrisString = $qrisService->generate($payment->unique_amount, $payment->reference_code);
-        $options = new QROptions(['outputType' => QRCode::OUTPUT_MARKUP_SVG, 'eccLevel' => QRCode::ECC_L]);
+        $options = new QROptions(['outputInterface' => \chillerlan\QRCode\Output\QRMarkupSVG::class , 'eccLevel' => \chillerlan\QRCode\Common\EccLevel::L]);
         $qrCodeImage = (new QRCode($options))->render($qrisString);
 
         return response()->json(['payment' => $payment->load('subscriptionPlan'), 'qr_code_image' => $qrCodeImage]);
@@ -76,7 +76,8 @@ class SubscriptionApiController extends Controller
 
             return response()->json(['message' => 'Langganan berhasil diaktifkan.']);
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             // Tangkap error jika token tidak valid dari service
             return response()->json(['message' => $e->getMessage()], 404);
         }

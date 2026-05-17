@@ -17,7 +17,11 @@ use App\Http\Controllers\Admin\HpController; // Assuming for legacy /hp
 use App\Http\Controllers\Api\HpApiController;
 use App\Http\Controllers\Api\CommissionController;
 use App\Http\Controllers\Api\FinancialReportApiController;
-use App\Http\Controllers\Api\PengeluaranApiController;
+use App\Http\Controllers\Api\LaciApiController;
+use App\Http\Controllers\Api\ProfitDistributionApiController;
+use App\Http\Controllers\Api\DeviceMonitoringApiController;
+use App\Http\Controllers\Api\PengeluaranTokoApiController;
+use App\Http\Controllers\Api\PengeluaranOpexApiController;
 use App\Http\Controllers\Api\WebhookController;
 use App\Http\Controllers\Api\TokoSettingController;
 use App\Http\Controllers\Api\ProductSearchApiController;
@@ -94,6 +98,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
 
+
+
+
+
+
+
     
 });
 
@@ -118,6 +128,7 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::post('qris-setting', [TokoSettingController::class , 'updateQrisSetting']);
 
     Route::get('/customers/search', [CustomerController::class , 'search']);
+    Route::get('/customers/check-phone', [CustomerController::class , 'checkPhone']);
     Route::get('/product/search', [ProductSearchApiController::class , 'search']);
 
     //pembeliaan
@@ -161,22 +172,29 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::get('/employee-withdrawal-history', [UserDataController::class , 'employeeWithdrawalHistory']);
 
 
-    // TAMBAHAN: Route untuk breakdown laci
-    Route::get('/laci-breakdown', [FinancialReportApiController::class , 'getLaciBreakdown']);
-    // TAMBAHAN: Route untuk detail history laci tertentu
-    Route::get('/laci-history/{laciId}', [FinancialReportApiController::class , 'getLaciHistory']);
-    // TAMBAHAN: Route untuk export breakdown laci
-    Route::get('/laci-breakdown/export', [FinancialReportApiController::class , 'exportLaciBreakdown']);
+    // ═══════════════════════════════════════════════════════════════
+    // OPERASIONAL TOKO: Laci (Cash Drawer)
+    // Controller: LaciApiController (dipindah dari FinancialReportApiController)
+    // ═══════════════════════════════════════════════════════════════
+    Route::get('/laci-breakdown', [LaciApiController::class , 'getLaciBreakdown']);
+    Route::get('/laci-history/{laciId}', [LaciApiController::class , 'getLaciHistory']);
+    Route::get('/laci-breakdown/export', [LaciApiController::class , 'exportLaciBreakdown']);
 
-    // Financial & Reports (existing, tetap sama)
-    Route::get('/accumulated-funds', [AccumulatedFundsApiController::class , 'index']); // Financial & Reports (existing, tetap sama)
-    Route::get('/accumulated-funds', [AccumulatedFundsApiController::class , 'index']); // New Accumulated Funds
+    // ═══════════════════════════════════════════════════════════════
+    // KEUANGAN PERUSAHAAN: Laporan Keuangan
+    // Controller: FinancialReportApiController (tetap)
+    // ═══════════════════════════════════════════════════════════════
+    Route::get('/accumulated-funds', [AccumulatedFundsApiController::class , 'index']);
     Route::get('/financial-report', [FinancialReportApiController::class , 'getFinancialReport']);
-    Route::get('/profit-allocation/preview', [FinancialReportApiController::class , 'getProfitAllocationPreview']);
-    Route::post('/profit-allocation/distribute', [FinancialReportApiController::class , 'processProfitDistribution']);
 
-    Route::get('/allocation/balances', [FinancialReportApiController::class , 'getAllocationBalances']);
-    Route::post('/allocation/withdraw', [FinancialReportApiController::class , 'processAllocationWithdrawal']);
+    // ═══════════════════════════════════════════════════════════════
+    // KEUANGAN PERUSAHAAN: Distribusi & Alokasi Laba
+    // Controller: ProfitDistributionApiController (dipindah dari FinancialReportApiController)
+    // ═══════════════════════════════════════════════════════════════
+    Route::get('/profit-allocation/preview', [ProfitDistributionApiController::class , 'getProfitAllocationPreview']);
+    Route::post('/profit-allocation/distribute', [ProfitDistributionApiController::class , 'processProfitDistribution']);
+    Route::get('/allocation/balances', [ProfitDistributionApiController::class , 'getAllocationBalances']);
+    Route::post('/allocation/withdraw', [ProfitDistributionApiController::class , 'processAllocationWithdrawal']);
 
     // Admin/Employee Attendance & Payroll related
     Route::post('/attendance/scan', [AttendanceController::class , 'scanQrCode']); // Assuming attendance controller in Api folder
@@ -243,16 +261,22 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
         // Sparepart Management (General / Initial Service)
         Route::get('/sparepart-toko/search', [SparepartApiController::class , 'searchSparepartToko']); // Search for store parts (generic)
         Route::post('/sparepart-toko', [SparepartApiController::class , 'storeSparepartToko']); // Add store part (generic, no commission recalculation here)
+        Route::post('/sparepart/service/toko', [SparepartApiController::class , 'storeSparepartToko']); // Backward compatibility for Flutter app
         Route::delete('/sparepart-toko/{detailPartId}', [SparepartApiController::class , 'deletePartTokoFromService']); // Delete store part (generic, no commission recalculation here)
+        Route::delete('/sparepart/service/toko/{detailPartId}', [SparepartApiController::class , 'deletePartTokoFromService']); // Backward compatibility for Flutter app
     
         // **ROUTE SPAREPART LUAR GENERIC - DARI FILE LAMA**
         Route::post('/sparepart-luar', [SparepartApiController::class , 'storeSparepartLuar']); // GENERIC untuk service belum selesai
+        Route::post('/sparepart/service/luar', [SparepartApiController::class , 'storeSparepartLuar']); // Backward compat for Flutter
         Route::put('/sparepart-luar/{id}', [SparepartApiController::class , 'updateSparepartLuar']); // GENERIC untuk service belum selesai
+        Route::put('/sparepart/service/luar/{id}', [SparepartApiController::class , 'updateSparepartLuar']); // Backward compat for Flutter
         Route::delete('/sparepart-luar/{id}', [SparepartApiController::class , 'deleteSparepartLuar']); // GENERIC untuk service belum selesai
+        Route::delete('/sparepart/service/luar/{id}', [SparepartApiController::class , 'deleteSparepartLuar']); // Backward compat for Flutter
     
         // Sparepart Management (Specifically for COMPLETED Services - with Commission Recalculation)
         Route::post('/completed-services/sparepart-toko', [SparepartApiController::class , 'addPartTokoToCompletedService']); // Renamed route, now explicit
         Route::put('/completed-services/sparepart-toko/{detailPartId}', [SparepartApiController::class , 'updatePartTokoQuantityForCompletedService']); // New route for updating qty
+        Route::put('/sparepart/completed/toko/{detailPartId}', [SparepartApiController::class , 'updatePartTokoQuantityForCompletedService']); // Backwards compat for Flutter
         Route::delete('/completed-services/sparepart-toko/{detailPartId}', [SparepartApiController::class , 'deletePartTokoFromCompletedService']); // Renamed route, now explicit
     
         Route::post('/completed-services/sparepart-luar', [SparepartApiController::class , 'addPartLuarToCompletedService']); // Renamed route, now explicit
@@ -284,6 +308,9 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
         Route::put('/sales/{id}/update', [SalesApiController::class , 'updateSale']);
         Route::delete('/sales/{id}/delete', [SalesApiController::class , 'deleteSale']);
         Route::put('/sales/{id}/cancel', [SalesApiController::class , 'cancelSale']);
+        Route::post('/sales/{id}/refund', [SalesApiController::class , 'refundSale']);
+        Route::put('/sales/{id}/edit-items', [SalesApiController::class , 'updateSaleItems']);
+
 
         // **ROUTE SUPPLIERS DARI FILE LAMA - JANGAN DIHAPUS**
         Route::get('/suppliers', [OrderApiController::class , 'getSuppliers']); // ROUTE SUPPLIERS LANGSUNG
@@ -328,23 +355,27 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
         Route::get('/shift/detail/{id}', [ShiftApiController::class , 'show']);
 
         // Financial & Reports
-        Route::get('/pengeluaran-kategori', [PengeluaranApiController::class , 'getKategoriPengeluaran']);
+        // Route::get('/pengeluaran-kategori', [PengeluaranApiController::class , 'getKategoriPengeluaran']); // Skipped, legacy unused logic
+    
+        Route::get('pengeluaran-toko', [PengeluaranTokoApiController::class , 'getPengeluaranToko'])->name('api.pengeluaran-toko.index');
+        Route::post('pengeluaran-toko', [PengeluaranTokoApiController::class , 'storePengeluaranToko'])->name('api.pengeluaran-toko.store');
+        Route::get('pengeluaran-toko/{id}', [PengeluaranTokoApiController::class , 'showPengeluaranToko'])->name('api.pengeluaran-toko.show');
+        Route::put('pengeluaran-toko/{id}', [PengeluaranTokoApiController::class , 'updatePengeluaranToko'])->name('api.pengeluaran-toko.update');
+        Route::delete('pengeluaran-toko/{id}', [PengeluaranTokoApiController::class , 'deletePengeluaranToko'])->name('api.pengeluaran-toko.delete');
 
-        Route::get('pengeluaran-toko', [PengeluaranApiController::class , 'getPengeluaranToko'])->name('api.pengeluaran-toko.index');
-        Route::post('pengeluaran-toko', [PengeluaranApiController::class , 'storePengeluaranToko'])->name('api.pengeluaran-toko.store');
-        Route::get('pengeluaran-toko/{id}', [PengeluaranApiController::class , 'showPengeluaranToko'])->name('api.pengeluaran-toko.show');
-        Route::put('pengeluaran-toko/{id}', [PengeluaranApiController::class , 'updatePengeluaranToko'])->name('api.pengeluaran-toko.update');
-        Route::delete('pengeluaran-toko/{id}', [PengeluaranApiController::class , 'deletePengeluaranToko'])->name('api.pengeluaran-toko.delete');
-        Route::get('pengeluaran-operasional', [PengeluaranApiController::class , 'getPengeluaranOperasional'])->name('api.pengeluaran-operasional.index');
-        Route::get('beban-operasional-list', [PengeluaranApiController::class , 'getBebanOperasionalList']);
+        Route::get('pengeluaran-operasional', [PengeluaranOpexApiController::class , 'getPengeluaranOperasional'])->name('api.pengeluaran-operasional.index');
+        Route::get('beban-operasional-list', [PengeluaranOpexApiController::class , 'getBebanOperasionalList']);
 
-        Route::post('pengeluaran-operasional', [PengeluaranApiController::class , 'storePengeluaranOperasional'])->name('api.pengeluaran-operasional.store');
-        Route::get('pengeluaran-operasional/{id}', [PengeluaranApiController::class , 'showPengeluaranOperasional'])->name('api.pengeluaran-operasional.show');
-        Route::put('pengeluaran-operasional/{id}', [PengeluaranApiController::class , 'updatePengeluaranOperasional'])->name('api.pengeluaran-operasional.update');
-        Route::delete('pengeluaran-operasional/{id}', [PengeluaranApiController::class , 'deletePengeluaranOperasional'])->name('api.pengeluaran-operasional.delete');
+        Route::post('pengeluaran-operasional', [PengeluaranOpexApiController::class , 'storePengeluaranOperasional'])->name('api.pengeluaran-operasional.store');
+        Route::get('pengeluaran-operasional/{id}', [PengeluaranOpexApiController::class , 'showPengeluaranOperasional'])->name('api.pengeluaran-operasional.show');
+        Route::put('pengeluaran-operasional/{id}', [PengeluaranOpexApiController::class , 'updatePengeluaranOperasional'])->name('api.pengeluaran-operasional.update');
+        Route::delete('pengeluaran-operasional/{id}', [PengeluaranOpexApiController::class , 'deletePengeluaranOperasional'])->name('api.pengeluaran-operasional.delete');
 
-        Route::get('employees', [PengeluaranApiController::class , 'getEmployees'])->name('api.employees');
-        Route::get('pengeluaran-summary', [PengeluaranApiController::class , 'getSummary'])->name('api.pengeluaran.summary');
+        Route::get('employees', [PengeluaranOpexApiController::class , 'getEmployees'])->name('api.employees');
+        Route::get('pengeluaran-summary', [PengeluaranOpexApiController::class , 'getSummary'])->name('api.pengeluaran.summary');
+        // ═══════════════════════════════════════════════════════════════
+        // KEUANGAN PERUSAHAAN: Laporan Keuangan (tetap di FinancialReportApiController)
+        // ═══════════════════════════════════════════════════════════════
         Route::get('/financial-report', [FinancialReportApiController::class , 'getFinancialReport']);
         Route::get('/financial-report/detailed', [FinancialReportApiController::class , 'getDetailedReport']);
         Route::get('/financial-report/daily', [FinancialReportApiController::class , 'getDailyReport']);
@@ -353,21 +384,16 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
         Route::get('/financial-report/technician-analysis', [FinancialReportApiController::class , 'getTechnicianProfitAnalysis']);
         Route::post('/financial-report/export', [FinancialReportApiController::class , 'exportFinancialReport']);
 
-        // Route::prefix('device-statistics')->group(function () {
-        //     Route::get('/', [FinancialReportApiController::class, 'getDeviceStatistics']);
-        //     Route::get('/trends', [FinancialReportApiController::class, 'getDeviceTrends']);
-        //     Route::get('/comparison', [FinancialReportApiController::class, 'getDeviceComparison']);
-        // });
-    
-        // Daily Device Monitoring Routes
-        Route::get('/financial-report/daily-device-monitoring', [FinancialReportApiController::class , 'getDailyDeviceMonitoring']);
-        Route::get('/financial-report/device-pickup-alerts', [FinancialReportApiController::class , 'getDevicePickupAlerts']);
-        Route::post('/financial-report/update-device-pickup-status', [FinancialReportApiController::class , 'updateDevicePickupStatus']);
-
-        // Or add them to the existing financial-report group:
-        Route::get('/financial-report/device-statistics', [FinancialReportApiController::class , 'getDeviceStatistics']);
-        Route::get('/financial-report/device-trends', [FinancialReportApiController::class , 'getDeviceTrends']);
-        Route::get('/financial-report/device-comparison', [FinancialReportApiController::class , 'getDeviceComparison']);
+        // ═══════════════════════════════════════════════════════════════
+        // OPERASIONAL TOKO: Device Monitoring (dipindah ke DeviceMonitoringApiController)
+        // URL path tetap sama agar tidak breaking change
+        // ═══════════════════════════════════════════════════════════════
+        Route::get('/financial-report/daily-device-monitoring', [DeviceMonitoringApiController::class , 'getDailyDeviceMonitoring']);
+        Route::get('/financial-report/device-pickup-alerts', [DeviceMonitoringApiController::class , 'getDevicePickupAlerts']);
+        Route::post('/financial-report/update-device-pickup-status', [DeviceMonitoringApiController::class , 'updateDevicePickupStatus']);
+        Route::get('/financial-report/device-statistics', [DeviceMonitoringApiController::class , 'getDeviceStatistics']);
+        Route::get('/financial-report/device-trends', [DeviceMonitoringApiController::class , 'getDeviceTrends']);
+        Route::get('/financial-report/device-comparison', [DeviceMonitoringApiController::class , 'getDeviceComparison']);
 
         // Get daily report services (with pagination)
         Route::get('/services/dailyReport', [ServiceApiController::class , 'getDailyReportServices']);

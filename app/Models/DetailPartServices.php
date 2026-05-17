@@ -16,12 +16,12 @@ class DetailPartServices extends Model
         'harga_garansi',
         'jasa',
         'qty_part',
+        'is_tanggungan_teknisi',
         'user_input',
-    ];
-public function service()
+    ];    public function service()
     {
         // Parameter kedua adalah nama kolom foreign key di tabel 'detail_part_services'
-        return $this->belongsTo(Sevices::class, 'kode_services');
+        return $this->belongsTo(Sevices::class , 'kode_services');
     }
 
     /**
@@ -32,11 +32,9 @@ public function service()
     {
         // Parameter kedua adalah nama kolom foreign key di tabel 'detail_part_services'
         // Parameter ketiga adalah nama kolom primary key di tabel 'spareparts'
-        return $this->belongsTo(Sparepart::class, 'kode_sparepart', 'id');
+        return $this->belongsTo(Sparepart::class , 'kode_sparepart', 'id');
     }
-    public function variant()
-{
-    // Parameter kedua adalah nama kolom di tabel ini yang menyimpan ID variant
-    return $this->belongsTo(ProductVariant::class, 'kode_sparepart');
-}
+    public function variant()    {
+        // Parameter kedua adalah nama kolom di tabel ini yang menyimpan ID variant
+        return $this->belongsTo(ProductVariant::class , 'kode_sparepart');    }
 }

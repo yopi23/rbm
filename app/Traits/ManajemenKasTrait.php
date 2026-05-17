@@ -21,12 +21,12 @@ trait ManajemenKasTrait
      * @param bool $isCash - true = transaksi cash (masuk/keluar laci), false = transfer/non-cash
      * @return void
      */
-    protected function catatKas(Model $sumberModel, float $debit, float $kredit, string $deskripsi, $tanggal = null, bool $isCash = true)
+    protected function catatKas(Model $sumberModel, float $debit, float $kredit, string $deskripsi, $tanggal = null, bool $isCash = true, bool $attachShift = true)
     {
         // Menggunakan DB::transaction untuk memastikan jika ada error,
         // semua proses di dalamnya akan dibatalkan (rollback).
         // Ini mencegah data korup (misal: penjualan tercatat tapi kas tidak).
-        DB::transaction(function () use ($sumberModel, $debit, $kredit, $deskripsi, $tanggal, $isCash) {
+        DB::transaction(function () use ($sumberModel, $debit, $kredit, $deskripsi, $tanggal, $isCash, $attachShift) {
 
             // Ambil ID owner dari model sumber (Penjualan, Service, dll).
             // Ini memastikan setiap model sumber WAJIB punya kolom 'kode_owner'.
@@ -46,18 +46,20 @@ trait ManajemenKasTrait
             // Deteksi Shift Aktif
             // Prioritaskan Shift Aktif dari User yang sedang login/melakukan aksi
             $shiftId = null;
-            $currentUser = Auth::id();
+            if ($attachShift) {
+                $currentUser = Auth::id();
 
-            if ($currentUser) {
-                $activeShift = Shift::getActiveShift($currentUser);
-                if ($activeShift) {
-                    $shiftId = $activeShift->id;
+                if ($currentUser) {
+                    $activeShift = Shift::getActiveShift($currentUser);
+                    if ($activeShift) {
+                        $shiftId = $activeShift->id;
+                    }
                 }
-            }
 
-            // Jika tidak ada shift aktif (misal sistem/cron), baru gunakan shift dari model sumber
-            if (!$shiftId) {
-                $shiftId = $sumberModel->shift_id ?? null;
+                // Jika tidak ada shift aktif (misal sistem/cron), baru gunakan shift dari model sumber
+                if (!$shiftId) {
+                    $shiftId = $sumberModel->shift_id ?? null;
+                }
             }
 
             // Siapkan data untuk entri kas baru

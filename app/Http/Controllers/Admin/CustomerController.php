@@ -220,33 +220,86 @@ class CustomerController extends Controller
 
     /**
      * Search for customers based on a query for the API.
+     * Includes service_count to help identify returning customers.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function search(Request $request)
     {
-        // PERBAIKAN: Mengganti ›input() menjadi ->input()
         $query = $request->input('query', '');
 
         if (strlen($query) < 3) {
             return response()->json(['success' => true, 'data' => []]);
         }
 
-        // Mengambil kode owner dari user yang sedang login via API
-        // $kodeOwner = ;
         $kodeOwner = $this->getThisUser()->id_upline;
 
-        $customers = customer_table::where('kode_owner', $kodeOwner)
+        $customers = customer_table::where('customer_tables.kode_owner', $kodeOwner)
             ->where(function ($q) use ($query) {
-                $q->where('nama_kontak', 'LIKE', "%{$query}%")
-                  ->orWhere('nomor_telepon', 'LIKE', "%{$query}%")
-                  ->orWhere('nama_toko', 'LIKE', "%{$query}%");
+                $q->where('customer_tables.nama_kontak', 'LIKE', "%{$query}%")
+                  ->orWhere('customer_tables.nomor_telepon', 'LIKE', "%{$query}%")
+                  ->orWhere('customer_tables.nama_toko', 'LIKE', "%{$query}%");
             })
-            ->select('id', 'nama_kontak', 'nomor_telepon', 'alamat', 'tipe_pelanggan')
+            ->leftJoin('sevices', 'customer_tables.id', '=', 'sevices.customer_id')
+            ->select(
+                'customer_tables.id',
+                'customer_tables.nama_kontak',
+                'customer_tables.nomor_telepon',
+                'customer_tables.alamat',
+                'customer_tables.tipe_pelanggan',
+                DB::raw('COUNT(sevices.id) as service_count')
+            )
+            ->groupBy(
+                'customer_tables.id',
+                'customer_tables.nama_kontak',
+                'customer_tables.nomor_telepon',
+                'customer_tables.alamat',
+                'customer_tables.tipe_pelanggan'
+            )
+            ->orderByDesc('service_count')
             ->limit(15)
             ->get();
 
         return response()->json(['success' => true, 'data' => $customers]);
+    }
+
+    /**
+     * Check if a phone number already exists in the database.
+     * Used to prevent duplicate customer creation.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function checkPhone(Request $request)
+    {
+        $phone = $request->input('phone', '');
+
+        if (strlen($phone) < 4) {
+            return response()->json(['success' => true, 'exists' => false]);
+        }
+
+        $kodeOwner = $this->getThisUser()->id_upline;
+
+        // Cari customer dengan nomor telepon yang sama (exact match atau partial)
+        $existingCustomer = customer_table::where('kode_owner', $kodeOwner)
+            ->where(function ($q) use ($phone) {
+                // Normalisasi: hapus karakter non-digit untuk perbandingan
+                $cleanPhone = preg_replace('/[^0-9]/', '', $phone);
+                $q->where(DB::raw("REPLACE(REPLACE(REPLACE(nomor_telepon, '-', ''), ' ', ''), '+', '')"), 'LIKE', "%{$cleanPhone}%");
+            })
+            ->select('id', 'nama_kontak', 'nomor_telepon', 'alamat', 'tipe_pelanggan')
+            ->first();
+
+        if ($existingCustomer) {
+            return response()->json([
+                'success' => true,
+                'exists' => true,
+                'customer' => $existingCustomer,
+                'message' => "Nomor ini sudah terdaftar atas nama {$existingCustomer->nama_kontak}."
+            ]);
+        }
+
+        return response()->json(['success' => true, 'exists' => false]);
     }
 }

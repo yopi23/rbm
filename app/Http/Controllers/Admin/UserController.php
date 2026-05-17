@@ -81,7 +81,7 @@ class UserController extends Controller
             $update->update([
                 'name' => $request->name,
                 'email' => $request->email,
-                'password' => $request->password != null ? Hash::make($request->password) : $update->password,
+                'password' => $request->password != null ?Hash::make($request->password) : $update->password,
             ]);
             if ($update) {
                 $update1 = UserDetail::where([['kode_user', '=', $id]])->get()->first();
@@ -107,8 +107,8 @@ class UserController extends Controller
                 if ($update1) {
                     return redirect()->back()
                         ->with([
-                            'success' => 'Pengguna Berhasil DiUpdate'
-                        ]);
+                        'success' => 'Pengguna Berhasil DiUpdate'
+                    ]);
                 }
                 return redirect()->back()->with('error', "Oops, Something Went Wrong");
             }
@@ -153,7 +153,7 @@ class UserController extends Controller
             'dari_saldo' => $user->saldo,
             'shift_id' => Shift::getActiveShift(auth()->user()->id)->id ?? null,
         ]);
-        
+
         // Tentukan status berdasarkan jabatan (Admin=1/Sukses, Karyawan=0/Pending)
         $statusPenarikan = ($user->jabatan == '1') ? '1' : '0';
         $create->update(['status_penarikan' => $statusPenarikan]);
@@ -175,76 +175,76 @@ class UserController extends Controller
             // HANYA Catat Kas jika Status Disetujui (Admin)
             if ($statusPenarikan == '1') {
                 $this->catatKas(
-                    $create,                                     // Model sumber
-                    0,                                           // Debit
-                    $jumlahPenarikan,                            // Kredit (uang keluar dari kas perusahaan)
+                    $create, // Model sumber
+                    0, // Debit
+                    $jumlahPenarikan, // Kredit (uang keluar dari kas perusahaan)
                     'Penarikan Saldo Teknisi: ' . $pegawais->fullname, // Deskripsi
-                    now()                                        // Tanggal
+                    now(), // Tanggal
+                    true, // isCash
+                    false // attachShift
                 );
             }
 
             DB::commit();
 
             // Status WhatsApp notification
-$whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
-
-// Dapatkan admin dari upline
-$admin = UserDetail::where([['kode_user', '=', $pegawais->id_upline]])->get()->first();
-
-// Array untuk menyimpan nomor telepon valid
-$validPhoneNumbers = [];
-
-// Inject WhatsAppService
-$whatsAppService = app(WhatsAppService::class);
-
-// Cek nomor admin
-if (!empty($admin->no_telp) && $whatsAppService->isValidPhoneNumber($admin->no_telp)) {
-    $validPhoneNumbers[] = $admin->no_telp;
-}
-
-// Cek nomor owner/recipient kedua
-if (!empty($pegawais->no_telp) && $whatsAppService->isValidPhoneNumber($pegawais->no_telp)) {
-    $validPhoneNumbers[] = $pegawais->no_telp;
-}
-
-// Kirim notifikasi WhatsApp jika ada nomor telepon valid
-if (count($validPhoneNumbers) > 0) {
-    try {
-        // Kirim notifikasi ke semua nomor valid sekaligus
-        $waResult = $whatsAppService->penarikanNotification([
-            'teknisi' => $pegawais->fullname,
-            'jumlah' => 'Rp ' . number_format($jumlahPenarikan, 0, ',', '.'),
-            'catatan' => $request->catatan_penarikan != null ? $request->catatan_penarikan : '-',
-            'no_hp' => $validPhoneNumbers,
-        ]);
-
-        if ($waResult['status']) {
-            $whatsappStatus = 'Pesan WhatsApp berhasil dikirim ke semua penerima';
-        } else {
-            // Cek apakah sebagian berhasil
-            $successCount = count(array_filter($waResult['details'], function($detail) {
-                return $detail['status'] === true;
-            }));
-
-            if ($successCount > 0) {
-                $whatsappStatus = "Pesan WhatsApp berhasil dikirim ke {$successCount} dari " . count($validPhoneNumbers) . " penerima";
-            } else {
-                $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
+            $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
+            // Dapatkan admin dari upline
+            $admin = UserDetail::where([['kode_user', '=', $pegawais->id_upline]])->get()->first();
+            // Array untuk menyimpan nomor telepon valid
+            $validPhoneNumbers = [];
+            // Inject WhatsAppService
+            $whatsAppService = app(WhatsAppService::class);
+            // Cek nomor admin
+            if (!empty($admin->no_telp) && $whatsAppService->isValidPhoneNumber($admin->no_telp)) {
+                $validPhoneNumbers[] = $admin->no_telp;
             }
-        }
-    } catch (\Exception $waException) {
-        // Log error tapi jangan batalkan transaksi utama
-        \Log::error("Failed to send WhatsApp notification: " . $waException->getMessage(), [
-            'penarikan' => $pegawais->fullname,
-            'recipients' => $validPhoneNumbers,
-            'exception' => $waException
-        ]);
+            // Cek nomor owner/recipient kedua
+            if (!empty($pegawais->no_telp) && $whatsAppService->isValidPhoneNumber($pegawais->no_telp)) {
+                $validPhoneNumbers[] = $pegawais->no_telp;
+            }
+            // Kirim notifikasi WhatsApp jika ada nomor telepon valid
+            if (count($validPhoneNumbers) > 0) {
+                try {
+                    // Kirim notifikasi ke semua nomor valid sekaligus
+                    $waResult = $whatsAppService->penarikanNotification([
+                        'teknisi' => $pegawais->fullname,
+                        'jumlah' => 'Rp ' . number_format($jumlahPenarikan, 0, ',', '.'),
+                        'catatan' => $request->catatan_penarikan != null ? $request->catatan_penarikan : '-',
+                        'no_hp' => $validPhoneNumbers,
+                    ]);
 
-        $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
-    }
-} else {
-    $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Tidak ada nomor telepon valid';
-}
+                    if ($waResult['status']) {
+                        $whatsappStatus = 'Pesan WhatsApp berhasil dikirim ke semua penerima';
+                    }
+                    else {
+                        // Cek apakah sebagian berhasil
+                        $successCount = count(array_filter($waResult['details'], function ($detail) {
+                            return $detail['status'] === true;
+                        }));
+
+                        if ($successCount > 0) {
+                            $whatsappStatus = "Pesan WhatsApp berhasil dikirim ke {$successCount} dari " . count($validPhoneNumbers) . " penerima";
+                        }
+                        else {
+                            $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
+                        }
+                    }
+                }
+                catch (\Exception $waException) {
+                    // Log error tapi jangan batalkan transaksi utama
+                    \Log::error("Failed to send WhatsApp notification: " . $waException->getMessage(), [
+                        'penarikan' => $pegawais->fullname,
+                        'recipients' => $validPhoneNumbers,
+                        'exception' => $waException
+                    ]);
+
+                    $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
+                }
+            }
+            else {
+                $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Tidak ada nomor telepon valid';
+            }
 
             return redirect()->route('profile')->with([
                 'success' => 'Penarikan Berhasil Di Buat'
@@ -290,24 +290,26 @@ if (count($validPhoneNumbers) > 0) {
 
         $data = Penarikan::findOrFail($id);
         $oldStatus = $data->status_penarikan;
-        
+
         $data->update([
             'jumlah_penarikan' => $request->jumlah_penarikan,
             'catatan_penarikan' => $request->catatan_penarikan != null ? $request->catatan_penarikan : '-',
             'status_penarikan' => $request->status_penarikan,
         ]);
-        
+
         if ($data) {
             $pegawais = UserDetail::where([['kode_user', '=', $data->kode_user]])->get()->first();
 
             // 1. Pending -> Approved (0 -> 1)
             if ($oldStatus == '0' && $request->status_penarikan == '1') {
-                 $this->catatKas(
+                $this->catatKas(
                     $data,
                     0,
                     $data->jumlah_penarikan,
                     'Penarikan Saldo Teknisi: ' . $pegawais->fullname,
-                    now()
+                    now(),
+                    true,
+                    false
                 );
             }
             // 2. Rejected (Any -> 2)
@@ -317,7 +319,7 @@ if (count($validPhoneNumbers) > 0) {
                     'saldo' => $new_saldo
                 ]);
             }
-            
+
             return redirect()->route('profile')->with([
                 'success' => 'Penarikan Berhasil Di Update'
             ]);

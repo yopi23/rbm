@@ -1303,4 +1303,216 @@ class SalesApiController extends Controller
             ], 500);
         }
     }
+
+    // ==============================================================================
+    // API UNTUK REFUND PENJUALAN (MAKS 2 HARI UNTUK LUNAS, BISA UNTUK DRAF)
+    // ==============================================================================
+    public function refundSale(Request $request, $id)
+    {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json(['status' => 'error', 'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'], 403);
+        }
+
+        DB::beginTransaction();
+        try {
+            $sale = Penjualan::findOrFail($id);
+
+            // Jika sudah di-refund/cancel
+            if ($sale->status_penjualan == '0') {
+                return response()->json(['status' => 'error', 'message' => 'Penjualan ini sudah dibatalkan/direfund sebelumnya.'], 400);
+            }
+
+            // Jika lunas (1), cek batas waktu maksimal 2 hari & refund kas/laci
+            if ($sale->status_penjualan == '1') {
+                $daysDiff = Carbon::parse($sale->updated_at)->diffInDays(now());
+                if ($daysDiff > 2) {
+                    return response()->json(['status' => 'error', 'message' => 'Tidak dapat me-refund penjualan yang sudah lebih dari 2 hari.'], 400);
+                }
+
+                if ($sale->jumlah_cash > 0 && !$request->id_kategorilaci) {
+                    return response()->json(['status' => 'error', 'message' => 'id_kategorilaci wajib diisi untuk refund transaksi cash.'], 400);
+                }
+
+                // Reverse Kas & Laci
+                if ($sale->jumlah_cash > 0) {
+                    $this->catatKas($sale, 0, $sale->jumlah_cash, 'Refund Penjualan (Cash) #' . $sale->kode_penjualan, now(), true);
+                    $this->recordLaciHistory(
+                        $request->id_kategorilaci, null, $sale->jumlah_cash, 
+                        'Refund Penjualan: ' . $sale->kode_penjualan . ' - Cust: ' . ($sale->nama_customer ?? '-') . ' [Cash]'
+                    );
+                }
+                if ($sale->jumlah_transfer > 0) {
+                    $this->catatKas($sale, 0, $sale->jumlah_transfer, 'Refund Penjualan (Transfer) #' . $sale->kode_penjualan, now(), false);
+                }
+            }
+
+            // Kembalikan stok & Hapus Detail
+            $saleDetails = DetailSparepartPenjualan::where('kode_penjualan', $sale->id)->get();
+            $stockUpdates = [];
+            foreach ($saleDetails as $detail) {
+                $sparepart = Sparepart::find($detail->kode_sparepart);
+                if ($sparepart) {
+                    $sparepart->logStockChange($detail->qty_sparepart, 'refund', $sale->id, 'Refund penjualan: ' . $sale->kode_penjualan, auth()->user()->id);
+                    $stockUpdates[] = [
+                        'sparepart_id' => $detail->kode_sparepart, 'returned_qty' => $detail->qty_sparepart, 'new_stock' => $sparepart->stok_sparepart
+                    ];
+                }
+            }
+
+            DetailSparepartPenjualan::where('kode_penjualan', $sale->id)->delete();
+
+            // Ubah status dan total
+            $sale->update([
+                'status_penjualan' => '0',
+                'total_penjualan' => 0,
+                'total_bayar' => 0,
+                'jumlah_cash' => 0,
+                'jumlah_transfer' => 0,
+                'updated_at' => now(),
+            ]);
+
+            DB::commit();
+            return response()->json(['status' => 'success', 'message' => 'Penjualan berhasil di-refund.', 'data' => ['stock_updates' => $stockUpdates]]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['status' => 'error', 'message' => 'Gagal me-refund: ' . $e->getMessage()], 500);
+        }
+    }
+
+    // ==============================================================================
+    // API UNTUK EDIT ITEMS PENJUALAN (DRAF MAUPUN LUNAS)
+    // ==============================================================================
+    public function updateSaleItems(Request $request, $id)
+    {
+        $request->validate([
+            'items' => 'required|array',
+        ]);
+
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json(['status' => 'error', 'message' => 'Shift belum dibuka.'], 403);
+        }
+
+        DB::beginTransaction();
+        try {
+            $sale = Penjualan::findOrFail($id);
+
+            if ($sale->status_penjualan == '0') {
+                return response()->json(['status' => 'error', 'message' => 'Penjualan sudah dibatalkan/direfund, tidak bisa di-edit.'], 400);
+            }
+
+            if ($sale->status_penjualan == '1') {
+                $daysDiff = Carbon::parse($sale->updated_at)->diffInDays(now());
+                if ($daysDiff > 2) {
+                    return response()->json(['status' => 'error', 'message' => 'Maksimal 2 hari untuk edit penjualan lunas.'], 400);
+                }
+                if ($sale->jumlah_cash > 0 && !$request->id_kategorilaci) {
+                    return response()->json(['status' => 'error', 'message' => 'id_kategorilaci dibutuhkan untuk reversal uang kas laci transaksi sebelumnya.'], 400);
+                }
+            }
+
+            // 1. REVERSAL STOK DAN KAS LAMA
+            $oldDetails = DetailSparepartPenjualan::where('kode_penjualan', $sale->id)->get();
+            foreach ($oldDetails as $detail) {
+                $sparepart = Sparepart::find($detail->kode_sparepart);
+                if ($sparepart) {
+                    $sparepart->logStockChange($detail->qty_sparepart, 'edit_reversal', $sale->id, 'Reversal stok edit penjualan: ' . $sale->kode_penjualan, auth()->user()->id);
+                }
+            }
+
+            if ($sale->status_penjualan == '1') {
+                if ($sale->jumlah_cash > 0) {
+                    $this->catatKas($sale, 0, $sale->jumlah_cash, 'Reversal Edit Penjualan (Cash) #' . $sale->kode_penjualan, now(), true);
+                    $this->recordLaciHistory($request->id_kategorilaci, null, $sale->jumlah_cash, 'Reversal Edit Penjualan: ' . $sale->kode_penjualan . ' [Cash]');
+                }
+                if ($sale->jumlah_transfer > 0) {
+                    $this->catatKas($sale, 0, $sale->jumlah_transfer, 'Reversal Edit Penjualan (Transfer) #' . $sale->kode_penjualan, now(), false);
+                }
+            }
+
+            DetailSparepartPenjualan::where('kode_penjualan', $sale->id)->delete();
+
+            // 2. PROSES BARANG BARU
+            $totalPenjualan = 0;
+            $stockErrors = [];
+            foreach ($request->items as $item) {
+                $qtySparepart = $item['qty'];
+                $sparepartId = $item['sparepart_id'];
+                $customPrice = $item['custom_price'] ?? null;
+                
+                $sparepart = Sparepart::find($sparepartId);
+                if (!$sparepart) continue;
+
+                $calculatedPrice = $this->adjustPriceBasedOnCustomerType($sparepart, $item['customer_type'] ?? 'ecer');
+                $finalSellingPrice = $calculatedPrice;
+                if ($customPrice !== null && is_numeric($customPrice) && $customPrice >= $sparepart->harga_ecer) {
+                    $finalSellingPrice = (int)$customPrice;
+                }
+
+                if ($sparepart->stok_sparepart < $qtySparepart) {
+                    $stockErrors[] = ['id' => $sparepartId, 'name' => $sparepart->nama_sparepart, 'requested' => $qtySparepart, 'available' => $sparepart->stok_sparepart];
+                    continue;
+                }
+
+                $totalPenjualan += $finalSellingPrice * $qtySparepart;
+
+                // Create detail, SparepartSaleObserver will deduct stock automatically!
+                DetailSparepartPenjualan::create([
+                    'kode_penjualan' => $sale->id,
+                    'kode_sparepart' => $sparepartId,
+                    'detail_harga_modal' => $sparepart->harga_beli,
+                    'detail_harga_jual' => $finalSellingPrice,
+                    'qty_sparepart' => $qtySparepart,
+                    'user_input' => auth()->user()->id,
+                ]);
+            }
+
+            // 3. APPLY KAS/LACI BARU JIKA STATUS LUNAS
+            $totalBayar = 0;
+            $bayarCash = 0;
+            $bayarTransfer = 0;
+            $metodeBayar = 'cash';
+
+            if ($sale->status_penjualan == '1') {
+                $bayarCash = $request->has('bayar_cash') ? $request->input('bayar_cash') : $totalPenjualan;
+                $bayarTransfer = $request->input('bayar_transfer', 0);
+                $totalBayar = $totalPenjualan; // Asumsi lunas semuanya
+
+                if ($bayarCash > 0 && $bayarTransfer > 0) $metodeBayar = 'split';
+                else if ($bayarTransfer > 0 && $bayarCash <= 0) $metodeBayar = 'transfer';
+
+                if ($bayarCash > 0) {
+                    $this->catatKas($sale, $bayarCash, 0, 'Edit Penjualan Baru (Cash) #' . $sale->kode_penjualan, now(), true);
+                    $this->recordLaciHistory($request->id_kategorilaci, $bayarCash, null, 'Edit Penjualan Baru: ' . $sale->kode_penjualan . ' [Cash]');
+                }
+                if ($bayarTransfer > 0) {
+                    $this->catatKas($sale, $bayarTransfer, 0, 'Edit Penjualan Baru (Transfer) #' . $sale->kode_penjualan, now(), false);
+                }
+            } else {
+                $totalBayar = 0; 
+            }
+
+            $sale->update([
+                'total_penjualan' => $totalPenjualan,
+                'total_bayar' => $totalBayar,
+                'jumlah_cash' => $bayarCash,
+                'jumlah_transfer' => $bayarTransfer,
+                'metode_bayar' => $metodeBayar,
+                'updated_at' => now()
+            ]);
+
+            DB::commit();
+            return response()->json([
+                'status' => count($stockErrors) > 0 ? 'partial_success' : 'success',
+                'message' => 'Items penjualan berhasil diupdate.',
+                'data' => $sale,
+                'stock_errors' => $stockErrors
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['status' => 'error', 'message' => 'Gagal mengedit penjualan: ' . $e->getMessage()], 500);
+        }
+    }
 }

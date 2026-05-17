@@ -143,153 +143,154 @@ class ServiceApiController extends Controller
      * Get all completed services with pagination and filters
      */
     public function getCompletedservice(Request $request)
-{
-    try {
-        $page = $request->get('page', 1);
-        $limit = min($request->get('limit', 20), 50);
-        $search = $request->get('search', '');
-        $technician_id = $request->get('technician_id');
-        $date_from = $request->get('date_from');
-        $date_to = $request->get('date_to');
+    {
+        try {
+            $page = $request->get('page', 1);
+            $limit = min($request->get('limit', 20), 50);
+            $search = $request->get('search', '');
+            $technician_id = $request->get('technician_id');
+            $date_from = $request->get('date_from');
+            $date_to = $request->get('date_to');
 
-        $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
-            ->where('status_services', 'Selesai')
-            ->join('users', 'sevices.id_teknisi', '=', 'users.id')
-            ->select('sevices.*', 'users.name as teknisi');
+            $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+                ->where('status_services', 'Selesai')
+                ->join('users', 'sevices.id_teknisi', '=', 'users.id')
+                ->select('sevices.*', 'users.name as teknisi');
 
-        // Apply filters
-        if (!empty($search)) {
-            $query->where(function ($q) use ($search) {
-                $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
-                  ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
-                  ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
-                  ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
-            });
-        }
+            // Apply filters
+            if (!empty($search)) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
+                        ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
+                        ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
+                        ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
+                });
+            }
 
-        if ($technician_id) {
-            $query->where('sevices.id_teknisi', $technician_id);
-        }
+            if ($technician_id) {
+                $query->where('sevices.id_teknisi', $technician_id);
+            }
 
-        if ($date_from) {
-            $query->whereDate('sevices.tgl_service', '>=', $date_from);
-        }
+            if ($date_from) {
+                $query->whereDate('sevices.tgl_service', '>=', $date_from);
+            }
 
-        if ($date_to) {
-            $query->whereDate('sevices.tgl_service', '<=', $date_to);
-        }
+            if ($date_to) {
+                $query->whereDate('sevices.tgl_service', '<=', $date_to);
+            }
 
-        $totalCount = $query->count();
-        $services = $query->orderBy('sevices.tgl_service', 'desc')
-                         ->offset(($page - 1) * $limit)
-                         ->limit($limit)
-                         ->get();
+            $totalCount = $query->count();
+            $services = $query->orderBy('sevices.tgl_service', 'desc')
+                ->offset(($page - 1) * $limit)
+                ->limit($limit)
+                ->get();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Data layanan selesai berhasil diambil.',
-            'data' => $services,
-            'pagination' => [
-                'current_page' => (int) $page,
-                'per_page' => (int) $limit,
-                'total' => (int) $totalCount,
-                'total_pages' => ceil($totalCount / $limit),
-                'has_next_page' => $page < ceil($totalCount / $limit),
-                'has_previous_page' => $page > 1,
-            ],
-            'filters' => [
-                'search' => $search,
-                'technician_id' => $technician_id,
-                'date_from' => $date_from,
-                'date_to' => $date_to
-            ]
-        ], 200);
-    } catch (\Exception $e) {
-        Log::error("Get Completed Services Error: " . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-        ], 500);
-    }
-}
-
-    public function allservice(Request $request)
-{
-    try {
-        $kodeOwner = $this->getThisUser()->id_upline;
-        $search = $request->input('search');
-        $page = $request->get('page', 1);
-        $limit = min($request->get('limit', 20), 50);
-        $status = $request->get('status'); // Filter by status
-        $year = $request->get('year', date('Y'));
-
-        if (empty($search)) {
             return response()->json([
                 'success' => true,
-                'message' => 'Silakan masukkan kata kunci pencarian.',
-                'data' => [],
-                'pagination' => null
+                'message' => 'Data layanan selesai berhasil diambil.',
+                'data' => $services,
+                'pagination' => [
+                    'current_page' => (int) $page,
+                    'per_page' => (int) $limit,
+                    'total' => (int) $totalCount,
+                    'total_pages' => ceil($totalCount / $limit),
+                    'has_next_page' => $page < ceil($totalCount / $limit),
+                    'has_previous_page' => $page > 1,
+                ],
+                'filters' => [
+                    'search' => $search,
+                    'technician_id' => $technician_id,
+                    'date_from' => $date_from,
+                    'date_to' => $date_to
+                ]
             ], 200);
+        } catch (\Exception $e) {
+            Log::error("Get Completed Services Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
         }
-
-        $query = modelServices::where('kode_owner', $kodeOwner)
-            ->where(function ($q) use ($search) {
-                $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
-                  ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
-                  ->orWhere('sevices.kode_service',$search)
-                  ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
-            })
-            ->whereYear('sevices.created_at', $year)
-            ->join('users', 'sevices.id_teknisi', '=', 'users.id')
-            ->select('sevices.*', 'users.name as teknisi');
-
-        if ($status) {
-            $query->where('sevices.status_services', $status);
-        }
-
-        $totalCount = $query->count();
-        $services = $query->orderBy('sevices.created_at', 'desc')
-                         ->offset(($page - 1) * $limit)
-                         ->limit($limit)
-                         ->get();
-
-        // Tambahan data
-        $services = $services->map(function ($service) {
-            $service->has_warranty = Garansi::where('kode_garansi', $service->kode_service)
-                ->where('type_garansi', 'service')
-                ->exists();
-
-            $service->has_notes = DetailCatatanService::where('kode_services', $service->id)->exists();
-
-            $service->part_count = [
-                'toko' => DetailPartServices::where('kode_services', $service->id)->count(),
-                'luar' => DetailPartLuarService::where('kode_services', $service->id)->count()
-            ];
-
-            return $service;
-        });
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Data layanan ditemukan.',
-            'data' => $services,
-            'pagination' => [
-                'current_page' => (int) $page,
-                'per_page' => (int) $limit,
-                'total' => (int) $totalCount,
-                'total_pages' => ceil($totalCount / $limit),
-            ],
-            'search_query' => $search
-        ], 200);
-
-    } catch (\Exception $e) {
-        Log::error("All Service Search Error: " . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-        ], 500);
     }
-}
+
+    public function allservice(Request $request)
+    {
+        try {
+            $kodeOwner = $this->getThisUser()->id_upline;
+            $search = $request->input('search');
+            $page = $request->get('page', 1);
+            $limit = min($request->get('limit', 20), 50);
+            $status = $request->get('status'); // Filter by status
+            $year = $request->get('year', date('Y'));
+
+            if (empty($search)) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Silakan masukkan kata kunci pencarian.',
+                    'data' => [],
+                    'pagination' => null
+                ], 200);
+            }
+
+            $query = modelServices::where('sevices.kode_owner', $kodeOwner)
+                ->where(function ($q) use ($search) {
+                    $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
+                        ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
+                        ->orWhere('sevices.kode_service', $search)
+                        ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
+                })
+                ->whereYear('sevices.created_at', $year)
+                ->join('users', 'sevices.id_teknisi', '=', 'users.id')
+                ->leftJoin('customer_tables', 'sevices.customer_id', '=', 'customer_tables.id')
+                ->select('sevices.*', 'users.name as teknisi', 'customer_tables.alamat as alamat_pelanggan');
+
+            if ($status) {
+                $query->where('sevices.status_services', $status);
+            }
+
+            $totalCount = $query->count();
+            $services = $query->orderBy('sevices.created_at', 'desc')
+                ->offset(($page - 1) * $limit)
+                ->limit($limit)
+                ->get();
+
+            // Tambahan data
+            $services = $services->map(function ($service) {
+                $service->has_warranty = Garansi::where('kode_garansi', $service->kode_service)
+                    ->where('type_garansi', 'service')
+                    ->exists();
+
+                $service->has_notes = DetailCatatanService::where('kode_services', $service->id)->exists();
+
+                $service->part_count = [
+                    'toko' => DetailPartServices::where('kode_services', $service->id)->count(),
+                    'luar' => DetailPartLuarService::where('kode_services', $service->id)->count()
+                ];
+
+                return $service;
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data layanan ditemukan.',
+                'data' => $services,
+                'pagination' => [
+                    'current_page' => (int) $page,
+                    'per_page' => (int) $limit,
+                    'total' => (int) $totalCount,
+                    'total_pages' => ceil($totalCount / $limit),
+                ],
+                'search_query' => $search
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error("All Service Search Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 
     /**
      * Check service with enhanced warranty and part information
@@ -309,7 +310,7 @@ class ServiceApiController extends Controller
             $cacheKey = "cek_service_{$kodeService}";
 
             $serviceData = Cache::remember($cacheKey, 300, function () use ($kodeService) {
-                $data = modelServices::where('kode_service', $kodeService)->first();
+                $data = modelServices::with('customer')->where('kode_service', $kodeService)->first();
 
                 if (!$data) {
                     return null;
@@ -753,9 +754,9 @@ class ServiceApiController extends Controller
                 ->where('status_services', 'Selesai')
                 ->whereExists(function ($query) {
                     $query->select(DB::raw(1))
-                          ->from('garansis')
-                          ->whereRaw('garansis.kode_garansi = sevices.kode_service')
-                          ->where('garansis.type_garansi', 'service');
+                        ->from('garansis')
+                        ->whereRaw('garansis.kode_garansi = sevices.kode_service')
+                        ->where('garansis.type_garansi', 'service');
                 })
                 ->count();
 
@@ -1004,8 +1005,8 @@ class ServiceApiController extends Controller
             // Check for orphaned part records
             $orphanedParts = DetailPartServices::whereNotExists(function ($query) {
                 $query->select(DB::raw(1))
-                      ->from('sevices')
-                      ->whereRaw('sevices.id = detail_part_services.kode_services');
+                    ->from('sevices')
+                    ->whereRaw('sevices.id = detail_part_services.kode_services');
             })->count();
 
             if ($orphanedParts > 0) {
@@ -1069,11 +1070,11 @@ class ServiceApiController extends Controller
 
         // Cache health score
         $scores[] = $healthData['cache_status']['status'] === 'healthy' ? 100 :
-                   ($healthData['cache_status']['status'] === 'degraded' ? 50 : 0);
+            ($healthData['cache_status']['status'] === 'degraded' ? 50 : 0);
 
         // Data integrity score
         $scores[] = $healthData['data_integrity']['status'] === 'healthy' ? 100 :
-                   ($healthData['data_integrity']['status'] === 'warning' ? 70 : 0);
+            ($healthData['data_integrity']['status'] === 'warning' ? 70 : 0);
 
         $averageScore = array_sum($scores) / count($scores);
 
@@ -1323,7 +1324,7 @@ class ServiceApiController extends Controller
             // Clear relevant caches
             $this->clearServiceCaches(new Request(['types' => ['completed', 'statistics']]));
 
-            $successCount = count(array_filter($results, function($result) {
+            $successCount = count(array_filter($results, function ($result) {
                 return $result['success'];
             }));
 
@@ -1361,7 +1362,7 @@ class ServiceApiController extends Controller
             $status = $request->get('status');
 
             $cacheKey = "daily_report_{$this->getThisUser()->id_upline}_{$page}_{$limit}_" .
-                    md5($search . $technician_id . $date_from . $date_to . $status);
+                md5($search . $technician_id . $date_from . $date_to . $status);
 
             $result = Cache::remember($cacheKey, 300, function () use ($page, $limit, $search, $technician_id, $date_from, $date_to, $status) {
                 $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
@@ -1380,9 +1381,9 @@ class ServiceApiController extends Controller
                 if (!empty($search)) {
                     $query->where(function ($q) use ($search) {
                         $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
-                        ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
-                        ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
-                        ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
+                            ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
+                            ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
+                            ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
                     });
                 }
 
@@ -1421,9 +1422,9 @@ class ServiceApiController extends Controller
 
                 $totalCount = $query->count();
                 $services = $query->orderBy('sevices.updated_at', 'desc')
-                                ->offset(($page - 1) * $limit)
-                                ->limit($limit)
-                                ->get();
+                    ->offset(($page - 1) * $limit)
+                    ->limit($limit)
+                    ->get();
 
                 // FIXED: Enhanced mapping dengan logika tanggal dan omset yang BENAR
                 $services = $services->map(function ($service) {
@@ -1713,20 +1714,20 @@ class ServiceApiController extends Controller
     public function searchServiceExtended(Request $request)
     {
         try {
-            $search        = $request->input('search');
-            $page          = (int) $request->get('page', 1);
-            $limit         = min((int) $request->get('limit', 20), 50);
-            $status        = $request->get('status');         // Optional filter status
+            $search = $request->input('search');
+            $page = (int) $request->get('page', 1);
+            $limit = min((int) $request->get('limit', 20), 50);
+            $status = $request->get('status');         // Optional filter status
             $technician_id = $request->get('technician_id');  // Optional filter teknisi
-            $sort_by       = $request->get('sort_by', 'created_at');
-            $sort_order    = strtolower($request->get('sort_order', 'desc'));
+            $sort_by = $request->get('sort_by', 'created_at');
+            $sort_order = strtolower($request->get('sort_order', 'desc'));
 
             // Validation keyword
             if (empty($search) || strlen($search) < 2) {
                 return response()->json([
-                    'success'    => false,
-                    'message'    => 'Kata kunci pencarian minimal 2 karakter.',
-                    'data'       => [],
+                    'success' => false,
+                    'message' => 'Kata kunci pencarian minimal 2 karakter.',
+                    'data' => [],
                     'pagination' => null
                 ], 400);
             }
@@ -1736,14 +1737,16 @@ class ServiceApiController extends Controller
             $previousYear = $currentYear - 1;
 
             $dateFrom = Carbon::create($previousYear, 10, 1)->startOfDay(); // 1 Okt tahun lalu
-            $dateTo   = Carbon::create($currentYear, 12, 31)->endOfDay();   // 31 Des tahun ini
+            $dateTo = Carbon::create($currentYear, 12, 31)->endOfDay();   // 31 Des tahun ini
 
-            $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+            $query = modelServices::where('sevices.kode_owner', $this->getThisUser()->id_upline)
                 ->whereBetween('sevices.created_at', [$dateFrom, $dateTo])
                 ->leftJoin('users', 'sevices.id_teknisi', '=', 'users.id')
+                ->leftJoin('customer_tables', 'sevices.customer_id', '=', 'customer_tables.id')
                 ->select(
                     'sevices.*',
                     'users.name as teknisi',
+                    'customer_tables.alamat as alamat_pelanggan',
                     DB::raw('CASE
                         WHEN sevices.created_at >= "' . date('Y-01-01') . '" THEN "current_year"
                         ELSE "previous_year_last_quarter"
@@ -1753,10 +1756,10 @@ class ServiceApiController extends Controller
             // Pencarian fleksibel
             $query->where(function ($q) use ($search) {
                 $q->where('sevices.nama_pelanggan', 'LIKE', "%$search%")
-                ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
-                ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
-                ->orWhere('sevices.no_telp', 'LIKE', "%$search%")
-                ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
+                    ->orWhere('sevices.type_unit', 'LIKE', "%$search%")
+                    ->orWhere('sevices.kode_service', 'LIKE', "%$search%")
+                    ->orWhere('sevices.no_telp', 'LIKE', "%$search%")
+                    ->orWhere('sevices.keterangan', 'LIKE', "%$search%");
             });
 
             // Filter tambahan
@@ -1795,9 +1798,9 @@ class ServiceApiController extends Controller
                     ->first();
 
                 $service->warranty_info = $warranty ? [
-                    'exists'         => true,
-                    'expiry_date'    => $warranty->tgl_exp_garansi,
-                    'status'         => $this->getWarrantyStatus($warranty->tgl_exp_garansi),
+                    'exists' => true,
+                    'expiry_date' => $warranty->tgl_exp_garansi,
+                    'status' => $this->getWarrantyStatus($warranty->tgl_exp_garansi),
                     'days_remaining' => now()->diffInDays($warranty->tgl_exp_garansi, false)
                 ] : ['exists' => false];
 
@@ -1815,26 +1818,26 @@ class ServiceApiController extends Controller
                     ->first();
 
                 $service->latest_note = $latestNote ? $latestNote->catatan_service : null;
-                $service->has_notes   = $latestNote != null;
+                $service->has_notes = $latestNote != null;
 
                 // Info pembayaran
                 $totalBiaya = (float) $service->total_biaya;
-                $dp         = (float) $service->dp;
-                $sisaBayar  = $totalBiaya - $dp;
+                $dp = (float) $service->dp;
+                $sisaBayar = $totalBiaya - $dp;
 
                 $service->payment_info = [
-                    'total_biaya'       => $totalBiaya,
-                    'dp_paid'           => $dp,
-                    'remaining'         => $sisaBayar,
-                    'is_fully_paid'     => $sisaBayar <= 0 || $service->status_services === 'Diambil',
-                    'payment_percentage'=> $totalBiaya > 0 ? round(($dp / $totalBiaya) * 100, 2) : 0
+                    'total_biaya' => $totalBiaya,
+                    'dp_paid' => $dp,
+                    'remaining' => $sisaBayar,
+                    'is_fully_paid' => $sisaBayar <= 0 || $service->status_services === 'Diambil',
+                    'payment_percentage' => $totalBiaya > 0 ? round(($dp / $totalBiaya) * 100, 2) : 0
                 ];
 
                 // Lama service (jika selesai)
                 if ($service->status_services === 'Selesai' && $service->tgl_service) {
                     $service->completion_time = [
                         'hours' => Carbon::parse($service->created_at)->diffInHours(Carbon::parse($service->tgl_service)),
-                        'days'  => Carbon::parse($service->created_at)->diffInDays(Carbon::parse($service->tgl_service))
+                        'days' => Carbon::parse($service->created_at)->diffInDays(Carbon::parse($service->tgl_service))
                     ];
                 }
 
@@ -1843,29 +1846,29 @@ class ServiceApiController extends Controller
 
             // Response final
             return response()->json([
-                'success'    => true,
-                'message'    => "Ditemukan {$totalCount} layanan yang cocok dengan pencarian.",
-                'data'       => $services,
+                'success' => true,
+                'message' => "Ditemukan {$totalCount} layanan yang cocok dengan pencarian.",
+                'data' => $services,
                 'pagination' => [
-                    'current_page'     => $page,
-                    'per_page'         => $limit,
-                    'total'            => $totalCount,
-                    'total_pages'      => ceil($totalCount / $limit),
-                    'has_next_page'    => $page < ceil($totalCount / $limit),
-                    'has_previous_page'=> $page > 1,
+                    'current_page' => $page,
+                    'per_page' => $limit,
+                    'total' => $totalCount,
+                    'total_pages' => ceil($totalCount / $limit),
+                    'has_next_page' => $page < ceil($totalCount / $limit),
+                    'has_previous_page' => $page > 1,
                 ],
-                'search_info'=> [
-                    'query'       => $search,
-                    'period'      => [
-                        'from'        => $dateFrom->format('Y-m-d'),
-                        'to'          => $dateTo->format('Y-m-d'),
+                'search_info' => [
+                    'query' => $search,
+                    'period' => [
+                        'from' => $dateFrom->format('Y-m-d'),
+                        'to' => $dateTo->format('Y-m-d'),
                         'description' => "Tahun {$currentYear} dan 3 bulan terakhir tahun " . ($currentYear - 1)
                     ],
-                    'filters'     => [
-                        'status'        => $status,
+                    'filters' => [
+                        'status' => $status,
                         'technician_id' => $technician_id,
-                        'sort_by'       => $sort_by,
-                        'sort_order'    => $sort_order
+                        'sort_by' => $sort_by,
+                        'sort_order' => $sort_order
                     ]
                 ]
             ], 200);
@@ -1893,11 +1896,11 @@ class ServiceApiController extends Controller
             $searchQuery = clone $baseQuery;
             $searchQuery->where(function ($q) use ($search) {
                 $q->where('nama_pelanggan', 'LIKE', "%$search%")
-                ->orWhere('type_unit', 'LIKE', "%$search%")
-                ->orWhere('kode_service', 'LIKE', "%$search%")
-                ->orWhere('no_hp', 'LIKE', "%$search%")
-                ->orWhere('keterangan', 'LIKE', "%$search%")
-                ->orWhere('alamat', 'LIKE', "%$search%");
+                    ->orWhere('type_unit', 'LIKE', "%$search%")
+                    ->orWhere('kode_service', 'LIKE', "%$search%")
+                    ->orWhere('no_hp', 'LIKE', "%$search%")
+                    ->orWhere('keterangan', 'LIKE', "%$search%")
+                    ->orWhere('alamat', 'LIKE', "%$search%");
             });
 
             $totalMatches = $searchQuery->count();
@@ -2012,9 +2015,9 @@ class ServiceApiController extends Controller
                     });
 
                 return $customerSuggestions->concat($deviceSuggestions)
-                                        ->concat($serviceCodes)
-                                        ->take($limit)
-                                        ->values();
+                    ->concat($serviceCodes)
+                    ->take($limit)
+                    ->values();
             });
 
             return response()->json([
@@ -2063,9 +2066,18 @@ class ServiceApiController extends Controller
             }
 
             $filters = $request->only([
-                'customer_name', 'device_type', 'phone_number', 'service_code',
-                'status', 'technician_id', 'date_from', 'date_to',
-                'min_amount', 'max_amount', 'has_warranty', 'payment_status'
+                'customer_name',
+                'device_type',
+                'phone_number',
+                'service_code',
+                'status',
+                'technician_id',
+                'date_from',
+                'date_to',
+                'min_amount',
+                'max_amount',
+                'has_warranty',
+                'payment_status'
             ]);
 
             $page = $request->get('page', 1);
@@ -2084,7 +2096,8 @@ class ServiceApiController extends Controller
             $result = Cache::remember($cacheKey, 300, function () use ($filters, $page, $limit) {
                 $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
                     ->leftJoin('users', 'sevices.id_teknisi', '=', 'users.id')
-                    ->select('sevices.*', 'users.name as teknisi');
+                    ->leftJoin('customer_tables', 'sevices.customer_id', '=', 'customer_tables.id')
+                    ->select('sevices.*', 'users.name as teknisi', 'customer_tables.alamat as alamat_pelanggan');
 
                 // Apply filters
                 if (!empty($filters['customer_name'])) {
@@ -2132,16 +2145,16 @@ class ServiceApiController extends Controller
                     if ($filters['has_warranty']) {
                         $query->whereExists(function ($q) {
                             $q->select(DB::raw(1))
-                            ->from('garansis')
-                            ->whereRaw('garansis.kode_garansi = sevices.kode_service')
-                            ->where('garansis.type_garansi', 'service');
+                                ->from('garansis')
+                                ->whereRaw('garansis.kode_garansi = sevices.kode_service')
+                                ->where('garansis.type_garansi', 'service');
                         });
                     } else {
                         $query->whereNotExists(function ($q) {
                             $q->select(DB::raw(1))
-                            ->from('garansis')
-                            ->whereRaw('garansis.kode_garansi = sevices.kode_service')
-                            ->where('garansis.type_garansi', 'service');
+                                ->from('garansis')
+                                ->whereRaw('garansis.kode_garansi = sevices.kode_service')
+                                ->where('garansis.type_garansi', 'service');
                         });
                     }
                 }
@@ -2166,9 +2179,9 @@ class ServiceApiController extends Controller
 
                 $totalCount = $query->count();
                 $services = $query->orderBy('sevices.created_at', 'desc')
-                                ->offset(($page - 1) * $limit)
-                                ->limit($limit)
-                                ->get();
+                    ->offset(($page - 1) * $limit)
+                    ->limit($limit)
+                    ->get();
 
                 return [
                     'data' => $services,
@@ -2226,9 +2239,9 @@ class ServiceApiController extends Controller
 
             // 2. Verifikasi Garansi (kode ini tetap sama)
             $warranty = \App\Models\Garansi::where('kode_garansi', $originalService->kode_service)
-                            ->where('type_garansi', 'service')
-                            ->where('tgl_exp_garansi', '>=', now())
-                            ->first();
+                ->where('type_garansi', 'service')
+                ->where('tgl_exp_garansi', '>=', now())
+                ->first();
 
             if (!$warranty) {
                 return response()->json([

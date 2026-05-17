@@ -140,6 +140,9 @@ class ServiceController extends Controller
             'no_telp' => $request->no_telp,
             'type_unit' => $request->type_unit,
             'keterangan' => $request->keterangan,
+            'tipe_sandi' => $request->tipe_sandi,
+            'isi_sandi' => $request->isi_sandi,
+            'data_unit' => $request->data_unit,
             'total_biaya' => $request->total_biaya,
             // 'created_at' => Carbon::now(),
         ]);
@@ -169,6 +172,9 @@ class ServiceController extends Controller
             'no_telp' => $request->no_telp,
             'type_unit' => $request->type_unit,
             'keterangan' => $request->keterangan,
+            'tipe_sandi' => $request->tipe_sandi,
+            'isi_sandi' => $request->isi_sandi,
+            'data_unit' => $request->data_unit,
             'dp' => $request->dp,
             'total_biaya' => $request->total_biaya,
             // 'created_at' => Carbon::now(),
@@ -304,12 +310,18 @@ class ServiceController extends Controller
             ]);
         }
 
-        $cek = DetailPartServices::where([['kode_services', '=', $request->kode_services], ['kode_sparepart', '=', $request->kode_sparepart]])->get()->first();
+        $cek = DetailPartServices::where([
+            ['kode_services', '=', $request->kode_services],
+            ['kode_sparepart', '=', $request->kode_sparepart],
+            ['is_tanggungan_teknisi', '=', $request->is_tanggungan_teknisi ?? 0]
+        ])->get()->first();
+
         if ($cek) {
             $update = DetailPartServices::findOrFail($cek->id);
             $qty_baru = $cek->qty_part + $request->qty_part;
             $update->update([
                 'qty_part' => $qty_baru,
+                'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
                 'user_input' => auth()->user()->id,
             ]);
             if ($update) {
@@ -344,6 +356,7 @@ class ServiceController extends Controller
                 'detail_modal_part_service' => $update_sparepart->harga_beli,
                 'detail_harga_part_service' => $update_sparepart->harga_jual,
                 'qty_part' => $request->qty_part,
+                'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
                 'user_input' => auth()->user()->id,
             ]);
             if ($create) {
@@ -411,6 +424,7 @@ class ServiceController extends Controller
             'nama_part' => $request->nama_part,
             'harga_part' => $request->harga_part,
             'qty_part' => $request->qty_part,
+            'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
             'user_input' => auth()->user()->id,
         ]);
         if ($create) {
@@ -430,6 +444,7 @@ class ServiceController extends Controller
             'nama_part' => $request->nama_part,
             'harga_part' => $request->harga_part,
             'qty_part' => $request->qty_part,
+            'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
             'user_input' => auth()->user()->id,
         ]);
         if ($update) {
@@ -623,45 +638,78 @@ class ServiceController extends Controller
             }
 
             if ($request->status_services == 'Selesai') {
-                // if ($this->getThisUser()->jabatan != '1') {
-                $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')->where([['kode_services', '=', $id]])->get(['detail_part_services.id as id_detail_part', 'detail_part_services.*', 'spareparts.*']);
-                $part_luar_toko_service = DetailPartLuarService::where([['kode_services', '=', $id]])->get();
-                $presentase = SalarySetting::where([['user_id', '=', $id_teknisi]])->get()->first();
+                $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+                    ->where('kode_services', $id)
+                    ->get(['detail_part_services.*', 'spareparts.harga_beli as current_harga_beli', 'spareparts.harga_jual as current_harga_jual']);
+                $part_luar_toko_service = DetailPartLuarService::where('kode_services', $id)->get();
+                $presentase = SalarySetting::where('user_id', $id_teknisi)->first();
 
-                $total_part = 0;
+                $total_part_harga_jual = 0; // Untuk ditagihkan ke customer
+                $total_part_modal_toko = 0; // Untuk hitung profit toko
+                $total_penalty_cost = 0; // Untuk potong saldo teknisi
+
                 foreach ($part_toko_service as $a) {
-                    $total_part += $a->harga_jual * $a->qty_part;
+                    $item_harga_jual = $a->detail_harga_part_service * $a->qty_part;
+                    $item_modal = $a->detail_modal_part_service * $a->qty_part;
+                    $item_harga_jual_teknisi = ($a->current_harga_jual ?: 0) * $a->qty_part;
+
+                    $total_part_harga_jual += $item_harga_jual;
+
+                    if ($a->is_tanggungan_teknisi) {
+                        // Diubah menggunakan harga jual part agar toko tidak rugi ketika teknisi memecahkan layar
+                        $total_penalty_cost += $item_harga_jual_teknisi;
+                    }
+                    else {
+                        // Jika part normal, modal part mengurangi profit toko
+                        $total_part_modal_toko += $item_modal;
+                    }
                 }
+
                 foreach ($part_luar_toko_service as $b) {
-                    $total_part += $b->harga_part * $b->qty_part;
+                    $item_harga = $b->harga_part * $b->qty_part;
+                    $total_part_harga_jual += $item_harga;
+
+                    if ($b->is_tanggungan_teknisi) {
+                        // Part luar biasanya harga jual = harga modal bagi toko. 
+                        // Jika dirusak teknisi, teknisi ganti seharga "harga beli/jual" part tersebut.
+                        $total_penalty_cost += $item_harga;
+                    }
+                    else {
+                        $total_part_modal_toko += $item_harga;
+                    }
                 }
-                // **Menambahkan total part ke kolom `part` di tabel `sevices`**
+
+                // Update total sparepart yang ditagihkan ke customer
                 $update->update([
-                    'harga_sp' => $total_part // Menambahkan total_part ke kolom 'part'
+                    'harga_sp' => $total_part_harga_jual
                 ]);
 
-                if ($presentase->compensation_type == 'percentage') {
+                if ($presentase && $presentase->compensation_type == 'percentage') {
+                    // Profit toko = (Biaya Service - Total Part Jual) + (Total Part Jual - Total Part Modal Normal)
+                    // Ringkasnya: Profit = Total Biaya - Total Part Modal Normal (yang tidak ganti rugi)
+                    $profit_servis = $update->total_biaya - $total_part_harga_jual; // Ini adalah Jasa
 
-                    $profit = $update->total_biaya - $total_part;
-                    $fix_profit = $profit * $presentase->percentage_value / 100;
+                    // Hitung komisi teknisi (biasanya dari Jasa)
+                    $base_commission = $profit_servis * $presentase->percentage_value / 100;
 
-                    //
-                    $pegawais = UserDetail::where([['kode_user', '=', $id_teknisi, ]])->get()->first();
+                    // Komisi Akhir = Komisi Dasar - Penalti Kerusakan
+                    $fix_profit = $base_commission - $total_penalty_cost;
 
+                    $pegawais = UserDetail::where('kode_user', $id_teknisi)->first();
 
-                    $komisi = ProfitPresentase::create([
-                        'tgl_profit' => date('Y-m-d'),
-                        'kode_service' => $id,
-                        'kode_presentase' => $presentase->id,
-                        'kode_user' => $id_teknisi,
-                        'profit' => $fix_profit,
-                        'saldo' => $pegawais->saldo,
-                    ]);
-                    if ($komisi) {
-                        $new_saldo = $pegawais->saldo + $fix_profit;
-                        $pegawais->update([
-                            'saldo' => $new_saldo
+                    if ($pegawais) {
+                        $komisi = ProfitPresentase::create([
+                            'tgl_profit' => date('Y-m-d'),
+                            'kode_service' => $id,
+                            'kode_presentase' => $presentase->id,
+                            'kode_user' => $id_teknisi,
+                            'profit' => $fix_profit,
+                            'saldo' => $pegawais->saldo + $fix_profit,
                         ]);
+
+                        if ($komisi) {
+                            $pegawais->increment('saldo', $fix_profit);
+                        }
                     }
                 }
 

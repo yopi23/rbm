@@ -13,6 +13,7 @@ class DetailPartLuarService extends Model
         'nama_part',
         'harga_part',
         'qty_part',
+        'is_tanggungan_teknisi',
         'user_input',
     ];
 }

@@ -20,10 +20,19 @@ use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 
+use App\Services\FinancialService;
+
 class DistribusiLabaController extends Controller
 {
     use ManajemenKasTrait;
     use OperationalDateTrait;
+
+    protected FinancialService $financialService;
+
+    public function __construct(FinancialService $financialService)
+    {
+        $this->financialService = $financialService;
+    }
 
     private function getOwnerId()
     {
@@ -66,9 +75,9 @@ class DistribusiLabaController extends Controller
             'page',
             'settings',
             'histori',
-            'summary',      // Kirim data summary ke view
-            'startDate',    // Kirim tanggal filter ke view
-            'endDate'       // Kirim tanggal filter ke view
+            'summary', // Kirim data summary ke view
+            'startDate', // Kirim tanggal filter ke view
+            'endDate' // Kirim tanggal filter ke view
         ));
         return view('admin.layout.blank_page', compact('page', 'content'));
     }
@@ -95,8 +104,8 @@ class DistribusiLabaController extends Controller
         $ownerId = $this->getOwnerId();
         foreach ($request->persentase as $role => $persen) {
             DistribusiSetting::updateOrCreate(
-                ['kode_owner' => $ownerId, 'role' => $role],
-                ['persentase' => $persen]
+            ['kode_owner' => $ownerId, 'role' => $role],
+            ['persentase' => $persen]
             );
         }
         return redirect()->route('distribusi.index')->with('success', 'Pengaturan persentase distribusi berhasil disimpan.');
@@ -112,16 +121,16 @@ class DistribusiLabaController extends Controller
 
         // 1. Cek apakah laba untuk tanggal operasional ini sudah pernah didistribusikan
         $cekSudahDistribusi = DistribusiLaba::where('kode_owner', $ownerId)
-                                ->where('tanggal_mulai', $tanggalOperasional)
-                                ->where('tanggal_selesai', $tanggalOperasional)
-                                ->exists();
+            ->where('tanggal_mulai', $tanggalOperasional)
+            ->where('tanggal_selesai', $tanggalOperasional)
+            ->exists();
 
         if ($cekSudahDistribusi) {
             return back()->with('error', 'Laba untuk tanggal ' . Carbon::parse($tanggalOperasional)->format('d/m/Y') . ' sudah didistribusikan sebelumnya.');
         }
 
-        // 2. Hitung Laba Bersih untuk HARI OPERASIONAL yang dipilih menggunakan metode Akrual/HPP
-        $labaResult = $this->hitungLabaBersih($tanggalOperasional, $tanggalOperasional);
+        // 2. Hitung Laba Bersih untuk HARI OPERASIONAL yang dipilih menggunakan FinancialService
+        $labaResult = $this->financialService->calculateNetProfit($ownerId, $tanggalOperasional, $tanggalOperasional);
         $labaBersihHarian = $labaResult['laba_bersih'];
 
         // 3. Jika tidak ada laba (rugi atau impas), batalkan proses
@@ -134,7 +143,7 @@ class DistribusiLabaController extends Controller
             $ownerId,
             $labaBersihHarian,
             $labaResult['laba_kotor'],
-            $labaResult['total_pendapatan'],
+            $labaResult['revenue'],
             $tanggalOperasional,
             $tanggalOperasional
         );
@@ -163,8 +172,8 @@ class DistribusiLabaController extends Controller
 
         if ($cekTumpangTindih) {
             $pesanError = "Gagal memproses. Sebagian atau seluruh tanggal dalam rentang yang Anda pilih sudah pernah didistribusikan sebelumnya dalam periode " .
-                        Carbon::parse($cekTumpangTindih->tanggal_mulai)->format('d/m/Y') . " - " .
-                        Carbon::parse($cekTumpangTindih->tanggal_selesai)->format('d/m/Y') . ".";
+                Carbon::parse($cekTumpangTindih->tanggal_mulai)->format('d/m/Y') . " - " .
+                Carbon::parse($cekTumpangTindih->tanggal_selesai)->format('d/m/Y') . ".";
             return back()->with('error', $pesanError);
         }
         // ==========================================================
@@ -173,8 +182,7 @@ class DistribusiLabaController extends Controller
 
 
         // Buat query dasar untuk rentang tanggal yang dipilih
-        // PERBAIKAN KECIL: Argumen hitungLabaBersih harus string tanggal
-        $labaResult = $this->hitungLabaBersih($request->start_date, $request->end_date);
+        $labaResult = $this->financialService->calculateNetProfit($ownerId, $request->start_date, $request->end_date);
         $labaBersihPeriodik = $labaResult['laba_bersih'];
 
         if ($labaBersihPeriodik <= 0) {
@@ -183,101 +191,10 @@ class DistribusiLabaController extends Controller
 
         // Lanjutkan proses distribusi
         return $this->distribusikanLaba(
-            $ownerId, $labaBersihPeriodik, $labaResult['laba_kotor'], $labaResult['total_pendapatan'], $startDate, $endDate
+            $ownerId, $labaBersihPeriodik, $labaResult['laba_kotor'], $labaResult['revenue'], $startDate, $endDate
         );
     }
 
-    /**
-     * Fungsi terpusat untuk menghitung laba bersih dengan metode HPP.
-     * Menerima query builder dari kas_perusahaan sebagai input.
-     */
-    private function hitungLabaBersih(string $tanggalMulai, string $tanggalSelesai): array
-    {
-        $ownerId = $this->getOwnerId();
-        $startRange = \Carbon\Carbon::parse($tanggalMulai)->startOfDay();
-        $endRange = \Carbon\Carbon::parse($tanggalSelesai)->endOfDay();
-
-        // A. Perhitungan Pendapatan (Sudah Benar)
-        $totalPendapatanPenjualan = \App\Models\Penjualan::where('kode_owner', $ownerId)->where('status_penjualan', '1')->whereBetween('updated_at', [$startRange, $endRange])->sum('total_penjualan');
-        $totalPendapatanService = \App\Models\Sevices::where('kode_owner', $ownerId)->where('status_services', 'Diambil')->whereBetween('updated_at', [$startRange, $endRange])->sum('total_biaya');
-        $totalPendapatan = $totalPendapatanPenjualan + $totalPendapatanService;
-
-        // B. Perhitungan HPP (Sudah Benar)
-        $penjualanIds = \App\Models\Penjualan::where('kode_owner', $ownerId)->where('status_penjualan', '1')->whereBetween('updated_at', [$startRange, $endRange])->pluck('id');
-        $hppSparepartJual = \App\Models\DetailSparepartPenjualan::whereIn('kode_penjualan', $penjualanIds)->sum(DB::raw('detail_harga_modal * qty_sparepart'));
-        $hppBarangJual = \App\Models\DetailBarangPenjualan::whereIn('kode_penjualan', $penjualanIds)->sum(DB::raw('detail_harga_modal * qty_barang'));
-        $serviceIdsDiambil = \App\Models\Sevices::where('kode_owner', $ownerId)->where('status_services', 'Diambil')->whereBetween('updated_at', [$startRange, $endRange])->pluck('id');
-        $hppPartTokoService = \App\Models\DetailPartServices::whereIn('kode_services', $serviceIdsDiambil)->sum(DB::raw('detail_modal_part_service * qty_part'));
-        $hppPartLuarService = \App\Models\DetailPartLuarService::whereIn('kode_services', $serviceIdsDiambil)->sum(DB::raw('harga_part * qty_part'));
-        $totalHpp = $hppSparepartJual + $hppBarangJual + $hppPartTokoService + $hppPartLuarService;
-
-        // C. Laba Kotor (Sudah Benar)
-        $labaKotor = $totalPendapatan - $totalHpp;
-
-        // D. Biaya Variabel (Sudah Benar)
-        $biayaOperasionalInsidental = \App\Models\PengeluaranToko::where('kode_owner', $ownerId)
-            ->whereBetween('tanggal_pengeluaran', [$startRange, $endRange])
-            ->sum('jumlah_pengeluaran');
-        $serviceIdsSelesai = \App\Models\Sevices::where('kode_owner', $ownerId)->whereIn('status_services', ['Selesai','Diambil'])->whereBetween('updated_at', [$startRange, $endRange])->pluck('id');
-        $biayaKomisi = \App\Models\ProfitPresentase::whereIn('kode_service', $serviceIdsSelesai)->sum('profit');
-
-
-        // ======================================================================
-        //          👇 BLOK PERHITUNGAN BEBAN TETAP & PENYUSUTAN YANG DIPERBARUI 👇
-        // ======================================================================
-        $jumlahHariPeriode = $startRange->diffInDays($endRange) + 1;
-
-        // 🌟 PENAMBAHAN: PERHITUNGAN BEBAN GAJI TETAP 🌟
-        $userIds = \App\Models\UserDetail::where('id_upline', $ownerId)->pluck('kode_user');
-        $totalGajiTetapBulanan = \App\Models\SalarySetting::whereIn('user_id', $userIds)
-            ->where('compensation_type', 'fixed')
-            ->sum('basic_salary');
-        $bebanGajiHarian = ($startRange->daysInMonth > 0) ? $totalGajiTetapBulanan / $startRange->daysInMonth : 0;
-        $bebanGajiTetapPeriodik = $bebanGajiHarian * $jumlahHariPeriode;
-
-
-        // E.1 Beban dari Aset Tetap (Penyusutan)
-        $totalPenyusutanBulanan = \App\Models\Aset::where('kode_owner', $ownerId)->sum(DB::raw('(nilai_perolehan - nilai_residu) / masa_manfaat_bulan'));
-        $bebanPenyusutanHarian = ($startRange->daysInMonth > 0) ? $totalPenyusutanBulanan / $startRange->daysInMonth : 0;
-        $bebanPenyusutanPeriodik = $bebanPenyusutanHarian * $jumlahHariPeriode;
-
-        // E.2 Beban dari Operasional Tetap (Bulanan & Tahunan) - Logika Baru
-        $totalBebanBulanan = \App\Models\BebanOperasional::where('kode_owner', $ownerId)
-            ->where('periode', 'bulanan')->sum('nominal');
-        $totalBebanTahunan = \App\Models\BebanOperasional::where('kode_owner', $ownerId)
-            ->where('periode', 'tahunan')->sum('nominal');
-
-        $bebanHarianDariBulanan = ($startRange->daysInMonth > 0) ? $totalBebanBulanan / $startRange->daysInMonth : 0;
-        $bebanHarianDariTahunan = ($startRange->daysInYear > 0) ? $totalBebanTahunan / $startRange->daysInYear : 0;
-
-        $totalBebanTetapHarian = $bebanHarianDariBulanan + $bebanHarianDariTahunan;
-        $bebanTetapPeriodik = $totalBebanTetapHarian * $jumlahHariPeriode;
-        // ======================================================================
-
-        // F. Hitung Laba Bersih Final
-        $labaBersih = $labaKotor - $biayaOperasionalInsidental - $biayaKomisi - $bebanPenyusutanPeriodik - $bebanTetapPeriodik;
-
-        Log::info('--- PERHITUNGAN LABA BERSIH AKRUAL (DistribusiLabaController) ---', [
-            'Periode' => $startRange->format('Y-m-d') . ' to ' . $endRange->format('Y-m-d'),
-            'Total Pendapatan Diakui' => $totalPendapatan, 'Total HPP' => $totalHpp, 'Laba Kotor' => $labaKotor,
-            'Biaya Op. Insidental' => $biayaOperasionalInsidental, 'Biaya Komisi Teknisi' => $biayaKomisi,
-            'Beban Penyusutan' => $bebanPenyusutanPeriodik, 'Beban Tetap' => $bebanTetapPeriodik,
-            'Laba Bersih Final' => $labaBersih
-        ]);
-
-        return [
-            'laba_bersih' => $labaBersih,
-            'laba_kotor' => $labaKotor,
-            'total_pendapatan' => $totalPendapatan,
-            'beban' => [
-                'Biaya Operasional Insidental' => $biayaOperasionalInsidental,
-                'Biaya Komisi Teknisi' => $biayaKomisi,
-                'Beban Gaji Tetap' => $bebanGajiTetapPeriodik,
-                'Beban Penyusutan Periodik' => $bebanPenyusutanPeriodik,
-                'Beban Tetap Periodik' => $bebanTetapPeriodik,
-            ]
-        ];
-    }
 
     /**
      * Fungsi terpusat untuk memproses alokasi dan penyimpanan distribusi laba.
@@ -356,7 +273,8 @@ class DistribusiLabaController extends Controller
 
             DB::commit();
             return redirect()->route('distribusi.laporan')->with('success', "Distribusi laba berhasil dialokasikan. Saldo kas perusahaan tidak berubah.");
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             DB::rollBack();
             return back()->with('error', 'Terjadi kesalahan saat alokasi: ' . $e->getMessage());
         }
@@ -381,8 +299,8 @@ class DistribusiLabaController extends Controller
 
         // QUERY YANG LEBIH SEDERHANA DAN AMAN
         $query = AlokasiLaba::where('kode_owner', $ownerId)
-                           ->with('distribusiLaba')
-                           ->orderBy('created_at', 'desc');
+            ->with('distribusiLaba')
+            ->orderBy('created_at', 'desc');
 
         // Filter Laporan
         if ($request->filled('start_date') && $request->filled('end_date')) {
@@ -450,12 +368,13 @@ class DistribusiLabaController extends Controller
             // Update status alokasi yang relevan menjadi "ditarik"
             $alokasiTersedia = AlokasiLaba::where('role', $role)->where('status', 'dialokasikan')
                 ->whereHas('distribusiLaba', function ($q) use ($ownerId) {
-                    $q->where('kode_owner', $ownerId);
-                })->orderBy('created_at', 'asc')->get();
+                $q->where('kode_owner', $ownerId);
+            })->orderBy('created_at', 'asc')->get();
 
             $sisaUntukDitarik = $jumlahPenarikan;
             foreach ($alokasiTersedia as $alokasi) {
-                if ($sisaUntukDitarik <= 0) break;
+                if ($sisaUntukDitarik <= 0)
+                    break;
 
                 $bisaDiambilDariAlokasiIni = min($alokasi->jumlah, $sisaUntukDitarik);
 
@@ -470,7 +389,8 @@ class DistribusiLabaController extends Controller
 
                 if ($bisaDiambilDariAlokasiIni >= $alokasi->jumlah) {
                     $alokasi->update(['status' => 'ditarik']);
-                } else {
+                }
+                else {
                     $alokasi->decrement('jumlah', $bisaDiambilDariAlokasiIni);
                 }
                 $sisaUntukDitarik -= $bisaDiambilDariAlokasiIni;
@@ -478,7 +398,8 @@ class DistribusiLabaController extends Controller
 
             DB::commit();
             return redirect()->route('distribusi.pencairan')->with('success', 'Dana berhasil dicairkan.');
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             DB::rollBack();
             return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
         }
@@ -504,10 +425,10 @@ class DistribusiLabaController extends Controller
         }
 
         // 3. Hitung Laba Bersih dan dapatkan semua komponennya
-        $labaResult = $this->hitungLabaBersih($tanggalOperasional, $tanggalOperasional);
+        $labaResult = $this->financialService->calculateNetProfit($ownerId, $tanggalOperasional, $tanggalOperasional);
         $labaBersihHarian = $labaResult['laba_bersih'];
         $labaKotor = $labaResult['laba_kotor'];
-        $beban = $labaResult['beban']; // Ambil data beban
+        $beban = $labaResult['detail_beban']; // Ambil data beban
 
         // 4. Jika tidak ada laba, kirim response
         if ($labaBersihHarian <= 0) {

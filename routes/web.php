@@ -45,6 +45,7 @@ use App\Http\Controllers\Administrator\TokenController;
 use App\Http\Controllers\Administrator\PlanController;
 use App\Http\Controllers\Administrator\SubscriptionLogController;
 use App\Http\Controllers\Admin\PriceSettingController;
+use App\Http\Controllers\Admin\MarkupHargaController;
 use App\Http\Controllers\Admin\AttributeController;
 use App\Http\Controllers\Admin\AttributeValueController;
 use App\Http\Controllers\Admin\ReviewController;
@@ -564,6 +565,11 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
         Route::get('pengaturan-harga', [PriceSettingController::class, 'index'])->name('price-settings.index');
         Route::post('pengaturan-harga', [PriceSettingController::class, 'storeOrUpdate'])->name('price-settings.store');
         Route::get('pengaturan-harga/form', [PriceSettingController::class, 'form'])->name('price-settings.form');
+
+        // Quick Price Markup Routes
+        Route::get('markup-harga', [MarkupHargaController::class, 'index'])->name('markup.index');
+        Route::get('markup-harga/data', [MarkupHargaController::class, 'getData'])->name('markup.data');
+        Route::post('markup-harga/update', [MarkupHargaController::class, 'update'])->name('markup.update');
 
         Route::resource('attributes', AttributeController::class);
         Route::post('attributes/{attribute}/values', [AttributeValueController::class, 'store'])->name('attribute-values.store');

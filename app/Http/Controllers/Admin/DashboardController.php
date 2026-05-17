@@ -320,6 +320,9 @@ class DashboardController extends Controller
         $validate = $request->validate([
             'kode_service' => ['required'],
             'tgl_service' => ['required'],
+            'tipe_sandi' => ['nullable', 'string', \Illuminate\Validation\Rule::in(['pola', 'pin', 'teks'])],
+            'isi_sandi' => ['nullable', 'string', 'required_with:tipe_sandi'],
+            'data_unit' => ['nullable', 'json'],
         ]);
         if ($validate) {
             // Cek apakah kode service sudah ada dalam database
@@ -347,6 +350,9 @@ class DashboardController extends Controller
                 'no_telp' => $request->no_telp,
                 'type_unit' => $request->type_unit,
                 'keterangan' => $request->ket,
+                'tipe_sandi' => $request->tipe_sandi,
+                'isi_sandi' => $request->isi_sandi,
+                'data_unit' => $request->data_unit,
                 'total_biaya' => $request->biaya_servis,
                 'dp' => $request->dp,
                 'dp_metode' => $dpMetode,
@@ -402,10 +408,11 @@ class DashboardController extends Controller
                             $update_sparepart = Sparepart::findOrFail($request['kode_sparepart'][$i]);
                             DetailPartServices::create([
                                 'kode_services' => $data_service->id,
-                                'kode_sparepart' => $request['kode_sparepart'][$i],
+                                'kode_sparepart' => $request->kode_sparepart[$i],
                                 'detail_modal_part_service' => $update_sparepart->harga_beli,
                                 'detail_harga_part_service' => $update_sparepart->harga_jual,
-                                'qty_part' => $request['qty_kode_sparepart'][$i],
+                                'qty_part' => $request->qty_kode_sparepart[$i],
+                                'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi[$i] ?? 0,
                                 'user_input' => auth()->user()->id,
                             ]);
                             $stok_awal = $update_sparepart->stok_sparepart;
@@ -899,7 +906,7 @@ class DashboardController extends Controller
     public function get_pending_services(Request $request)
     {
         // Ambil data service dengan status 'Antri'
-        $services = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
+        $services = modelServices::with('customer')->where('kode_owner', $this->getThisUser()->id_upline)
             ->whereIn('status_services', ['Antri', 'Proses'])
             ->latest()
             ->get();

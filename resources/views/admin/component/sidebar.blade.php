@@ -523,7 +523,14 @@
                                      <a href="{{ route('price-settings.index') }}"
                                          class="nav-link @yield('price-settings.index')">
                                          <i class="far fa-circle nav-icon"></i>
-                                         <p>pengaturan harga</p>
+                                         <p>Pengaturan Harga</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('markup.index') }}"
+                                         class="nav-link @yield('markup.index')">
+                                         <i class="fas fa-tags nav-icon"></i>
+                                         <p>Markup Harga</p>
                                      </a>
                                  </li>
                              </ul>

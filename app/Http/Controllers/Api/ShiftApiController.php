@@ -142,14 +142,33 @@ class ShiftApiController extends Controller
         // - Pembelian (Purchases) → Tidak dari laci, dari kas toko/safe supplier
         // - Hutang (Dept Payment) → Pembayaran hutang, dari kas toko bukan laci
         //
+        $excludedTypes = [
+            'App\Models\Pembelian',
+            'App\Models\Hutang',
+            'App\Models\Penarikan',
+            'App\Models\AlokasiLaba',
+            'App\Models\DistribusiLaba'
+        ];
+
         $cashIn = $shift->kasPerusahaan()
             ->where('is_cash', true)
-            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+            ->whereNotIn('sourceable_type', $excludedTypes)
             ->sum('debit');
 
         $cashOut = $shift->kasPerusahaan()
             ->where('is_cash', true)
-            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+            ->whereNotIn('sourceable_type', $excludedTypes)
+            ->sum('kredit');
+
+        // Transfer / Non-Tunai
+        $transferIn = $shift->kasPerusahaan()
+            ->where('is_cash', false)
+            ->whereNotIn('sourceable_type', $excludedTypes)
+            ->sum('debit');
+
+        $transferOut = $shift->kasPerusahaan()
+            ->where('is_cash', false)
+            ->whereNotIn('sourceable_type', $excludedTypes)
             ->sum('kredit');
 
         $expectedCash = $shift->modal_awal + $cashIn - $cashOut;
@@ -160,6 +179,8 @@ class ShiftApiController extends Controller
         $reportData = [
             'cash_in' => $cashIn,
             'cash_out' => $cashOut,
+            'transfer_in' => $transferIn,
+            'transfer_out' => $transferOut,
             'expected_cash' => $expectedCash,
             'sparepart_analysis' => $sparepartReport,
             'closed_at' => now()->toDateTimeString(),
@@ -217,7 +238,13 @@ class ShiftApiController extends Controller
         }
 
         $mutasiDetails = $shift->kasPerusahaan()
-            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+            ->whereNotIn('sourceable_type', [
+            'App\Models\Pembelian',
+            'App\Models\Hutang',
+            'App\Models\Penarikan',
+            'App\Models\AlokasiLaba',
+            'App\Models\DistribusiLaba'
+        ])
             ->orderBy('tanggal', 'asc')
             ->get()
             ->map(function ($kas) {
@@ -241,6 +268,8 @@ class ShiftApiController extends Controller
                     'modal_awal' => $shift->modal_awal,
                     'cash_in' => $cashIn,
                     'cash_out' => $cashOut,
+                    'transfer_in' => $transferIn,
+                    'transfer_out' => $transferOut,
                     'expected_cash' => $expectedCash,
                     'actual_cash' => $saldoAkhirAktual,
                     'difference' => $selisih,
@@ -364,16 +393,35 @@ class ShiftApiController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
         }
 
+        $excludedTypes = [
+            'App\Models\Pembelian',
+            'App\Models\Hutang',
+            'App\Models\Penarikan',
+            'App\Models\AlokasiLaba',
+            'App\Models\DistribusiLaba'
+        ];
+
         $baseQuery = clone $shift->kasPerusahaan();
 
         $cashIn = (clone $baseQuery)
             ->where('is_cash', true)
-            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+            ->whereNotIn('sourceable_type', $excludedTypes)
             ->sum('debit') ?? 0;
 
         $cashOut = (clone $baseQuery)
             ->where('is_cash', true)
-            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
+            ->whereNotIn('sourceable_type', $excludedTypes)
+            ->sum('kredit') ?? 0;
+
+        // Transfer / Non-Tunai
+        $transferIn = (clone $baseQuery)
+            ->where('is_cash', false)
+            ->whereNotIn('sourceable_type', $excludedTypes)
+            ->sum('debit') ?? 0;
+
+        $transferOut = (clone $baseQuery)
+            ->where('is_cash', false)
+            ->whereNotIn('sourceable_type', $excludedTypes)
             ->sum('kredit') ?? 0;
 
         $sparepartReport = [];
@@ -385,10 +433,14 @@ class ShiftApiController extends Controller
             // Override with snapshot if valid
             $cashIn = $reportDataRaw['cash_in'] ?? $cashIn;
             $cashOut = $reportDataRaw['cash_out'] ?? $cashOut;
+            $transferIn = $reportDataRaw['transfer_in'] ?? $transferIn;
+            $transferOut = $reportDataRaw['transfer_out'] ?? $transferOut;
         }
         else {
             $sparepartReport = $this->getSparepartAnalysis($shift);
         }
+
+        $totalPendapatan = $cashIn + $transferIn;
 
         return response()->json([
             'success' => true,
@@ -398,6 +450,9 @@ class ShiftApiController extends Controller
                     'modal_awal' => $shift->modal_awal,
                     'cash_in' => $cashIn,
                     'cash_out' => $cashOut,
+                    'transfer_in' => $transferIn,
+                    'transfer_out' => $transferOut,
+                    'total_pendapatan' => $totalPendapatan,
                     'expected_cash' => $shift->saldo_akhir_sistem ?? ($shift->modal_awal + $cashIn - $cashOut),
                     'actual_cash' => $shift->saldo_akhir_aktual,
                     'selisih' => $shift->selisih,

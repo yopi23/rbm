@@ -89,4 +89,9 @@ class Sevices extends Model
             ->withTimestamps();
     }
 
+    public function customer()
+    {
+        return $this->belongsTo(customer_table::class , 'customer_id');
+    }
+
 }
