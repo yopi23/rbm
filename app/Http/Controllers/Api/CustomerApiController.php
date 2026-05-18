@@ -198,8 +198,12 @@ class CustomerApiController extends Controller
         // Hapus field API yang tidak ada di DB agar tidak error SQL
         unset($updateData['nama_pelanggan'], $updateData['alamat_toko'], $updateData['nomor_toko'], $updateData['status_toko']);
 
+        \Illuminate\Support\Facades\Log::info("Update Customer ID: $id", $updateData);
+
         // Update data customer
-        $customer->update($updateData);
+        $updated = $customer->update($updateData);
+
+        \Illuminate\Support\Facades\Log::info("Update Result: ", ['updated' => $updated, 'customer_now' => $customer->fresh()->toArray()]);
 
         return response()->json([
             'success' => true,
