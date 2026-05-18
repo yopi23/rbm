@@ -161,15 +161,18 @@ class CustomerApiController extends Controller
             ], 404);
         }
 
-        // Validasi data input
+        // Validasi data input (Menerima versi API dan versi DB)
         $validator = Validator::make($request->all(), [
-            'nama_pelanggan' => 'required|string|max:255',
-            'nama_toko' => 'required|string|max:255',
-            'alamat_toko' => 'required|string',
-            'status_toko' => 'required|in:biasa,konter,glosir,super',
-            'nomor_toko' => 'required|string|max:15',
-            'kode_toko' => 'required|string|unique:customer_tables,kode_toko,'.$id,
-            // kode_owner tetap dalam validasi jika disediakan dalam request
+            'nama_pelanggan' => 'sometimes|required|string|max:255',
+            'nama_kontak' => 'sometimes|required|string|max:255',
+            'nama_toko' => 'sometimes|required|string|max:255',
+            'alamat_toko' => 'sometimes|required|string',
+            'alamat' => 'sometimes|required|string',
+            'status_toko' => 'sometimes|required|in:biasa,konter,glosir,super',
+            'tipe_pelanggan' => 'sometimes|required|in:Retail,Grosir,biasa,konter,glosir,super',
+            'nomor_toko' => 'sometimes|required|string|max:25',
+            'nomor_telepon' => 'sometimes|required|string|max:25',
+            'kode_toko' => 'sometimes|required|string|unique:customer_tables,kode_toko,'.$id,
             'kode_owner' => 'sometimes|required|string',
         ]);
 
@@ -181,8 +184,22 @@ class CustomerApiController extends Controller
             ], 422);
         }
 
+        // Map request data ke field database yang sebenarnya
+        $updateData = $request->all();
+        
+        if ($request->has('nama_pelanggan')) $updateData['nama_kontak'] = $request->nama_pelanggan;
+        if ($request->has('alamat_toko')) $updateData['alamat'] = $request->alamat_toko;
+        if ($request->has('nomor_toko')) $updateData['nomor_telepon'] = $request->nomor_toko;
+        
+        if ($request->has('status_toko')) {
+            $updateData['tipe_pelanggan'] = in_array($request->status_toko, ['glosir', 'super']) ? 'Grosir' : 'Retail';
+        }
+
+        // Hapus field API yang tidak ada di DB agar tidak error SQL
+        unset($updateData['nama_pelanggan'], $updateData['alamat_toko'], $updateData['nomor_toko'], $updateData['status_toko']);
+
         // Update data customer
-        $customer->update($request->all());
+        $customer->update($updateData);
 
         return response()->json([
             'success' => true,
