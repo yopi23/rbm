@@ -1546,7 +1546,8 @@ class SparepartApiController extends Controller
             'nama_part' => 'required|string',
             'harga_part' => 'required|numeric|min:0',
             'qty_part' => 'required|integer|min:1',
-            'is_tanggungan_teknisi' => 'nullable|boolean'
+            'is_tanggungan_teknisi' => 'nullable|boolean',
+            'is_potong_kas' => 'nullable|boolean'
         ]);
 
         if ($validator->fails()) {
@@ -1568,14 +1569,17 @@ class SparepartApiController extends Controller
                 'nama_part' => $request->nama_part,
                 'harga_part' => $request->harga_part,
                 'qty_part' => $request->qty_part,
+                'is_potong_kas' => $request->has('is_potong_kas') ? $request->is_potong_kas : 1,
                 'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
                 'user_input' => auth()->user()->id,
             ]);
 
-            // PERUBAHAN: Hitung total biaya dan catat sebagai kas keluar
-            $totalCost = $request->harga_part * $request->qty_part;
-            $deskripsi = "Biaya Part Luar: {$request->nama_part} (x{$request->qty_part}) untuk Service {$service->kode_service}";
-            $this->catatKas($service, 0, $totalCost, $deskripsi);
+            // PERUBAHAN: Hitung total biaya dan catat sebagai kas keluar JIKA is_potong_kas true
+            if ($create->is_potong_kas) {
+                $totalCost = $request->harga_part * $request->qty_part;
+                $deskripsi = "Biaya Part Luar: {$request->nama_part} (x{$request->qty_part}) untuk Service {$service->kode_service}";
+                $this->catatKas($service, 0, $totalCost, $deskripsi);
+            }
 
             // Lanjutkan dengan kalkulasi komisi
             $this->performCommissionRecalculation($serviceId);
@@ -1614,7 +1618,8 @@ class SparepartApiController extends Controller
             'nama_part' => 'required|string',
             'harga_part' => 'required|numeric|min:0',
             'qty_part' => 'required|integer|min:1',
-            'is_tanggungan_teknisi' => 'nullable|boolean'
+            'is_tanggungan_teknisi' => 'nullable|boolean',
+            'is_potong_kas' => 'nullable|boolean'
         ]);
 
         if ($validator->fails()) {
@@ -1633,25 +1638,35 @@ class SparepartApiController extends Controller
 
             // PERUBAHAN: Hitung biaya lama sebelum update
             $oldCost = $update->harga_part * $update->qty_part;
+            $is_potong_kas_baru = $request->has('is_potong_kas') ? $request->is_potong_kas : $update->is_potong_kas;
+
+            $newCost = $request->harga_part * $request->qty_part;
+            $deskripsi = "Update Biaya Part Luar: {$request->nama_part} untuk Service {$service->kode_service}";
+
+            if ($update->is_potong_kas && !$is_potong_kas_baru) {
+                // Sebelumnya memotong kas, sekarang tidak. Refund old cost.
+                $this->catatKas($service, $oldCost, 0, "Refund " . $deskripsi);
+            } elseif (!$update->is_potong_kas && $is_potong_kas_baru) {
+                // Sebelumnya tidak memotong kas, sekarang memotong. Tagih new cost.
+                $this->catatKas($service, 0, $newCost, "Charge " . $deskripsi);
+            } elseif ($update->is_potong_kas && $is_potong_kas_baru) {
+                // Keduanya memotong kas. Hitung selisih.
+                $costDifference = $newCost - $oldCost;
+                if ($costDifference > 0) {
+                    $this->catatKas($service, 0, $costDifference, $deskripsi);
+                } elseif ($costDifference < 0) {
+                    $this->catatKas($service, abs($costDifference), 0, $deskripsi);
+                }
+            }
 
             $update->update([
                 'nama_part' => $request->nama_part,
                 'harga_part' => $request->harga_part,
                 'qty_part' => $request->qty_part,
+                'is_potong_kas' => $is_potong_kas_baru,
                 'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? $update->is_tanggungan_teknisi,
                 'user_input' => auth()->user()->id,
             ]);
-
-            // PERUBAHAN: Hitung selisih biaya dan catat ke kas
-            $newCost = $request->harga_part * $request->qty_part;
-            $costDifference = $newCost - $oldCost;
-            $deskripsi = "Update Biaya Part Luar: {$request->nama_part} untuk Service {$service->kode_service}";
-
-            if ($costDifference > 0) {
-                $this->catatKas($service, 0, $costDifference, $deskripsi);
-            } elseif ($costDifference < 0) {
-                $this->catatKas($service, abs($costDifference), 0, $deskripsi);
-            }
 
             $this->performCommissionRecalculation($serviceId);
 
@@ -1702,11 +1717,13 @@ class SparepartApiController extends Controller
             $totalCostReversed = $data->harga_part * $data->qty_part;
             $deskripsi = "Koreksi/Hapus Part Luar: {$data->nama_part} (x{$data->qty_part}) untuk Service {$service->kode_service}";
 
+            // PERUBAHAN: Catat pengembalian sebagai kas masuk HANYA JIKA sebelumnya memotong kas
+            if ($data->is_potong_kas) {
+                $this->catatKas($service, $totalCostReversed, 0, $deskripsi);
+            }
+
             // Hapus data part luar
             $data->delete();
-
-            // PERUBAHAN: Catat pengembalian sebagai kas masuk
-            $this->catatKas($service, $totalCostReversed, 0, $deskripsi);
 
             // Lanjutkan dengan kalkulasi komisi
             $this->performCommissionRecalculation($serviceId);
@@ -2007,7 +2024,8 @@ class SparepartApiController extends Controller
             'nama_part' => 'required|string',
             'harga_part' => 'required|numeric|min:0',
             'qty_part' => 'required|integer|min:1',
-            'is_tanggungan_teknisi' => 'nullable|boolean'
+            'is_tanggungan_teknisi' => 'nullable|boolean',
+            'is_potong_kas' => 'nullable|boolean'
         ]);
 
         DB::beginTransaction(); // PERUBAHAN: Menggunakan transaksi database untuk keamanan
@@ -2022,16 +2040,15 @@ class SparepartApiController extends Controller
                 'nama_part' => $request->nama_part,
                 'harga_part' => $request->harga_part,
                 'qty_part' => $request->qty_part,
+                'is_potong_kas' => $request->has('is_potong_kas') ? $request->is_potong_kas : 1,
                 'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
                 'user_input' => auth()->user()->id,
             ]);
 
-            // PERUBAHAN: Hitung total biaya dan catat sebagai kas keluar
+            // PERUBAHAN: Hitung total biaya dan catat sebagai kas keluar JIKA is_potong_kas true
             $totalCost = $request->harga_part * $request->qty_part;
-            $deskripsi = "Biaya Part Luar: {$request->nama_part} (x{$request->qty_part}) untuk Service {$service->kode_service}";
-            // $this->catatKas($service, 0, $totalCost, $deskripsi);
-            if (!$request->is_tanggungan_teknisi) {
-                $deskripsi = "Biaya Part Luar:...";
+            if ($create->is_potong_kas && !$request->is_tanggungan_teknisi) {
+                $deskripsi = "Biaya Part Luar: {$request->nama_part} (x{$request->qty_part}) untuk Service {$service->kode_service}";
                 $this->catatKas($service, 0, $totalCost, $deskripsi);
             }
 
@@ -2068,7 +2085,8 @@ class SparepartApiController extends Controller
             'nama_part' => 'required|string',
             'harga_part' => 'required|numeric|min:0',
             'qty_part' => 'required|integer|min:1',
-            'is_tanggungan_teknisi' => 'nullable|boolean'
+            'is_tanggungan_teknisi' => 'nullable|boolean',
+            'is_potong_kas' => 'nullable|boolean'
         ]);
 
         DB::beginTransaction(); // PERUBAHAN: Menggunakan transaksi database
@@ -2078,29 +2096,36 @@ class SparepartApiController extends Controller
 
             // PERUBAHAN: Hitung biaya lama sebelum diupdate
             $oldCost = $update->harga_part * $update->qty_part;
+            $is_potong_kas_baru = $request->has('is_potong_kas') ? $request->is_potong_kas : $update->is_potong_kas;
+
+            $newCost = $request->harga_part * $request->qty_part;
+            $deskripsi = "Update Biaya Part Luar: {$request->nama_part} untuk Service {$service->kode_service}";
+
+            if ($update->is_potong_kas && !$is_potong_kas_baru) {
+                // Previously cut cash, now doesn't. Refund old cost.
+                $this->catatKas($service, $oldCost, 0, "Refund " . $deskripsi);
+            } elseif (!$update->is_potong_kas && $is_potong_kas_baru) {
+                // Previously didn't cut cash, now does. Charge new cost.
+                $this->catatKas($service, 0, $newCost, "Charge " . $deskripsi);
+            } elseif ($update->is_potong_kas && $is_potong_kas_baru) {
+                // Keduanya memotong kas. Hitung selisih.
+                $costDifference = $newCost - $oldCost;
+                if ($costDifference > 0) {
+                    $this->catatKas($service, 0, $costDifference, $deskripsi);
+                } elseif ($costDifference < 0) {
+                    $this->catatKas($service, abs($costDifference), 0, $deskripsi);
+                }
+            }
 
             // Update data part luar
             $update->update([
                 'nama_part' => $request->nama_part,
                 'harga_part' => $request->harga_part,
                 'qty_part' => $request->qty_part,
+                'is_potong_kas' => $is_potong_kas_baru,
                 'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
                 'user_input' => auth()->user()->id,
             ]);
-
-            // PERUBAHAN: Hitung biaya baru dan selisihnya
-            $newCost = $request->harga_part * $request->qty_part;
-            $costDifference = $newCost - $oldCost;
-            $deskripsi = "Update Biaya Part Luar: {$request->nama_part} untuk Service {$service->kode_service}";
-
-            if ($costDifference > 0) {
-                // Jika biaya baru lebih besar, catat selisihnya sebagai kas KELUAR
-                $this->catatKas($service, 0, $costDifference, $deskripsi);
-            } elseif ($costDifference < 0) {
-                // Jika biaya baru lebih kecil, catat selisihnya sebagai kas MASUK
-                $this->catatKas($service, abs($costDifference), 0, $deskripsi);
-            }
-            // Jika tidak ada selisih, tidak perlu dicatat
 
             DB::commit(); // PERUBAHAN: Commit transaksi
 
@@ -2136,8 +2161,10 @@ class SparepartApiController extends Controller
             $totalCostReversed = $data->harga_part * $data->qty_part;
             $deskripsi = "Koreksi/Hapus Part Luar: {$data->nama_part} (x{$data->qty_part}) untuk Service {$service->kode_service}";
 
-            // PERUBAHAN: Catat sebagai kas MASUK
-            $this->catatKas($service, $totalCostReversed, 0, $deskripsi);
+            // PERUBAHAN: Catat sebagai kas MASUK JIKA sebelumnya memotong kas
+            if ($data->is_potong_kas) {
+                $this->catatKas($service, $totalCostReversed, 0, $deskripsi);
+            }
 
             // Hapus data
             $data->delete();

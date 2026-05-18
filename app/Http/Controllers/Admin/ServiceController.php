@@ -424,6 +424,7 @@ class ServiceController extends Controller
             'nama_part' => $request->nama_part,
             'harga_part' => $request->harga_part,
             'qty_part' => $request->qty_part,
+            'is_potong_kas' => $request->has('is_potong_kas') ? $request->is_potong_kas : 1,
             'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
             'user_input' => auth()->user()->id,
         ]);
@@ -444,6 +445,7 @@ class ServiceController extends Controller
             'nama_part' => $request->nama_part,
             'harga_part' => $request->harga_part,
             'qty_part' => $request->qty_part,
+            'is_potong_kas' => $request->has('is_potong_kas') ? $request->is_potong_kas : $update->is_potong_kas,
             'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
             'user_input' => auth()->user()->id,
         ]);
