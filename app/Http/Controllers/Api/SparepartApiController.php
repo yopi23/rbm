@@ -188,8 +188,7 @@ class SparepartApiController extends Controller
                     } else {
                         return response()->json([
                             'success' => false,
-                            'message' => "Gagal mengirim pesan",
-                            'error'   => $response->json(),
+                            'message' => "Gagal mengirim pesan: Nomor telepon tidak valid",
                         ], 500);
                     }
                 }

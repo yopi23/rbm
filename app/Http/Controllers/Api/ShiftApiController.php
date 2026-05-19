@@ -145,7 +145,6 @@ class ShiftApiController extends Controller
         $excludedTypes = [
             'App\Models\Pembelian',
             'App\Models\Hutang',
-            'App\Models\Penarikan',
             'App\Models\AlokasiLaba',
             'App\Models\DistribusiLaba'
         ];
@@ -241,7 +240,6 @@ class ShiftApiController extends Controller
             ->whereNotIn('sourceable_type', [
             'App\Models\Pembelian',
             'App\Models\Hutang',
-            'App\Models\Penarikan',
             'App\Models\AlokasiLaba',
             'App\Models\DistribusiLaba'
         ])
@@ -396,7 +394,6 @@ class ShiftApiController extends Controller
         $excludedTypes = [
             'App\Models\Pembelian',
             'App\Models\Hutang',
-            'App\Models\Penarikan',
             'App\Models\AlokasiLaba',
             'App\Models\DistribusiLaba'
         ];
