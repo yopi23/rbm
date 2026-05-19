@@ -246,6 +246,46 @@ class ShiftApiController extends Controller
             ->orderBy('tanggal', 'asc')
             ->get()
             ->map(function ($kas) {
+            $sourceable = $kas->sourceable;
+            $namaPelanggan = null;
+            $keteranganTambahan = null;
+
+            if ($sourceable) {
+                $type = class_basename($kas->sourceable_type);
+                if ($type === 'Pengambilan') {
+                    $servicesRecords = \App\Models\Sevices::where('kode_pengambilan', $sourceable->id)->get();
+                    $namaPelangganAsli = $servicesRecords->pluck('nama_pelanggan')->filter()->unique()->implode(', ');
+                    
+                    if (!empty($namaPelangganAsli)) {
+                        if (strtolower($namaPelangganAsli) !== strtolower($sourceable->nama_pengambilan)) {
+                            $namaPelanggan = $namaPelangganAsli . ' (Pengambil: ' . $sourceable->nama_pengambilan . ')';
+                        } else {
+                            $namaPelanggan = $namaPelangganAsli;
+                        }
+                    } else {
+                        $namaPelanggan = $sourceable->nama_pengambilan;
+                    }
+
+                    $services = $servicesRecords->map(function($svc) {
+                        return ($svc->type_unit ? $svc->type_unit . ' (' . ($svc->keterangan ?? '-') . ')' : ($svc->keterangan ?? '-'));
+                    })->toArray();
+                    $keteranganTambahan = implode(', ', $services);
+                } elseif ($type === 'Sevices' || $type === 'Service') {
+                    $namaPelanggan = $sourceable->nama_pelanggan;
+                    $keteranganTambahan = ($sourceable->type_unit ? $sourceable->type_unit . ' (' . ($sourceable->keterangan ?? '-') . ')' : ($sourceable->keterangan ?? '-'));
+                } elseif ($type === 'Penjualan') {
+                    $namaPelanggan = $sourceable->nama_customer ?? 'Walk-in';
+                    $keteranganTambahan = $sourceable->catatan_customer;
+                } elseif ($type === 'PemasukkanLain' || $type === 'PengeluaranToko' || $type === 'PengeluaranOperasional') {
+                    $namaPelanggan = '-';
+                    $keteranganTambahan = $sourceable->keterangan ?? $sourceable->catatan ?? '-';
+                } elseif ($type === 'Penarikan') {
+                    $user = \App\Models\UserDetail::where('kode_user', $sourceable->kode_user)->first();
+                    $namaPelanggan = $user ? $user->fullname : '-';
+                    $keteranganTambahan = $sourceable->catatan_penarikan;
+                }
+            }
+
             return [
             'id' => $kas->id,
             'tanggal' => date('Y-m-d H:i:s', strtotime($kas->tanggal)),
@@ -253,7 +293,9 @@ class ShiftApiController extends Controller
             'debit' => $kas->debit,
             'kredit' => $kas->kredit,
             'is_cash' => $kas->is_cash,
-            'type' => class_basename($kas->sourceable_type)
+            'type' => class_basename($kas->sourceable_type),
+            'nama_pelanggan' => $namaPelanggan,
+            'keterangan_tambahan' => $keteranganTambahan
             ];
         });
 
@@ -384,8 +426,51 @@ class ShiftApiController extends Controller
             $q->where('status_services', 'Diambil')->with(['partToko.sparepart', 'partLuar']);
         },
             'pengeluaranTokos',
-            'kasPerusahaan'
+            'kasPerusahaan.sourceable'
         ])->findOrFail($id);
+
+        // Tambahkan informasi pelanggan dan keterangan pada kas_perusahaan
+        $shift->kasPerusahaan->each(function($kas) {
+            $kas->setAttribute('nama_pelanggan', null);
+            $kas->setAttribute('keterangan_tambahan', null);
+            $kas->setAttribute('type', class_basename($kas->sourceable_type));
+
+            if ($kas->sourceable) {
+                $type = class_basename($kas->sourceable_type);
+                if ($type === 'Pengambilan') {
+                    $servicesRecords = \App\Models\Sevices::where('kode_pengambilan', $kas->sourceable->id)->get();
+                    $namaPelangganAsli = $servicesRecords->pluck('nama_pelanggan')->filter()->unique()->implode(', ');
+                    
+                    if (!empty($namaPelangganAsli)) {
+                        if (strtolower($namaPelangganAsli) !== strtolower($kas->sourceable->nama_pengambilan)) {
+                            $kas->setAttribute('nama_pelanggan', $namaPelangganAsli . ' (Pengambil: ' . $kas->sourceable->nama_pengambilan . ')');
+                        } else {
+                            $kas->setAttribute('nama_pelanggan', $namaPelangganAsli);
+                        }
+                    } else {
+                        $kas->setAttribute('nama_pelanggan', $kas->sourceable->nama_pengambilan);
+                    }
+
+                    $services = $servicesRecords->map(function($svc) {
+                        return ($svc->type_unit ? $svc->type_unit . ' (' . ($svc->keterangan ?? '-') . ')' : ($svc->keterangan ?? '-'));
+                    })->toArray();
+                    $kas->setAttribute('keterangan_tambahan', implode(', ', $services));
+                } elseif ($type === 'Sevices' || $type === 'Service') {
+                    $kas->setAttribute('nama_pelanggan', $kas->sourceable->nama_pelanggan);
+                    $kas->setAttribute('keterangan_tambahan', ($kas->sourceable->type_unit ? $kas->sourceable->type_unit . ' (' . ($kas->sourceable->keterangan ?? '-') . ')' : ($kas->sourceable->keterangan ?? '-')));
+                } elseif ($type === 'Penjualan') {
+                    $kas->setAttribute('nama_pelanggan', $kas->sourceable->nama_customer ?? 'Walk-in');
+                    $kas->setAttribute('keterangan_tambahan', $kas->sourceable->catatan_customer);
+                } elseif ($type === 'PemasukkanLain' || $type === 'PengeluaranToko' || $type === 'PengeluaranOperasional') {
+                    $kas->setAttribute('nama_pelanggan', '-');
+                    $kas->setAttribute('keterangan_tambahan', $kas->sourceable->keterangan ?? $kas->sourceable->catatan ?? '-');
+                } elseif ($type === 'Penarikan') {
+                    $user = \App\Models\UserDetail::where('kode_user', $kas->sourceable->kode_user)->first();
+                    $kas->setAttribute('nama_pelanggan', $user ? $user->fullname : '-');
+                    $kas->setAttribute('keterangan_tambahan', $kas->sourceable->catatan_penarikan);
+                }
+            }
+        });
 
         if ($shift->kode_owner != $this->getOwnerId()) {
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
