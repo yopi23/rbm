@@ -5,6 +5,7 @@ services:
             context: .
             dockerfile: Dockerfile
         image: rbmdocker
+        user: "1002:1002"
         container_name: apprbmdocker
         restart: unless-stopped
         tty: true
