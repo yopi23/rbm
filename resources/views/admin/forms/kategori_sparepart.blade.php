@@ -69,6 +69,13 @@
                                         placeholder="Nama Kategori" class="form-control"
                                         value="{{ isset($data) != null ? $data->nama_kategori : '' }}">
                                 </div>
+                                <div class="form-group">
+                                    <label>Status Tampil</label>
+                                    <select name="is_active" class="form-control">
+                                        <option value="1" {{ (isset($data) && $data->is_active == 1) ? 'selected' : '' }}>Tampilkan</option>
+                                        <option value="0" {{ (isset($data) && $data->is_active == 0) ? 'selected' : '' }}>Sembunyikan</option>
+                                    </select>
+                                </div>
                             </div>
                             <div class="card-footer">
                                 <button type="submit" class="btn btn-success">Simpan</button>

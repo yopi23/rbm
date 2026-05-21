@@ -826,6 +826,31 @@ class PembelianApiController extends Controller
         }
     }
 
+    /**
+     * GET /api/categories/{categoryId}/sub-categories
+     * Mendapatkan daftar sub-kategori berdasarkan kategori
+     */
+    public function getSubKategori($categoryId)
+    {
+        try {
+            $subCategories = SubKategoriSparepart::where('kode_owner', $this->getOwnerId())
+                ->where('kode_kategori', $categoryId)
+                ->select('id', 'nama_sub_kategori')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $subCategories,
+            ]);
+        }
+        catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil data sub-kategori: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function getAttributesByCategory(KategoriSparepart $kategori)    {
         // Pastikan user hanya bisa mengakses kategori miliknya
         if ($kategori->kode_owner != $this->getOwnerId()) {

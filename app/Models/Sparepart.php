@@ -147,4 +147,54 @@ class Sparepart extends Model
     {
         return $this->belongsTo(Supplier::class, 'kode_spl');
     }
+
+    /**
+     * Get all photos as an array.
+     */
+    public function getPhotosAttribute()
+    {
+        $value = $this->attributes['foto_sparepart'] ?? '-';
+        if (empty($value) || $value === '-') {
+            return [];
+        }
+
+        // Try to decode as JSON
+        $decoded = json_decode($value, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            return $decoded;
+        }
+
+        // If not a JSON array, return it as a single-element array
+        return [$value];
+    }
+
+    /**
+     * Accessor to return the first photo (main photo) when accessing foto_sparepart.
+     */
+    public function getFotoSparepartAttribute($value)
+    {
+        if (empty($value) || $value === '-') {
+            return '-';
+        }
+
+        $decoded = json_decode($value, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            // Return the first photo as the main photo for backward compatibility
+            return $decoded[0] ?? '-';
+        }
+
+        return $value;
+    }
+
+    /**
+     * Mutator to encode arrays as JSON, while storing raw strings as-is.
+     */
+    public function setFotoSparepartAttribute($value)
+    {
+        if (is_array($value)) {
+            $this->attributes['foto_sparepart'] = json_encode(array_values($value));
+        } else {
+            $this->attributes['foto_sparepart'] = $value;
+        }
+    }
 }

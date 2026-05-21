@@ -45,8 +45,82 @@
     background:#ffffff; border-bottom:1px solid var(--yy-border);
     padding:18px 0; display:flex; justify-content:center; gap:40px; flex-wrap:wrap;
 }
-#yy-wrap .yy-brands img { height:30px; width:auto; filter:grayscale(100%) opacity(0.6); transition:opacity .3s, filter .3s; }
+#yy-wrap .yy-brands img { height:30px; width:80px; object-fit:contain; filter:grayscale(100%) opacity(0.6); transition:opacity .3s, filter .3s; }
 #yy-wrap .yy-brands img:hover { opacity:1; filter:grayscale(0%); }
+
+/* ── Category Filter Tabs ── */
+#yy-wrap .yy-category-tabs {
+    background:#ffffff;
+    border-bottom:1px solid var(--yy-border);
+    padding:16px 24px;
+}
+#yy-wrap .yy-category-tabs-inner {
+    max-width:1150px;
+    margin:0 auto;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    overflow-x:auto;
+    scrollbar-width:none;
+    -ms-overflow-style:none;
+    padding-bottom:2px;
+}
+#yy-wrap .yy-category-tabs-inner::-webkit-scrollbar { display:none; }
+#yy-wrap .yy-category-tabs-inner .yy-tab-label {
+    font-size:.82rem;
+    font-weight:600;
+    color:var(--yy-dim);
+    margin-right:8px;
+    white-space:nowrap;
+    display:flex;
+    align-items:center;
+    gap:5px;
+}
+#yy-wrap .yy-category-tabs-inner .yy-tab-label i { font-size:.95rem; }
+#yy-wrap .yy-cat-tab {
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    padding:7px 18px;
+    border-radius:20px;
+    font-size:.84rem;
+    font-weight:500;
+    color:var(--yy-text);
+    background:rgba(0,0,0,.04);
+    border:1px solid transparent;
+    cursor:pointer;
+    text-decoration:none;
+    white-space:nowrap;
+    transition:all .25s ease;
+}
+#yy-wrap .yy-cat-tab:hover {
+    background:rgba(0,201,167,.08);
+    border-color:rgba(0,201,167,.2);
+    color:var(--yy-accent);
+}
+#yy-wrap .yy-cat-tab.active {
+    background:rgba(0,201,167,.12);
+    border-color:var(--yy-accent);
+    color:var(--yy-accent);
+    font-weight:600;
+    box-shadow:0 2px 8px rgba(0,201,167,.15);
+}
+#yy-wrap .yy-cat-tab .yy-tab-count {
+    font-size:.72rem;
+    font-weight:700;
+    background:rgba(0,0,0,.08);
+    color:var(--yy-dim);
+    padding:1px 7px;
+    border-radius:10px;
+    min-width:20px;
+    text-align:center;
+    transition:all .25s;
+}
+#yy-wrap .yy-cat-tab.active .yy-tab-count {
+    background:var(--yy-accent);
+    color:#fff;
+}
+
 #yy-wrap .yy-content { padding:56px 0 80px; }
 #yy-wrap .yy-product-grid {
     display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr));
@@ -79,6 +153,13 @@
 }
 #yy-wrap .yy-btn-order:hover { background:var(--yy-accent2); }
 #yy-wrap .yy-btn-order:disabled { background:rgba(239,68,68,.35); color:#fff; cursor:not-allowed; }
+#yy-wrap .yy-prod-link { text-decoration:none; color:inherit; display:flex; flex-direction:column; height:100%; }
+#yy-wrap .yy-prod-card { cursor:pointer; }
+#yy-wrap .yy-btn-order-label {
+    color:var(--yy-accent); font-weight:600; font-size:.82rem;
+    display:flex; align-items:center; gap:2px; transition:gap .2s;
+}
+#yy-wrap .yy-prod-card:hover .yy-btn-order-label { gap:6px; }
 #yy-wrap .yy-alert {
     max-width:600px; margin:60px auto; text-align:center;
     background:var(--yy-card); border:1px solid var(--yy-border); border-radius:14px; padding:44px 28px;
@@ -86,6 +167,13 @@
 #yy-wrap .yy-alert-icon { font-size:2.2rem; color:var(--yy-dim); margin-bottom:12px; }
 #yy-wrap .yy-alert p { color:var(--yy-dim); font-size:.95rem; margin:0; }
 #yy-wrap .yy-alert.danger .yy-alert-icon { color:#f87171; }
+
+/* Responsive for category tabs */
+@media(max-width:600px) {
+    #yy-wrap .yy-category-tabs { padding:12px 16px; }
+    #yy-wrap .yy-cat-tab { padding:6px 14px; font-size:.8rem; }
+    #yy-wrap .yy-category-tabs-inner .yy-tab-label { display:none; }
+}
 </style>
 
 <div id="yy-wrap">
@@ -111,13 +199,46 @@
 
 <!-- BRANDS -->
 <div class="yy-brands">
-    <img src="{{ asset('public/') }}/img/ip.png"      alt="iPhone">
-    <img src="{{ asset('public/') }}/img/oppo.png"    alt="Oppo">
-    <img src="{{ asset('public/') }}/img/samsung.png" alt="Samsung">
-    <img src="{{ asset('public/') }}/img/vivo.png"    alt="Vivo">
-    <img src="{{ asset('public/') }}/img/xiaomi.png"  alt="Xiaomi">
-    <img src="{{ asset('public/') }}/img/huawei.png"  alt="Huawei">
+    <img src="{{ asset('img/ip.png') }}"      alt="iPhone">
+    <img src="{{ asset('img/oppo.png') }}"    alt="Oppo">
+    <img src="{{ asset('img/samsung.png') }}" alt="Samsung">
+    <img src="{{ asset('img/vivo.png') }}"    alt="Vivo">
+    <img src="{{ asset('img/xiaomi.png') }}"  alt="Xiaomi">
+    <img src="{{ asset('img/huawei.png') }}"  alt="Huawei">
 </div>
+
+<!-- CATEGORY FILTER TABS -->
+@if(isset($categories) && $categories->count() > 0)
+<div class="yy-category-tabs">
+    <div class="yy-category-tabs-inner">
+        <span class="yy-tab-label"><i class="bx bx-filter-alt"></i> Kategori:</span>
+
+        @php
+            $activeKategori = $request->kategori ?? null;
+            // Build base URL params (preserve q and ref)
+            $baseParams = [];
+            if($request->filled('q')) $baseParams['q'] = $request->q;
+            if($request->filled('ref')) $baseParams['ref'] = $request->ref;
+        @endphp
+
+        <a href="{{ route('spareparts', $baseParams) }}"
+           class="yy-cat-tab {{ !$activeKategori ? 'active' : '' }}" data-no-spa>
+            Semua
+            <span class="yy-tab-count">{{ $data->count() > 0 || !$activeKategori ? $data->count() : '' }}</span>
+        </a>
+
+        @foreach($categories as $cat)
+            @php
+                $catParams = array_merge($baseParams, ['kategori' => $cat->id]);
+            @endphp
+            <a href="{{ route('spareparts', $catParams) }}"
+               class="yy-cat-tab {{ $activeKategori == $cat->id ? 'active' : '' }}" data-no-spa>
+                {{ $cat->nama_kategori }}
+            </a>
+        @endforeach
+    </div>
+</div>
+@endif
 
 <!-- SPAREPART GRID -->
 <section class="yy-content">
@@ -131,34 +252,35 @@
             <div class="yy-product-grid">
                 @foreach ($data as $item)
                 <div class="yy-prod-card" data-aos="fade-up" data-aos-delay="80">
-                    @if ($item->foto_sparepart != '-')
-                        <img src="{{ asset('uploads/' . $item->foto_sparepart) }}" class="yy-prod-img" alt="{{ $item->nama_sparepart }}">
-                    @else
-                        <img src="{{ asset('img/no_image.png') }}" class="yy-prod-img" alt="No Image">
-                    @endif
-
-                    <div class="yy-prod-body">
-                        <h5>{{ $item->nama_sparepart }}</h5>
-                        <div class="yy-cat">{{ $item->nama_kategori }}</div>
-                        @if ($ismember)
-                            <div class="yy-price">Rp {{ number_format($item->harga_ecer) }},-</div>
+                    <a href="{{ route('sparepart.detail', $item->id_produk) }}{{ isset($request->ref) ? '?ref='.$request->ref : '' }}" class="yy-prod-link" style="text-decoration:none; color:inherit;">
+                        @if ($item->foto_sparepart != '-')
+                            <img src="{{ asset('uploads/' . $item->foto_sparepart) }}" class="yy-prod-img" alt="{{ $item->nama_sparepart }}">
+                        @else
+                            <img src="{{ asset('img/no_image.png') }}" class="yy-prod-img" alt="No Image">
                         @endif
 
-                        <div class="yy-prod-footer">
-                            <span class="yy-stock-badge {{ $item->stok_sparepart > 0 ? 'available' : 'empty' }}">
-                                {{ $item->stok_sparepart > 0 ? 'Tersedia' : 'Kosong' }}
-                            </span>
+                        <div class="yy-prod-body" style="padding-bottom: 0;">
+                            <h5>{{ $item->nama_sparepart }}</h5>
+                            <div class="yy-cat">{{ $item->nama_kategori }}</div>
                             @if ($ismember)
-                                <form action="{{ route('add_sparepart_cart', $item->id_produk) }}" method="POST" style="margin:0;">
-                                    @csrf
-                                    @method('PUT')
-                                    <input type="hidden" name="kode_invite" value="{{ $request->ref }}">
-                                    <button class="yy-btn-order" {{ $item->stok_sparepart <= 0 ? 'disabled' : '' }}>
-                                        <i class="bx bx-cart"></i> Pesan
-                                    </button>
-                                </form>
+                                <div class="yy-price">Rp {{ number_format($item->harga_ecer) }},-</div>
                             @endif
                         </div>
+                    </a>
+
+                    <div class="yy-prod-footer" style="margin: 14px 18px 18px 18px; padding-top: 12px; border-top: 1px solid var(--yy-border); display: flex; align-items: center; justify-content: space-between;">
+                        <span class="yy-stock-badge {{ $item->stok_sparepart > 0 ? 'available' : 'empty' }}">
+                            {{ $item->stok_sparepart > 0 ? 'Tersedia' : 'Kosong' }}
+                        </span>
+                        
+                        <form action="{{ route('add_sparepart_cart', $item->id_produk) }}" method="POST" class="ajax-cart-form" style="margin:0;">
+                            @csrf
+                            @method('PUT')
+                            <input type="hidden" name="kode_invite" value="{{ $request->ref ?? '' }}">
+                            <button type="submit" class="yy-btn-order" {{ $item->stok_sparepart <= 0 ? 'disabled style="opacity:.4;cursor:not-allowed;"' : '' }}>
+                                <i class="bx bx-cart"></i> Pesan
+                            </button>
+                        </form>
                     </div>
                 </div>
                 @endforeach

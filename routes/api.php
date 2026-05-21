@@ -33,6 +33,7 @@ use App\Http\Controllers\Api\QrisController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\ShiftApiController;
 use App\Http\Controllers\Api\AccumulatedFundsApiController;
+use App\Http\Controllers\Api\ProductApiController;
 use Illuminate\Support\Facades\Broadcast;
 
 /* |-------------------------------------------------------------------------- | API Routes |-------------------------------------------------------------------------- | | Here is where you can register API routes for your application. These | routes are loaded by the RouteServiceProvider within a group which | is assigned the "api" middleware group. Enjoy building your API! | */
@@ -136,6 +137,7 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::get('/pembelian/search-variants', [PembelianApiController::class , 'searchVariants']);
     Route::get('/suppliers', [PembelianApiController::class , 'getSuppliers']);
     Route::get('/categories', [PembelianApiController::class , 'getCategories']);
+    Route::get('/categories/{categoryId}/sub-categories', [PembelianApiController::class, 'getSubKategori']);
     Route::get('/kategori/{kategori}/attributes', [PembelianApiController::class , 'getAttributesByCategory']);
     // Pembelian routes
     Route::get('/pembelian', [PembelianApiController::class , 'index']);
@@ -424,6 +426,19 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
         Route::get('/hp/filters', [HpApiController::class , 'filters']);
         Route::get('/hp/{id}', [HpApiController::class , 'detail']);
         Route::post('/hp/suggest', [HpController::class , 'apiSuggest']); // Assuming this is for suggestions logic
+
+        // Product Management (CRUD)
+        Route::prefix('products')->group(function () {
+            Route::get('/', [ProductApiController::class, 'index']);
+            Route::post('/', [ProductApiController::class, 'store']);
+            Route::get('/categories', [ProductApiController::class, 'listCategories']);
+            Route::put('/categories/{id}/toggle-visibility', [ProductApiController::class, 'toggleCategoryVisibility']);
+            Route::get('/{id}', [ProductApiController::class, 'show']);
+            Route::put('/{id}', [ProductApiController::class, 'update']);
+            Route::post('/{id}', [ProductApiController::class, 'update']); // fallback for multipart/form-data
+            Route::delete('/{id}', [ProductApiController::class, 'destroy']);
+            Route::put('/{id}/toggle-visibility', [ProductApiController::class, 'toggleVisibility']);
+        });
     
         // Stock Opname
         Route::prefix('stock-opname')->group(function () {

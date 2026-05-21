@@ -169,6 +169,22 @@ class SalesApiController extends Controller
                 $item->sub_kategori_nama = optional($item->subKategori)->nama_sub_kategori;
                 $item->stock_status = $item->stok_sparepart > 0 ? 'available' : 'out_of_stock';
                 $item->low_stock = $item->stok_sparepart > 0 && $item->stok_sparepart <= 5;
+                $item->deskripsi = $item->desc_sparepart;
+                
+                // Add photo URL
+                $mainPhoto = $item->foto_sparepart;
+                $item->main_photo_url = ($mainPhoto && $mainPhoto != '-') ? asset('uploads/' . $mainPhoto) : null;
+
+                $photoPaths = $item->photos;
+                $photoUrls = [];
+                if (is_array($photoPaths)) {
+                    foreach ($photoPaths as $photoPath) {
+                        if ($photoPath && $photoPath != '-') {
+                            $photoUrls[] = asset('uploads/' . $photoPath);
+                        }
+                    }
+                }
+                $item->photo_urls = $photoUrls;
 
                 // 2. Logika untuk mengubah format harga khusus (CONTEK DARI search)
                 $hargaKhususPertama = $item->hargaKhusus->first();
@@ -236,6 +252,16 @@ class SalesApiController extends Controller
                 ], 404);
             }
 
+            $photoPaths = $sparepart->photos;
+            $photoUrls = [];
+            if (is_array($photoPaths)) {
+                foreach ($photoPaths as $photoPath) {
+                    if ($photoPath && $photoPath != '-') {
+                        $photoUrls[] = asset('uploads/' . $photoPath);
+                    }
+                }
+            }
+
             // Transform data sesuai format yang dibutuhkan
             $data = [
                 'id' => $sparepart->id,
@@ -248,13 +274,15 @@ class SalesApiController extends Controller
                 'harga_ecer' => $sparepart->harga_ecer,
                 'harga_pasang' => $sparepart->harga_pasang,
                 'stok_sparepart' => (int)$sparepart->stok_sparepart,
-                'deskripsi' => $sparepart->deskripsi,
+                'deskripsi' => $sparepart->desc_sparepart,
                 'created_at' => $sparepart->created_at,
                 'updated_at' => $sparepart->updated_at,
                 'kategori_nama' => optional($sparepart->kategori)->nama_kategori,
                 'sub_kategori_nama' => optional($sparepart->subKategori)->nama_sub_kategori,
                 'stock_status' => $sparepart->stok_sparepart > 0 ? 'available' : 'out_of_stock',
                 'low_stock' => $sparepart->stok_sparepart > 0 && $sparepart->stok_sparepart <= 5,
+                'main_photo_url' => ($sparepart->foto_sparepart && $sparepart->foto_sparepart != '-') ? asset('uploads/' . $sparepart->foto_sparepart) : null,
+                'photos' => $photoUrls,
             ];
 
             // Tambahkan variants jika ada
@@ -407,6 +435,22 @@ class SalesApiController extends Controller
                 $item->sub_kategori_nama = optional(SubKategoriSparepart::find($item->kode_sub_kategori))->nama_sub_kategori;
                 $item->stock_status = $item->stok_sparepart > 0 ? 'available' : 'out_of_stock';
                 $item->low_stock = $item->stok_sparepart > 0 && $item->stok_sparepart <= 5;
+                $item->deskripsi = $item->desc_sparepart;
+
+                // Add photo URL
+                $mainPhoto = $item->foto_sparepart;
+                $item->main_photo_url = ($mainPhoto && $mainPhoto != '-') ? asset('uploads/' . $mainPhoto) : null;
+
+                $photoPaths = $item->photos;
+                $photoUrls = [];
+                if (is_array($photoPaths)) {
+                    foreach ($photoPaths as $photoPath) {
+                        if ($photoPath && $photoPath != '-') {
+                            $photoUrls[] = asset('uploads/' . $photoPath);
+                        }
+                    }
+                }
+                $item->photo_urls = $photoUrls;
 
                 // 2. Logika untuk mengubah format harga khusus
                 // Ambil data harga khusus pertama dari relasi yang sudah di-load

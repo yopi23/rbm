@@ -89,11 +89,14 @@ Route::get('/service', [FrontControllerServiceController::class, 'index'])->name
 Route::get('/product', [ProdukController::class, 'index'])->name('product');
 //Sparepart
 Route::get('/spareparts', [FrontControllerSparepartController::class, 'index'])->name('spareparts');
+Route::get('/spareparts/{id}', [FrontControllerSparepartController::class, 'show'])->name('sparepart.detail');
 
 //Keranjang
 Route::get('/keranjang', [FrontControllerPesananController::class, 'cart'])->name('cart');
 Route::put('/keranjang/{id}/add_produk', [FrontControllerPesananController::class, 'pesan_produk'])->name('add_produk_cart');
 Route::put('/keranjang/{id}/add_sparepart', [FrontControllerPesananController::class, 'pesan_sparepart'])->name('add_sparepart_cart');
+Route::put('/keranjang/{id}/update_qty_produk', [FrontControllerPesananController::class, 'update_qty_produk'])->name('update_qty_produk');
+Route::put('/keranjang/{id}/update_qty_sparepart', [FrontControllerPesananController::class, 'update_qty_sparepart'])->name('update_qty_sparepart');
 Route::delete('/keranjang/{id}/delete_produk', [FrontControllerPesananController::class, 'delete_produk_in_cart'])->name('delete_produk_cart');
 Route::delete('/keranjang/{id}/delete_sparepart', [FrontControllerPesananController::class, 'delete_sparepart_in_cart'])->name('delete_sparepart_cart');
 //Checkout

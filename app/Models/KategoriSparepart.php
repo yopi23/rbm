@@ -12,6 +12,7 @@ class KategoriSparepart extends Model
         'foto_kategori',
         'nama_kategori',
         'kode_owner',
+        'is_active',
     ];
 
     public function spareparts()

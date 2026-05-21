@@ -55,7 +55,7 @@
     background:#ffffff; border-bottom:1px solid var(--yy-border);
     padding:18px 0; display:flex; justify-content:center; gap:40px; flex-wrap:wrap;
 }
-#yy-wrap .yy-brands img { height:28px; width:auto; filter:grayscale(100%) opacity(0.6); transition:opacity .3s, filter .3s; }
+#yy-wrap .yy-brands img { height:28px; width:80px; object-fit:contain; filter:grayscale(100%) opacity(0.6); transition:opacity .3s, filter .3s; }
 #yy-wrap .yy-brands img:hover { opacity:1; filter:grayscale(0%); }
 
 /* result section */
@@ -188,12 +188,12 @@
 
 <!-- BRANDS -->
 <div class="yy-brands">
-    <img src="{{asset('public/')}}/img/ip.png"      alt="iPhone">
-    <img src="{{asset('public/')}}/img/oppo.png"    alt="Oppo">
-    <img src="{{asset('public/')}}/img/samsung.png" alt="Samsung">
-    <img src="{{asset('public/')}}/img/vivo.png"    alt="Vivo">
-    <img src="{{asset('public/')}}/img/xiaomi.png"  alt="Xiaomi">
-    <img src="{{asset('public/')}}/img/huawei.png"  alt="Huawei">
+    <img src="{{asset('img/ip.png')}}"      alt="iPhone">
+    <img src="{{asset('img/oppo.png')}}"    alt="Oppo">
+    <img src="{{asset('img/samsung.png')}}" alt="Samsung">
+    <img src="{{asset('img/vivo.png')}}"    alt="Vivo">
+    <img src="{{asset('img/xiaomi.png')}}"  alt="Xiaomi">
+    <img src="{{asset('img/huawei.png')}}"  alt="Huawei">
 </div>
 
 <!-- ── SERVICE RESULT ── -->

@@ -32,7 +32,7 @@
     background:#ffffff; border-bottom:1px solid var(--yy-border);
     padding:16px 0; display:flex; justify-content:center; gap:40px; flex-wrap:wrap;
 }
-#yy-wrap .yy-brands img { height:26px; width:auto; filter:grayscale(100%) opacity(0.6); transition:opacity .3s, filter .3s; }
+#yy-wrap .yy-brands img { height:26px; width:80px; object-fit:contain; filter:grayscale(100%) opacity(0.6); transition:opacity .3s, filter .3s; }
 #yy-wrap .yy-brands img:hover { opacity:1; filter:grayscale(0%); }
 
 /* checkout layout */
@@ -167,12 +167,12 @@
 
 <!-- BRANDS -->
 <div class="yy-brands">
-    <img src="{{asset('public/')}}/img/ip.png"      alt="iPhone">
-    <img src="{{asset('public/')}}/img/oppo.png"    alt="Oppo">
-    <img src="{{asset('public/')}}/img/samsung.png" alt="Samsung">
-    <img src="{{asset('public/')}}/img/vivo.png"    alt="Vivo">
-    <img src="{{asset('public/')}}/img/xiaomi.png"  alt="Xiaomi">
-    <img src="{{asset('public/')}}/img/huawei.png"  alt="Huawei">
+    <img src="{{asset('img/ip.png')}}"      alt="iPhone">
+    <img src="{{asset('img/oppo.png')}}"    alt="Oppo">
+    <img src="{{asset('img/samsung.png')}}" alt="Samsung">
+    <img src="{{asset('img/vivo.png')}}"    alt="Vivo">
+    <img src="{{asset('img/xiaomi.png')}}"  alt="Xiaomi">
+    <img src="{{asset('img/huawei.png')}}"  alt="Huawei">
 </div>
 
 <!-- STEP INDICATOR -->
@@ -215,9 +215,9 @@
                         <td>
                             <div class="yy-order-product">
                                 @if ($item['photo'] != '-')
-                                    <img src="{{asset('public/uploads/'.$item['photo'])}}" class="yy-order-thumb" alt="">
+                                    <img src="{{asset('uploads/'.$item['photo'])}}" class="yy-order-thumb" alt="">
                                 @else
-                                    <img src="{{asset('public/img/no_image.png')}}" class="yy-order-thumb" alt="">
+                                    <img src="{{asset('img/no_image.png')}}" class="yy-order-thumb" alt="">
                                 @endif
                                 <span class="yy-order-name">{{$item['name']}}</span>
                             </div>
@@ -237,9 +237,9 @@
                         <td>
                             <div class="yy-order-product">
                                 @if ($item['photo'] != '-')
-                                    <img src="{{asset('public/uploads/'.$item['photo'])}}" class="yy-order-thumb" alt="">
+                                    <img src="{{asset('uploads/'.$item['photo'])}}" class="yy-order-thumb" alt="">
                                 @else
-                                    <img src="{{asset('public/img/no_image.png')}}" class="yy-order-thumb" alt="">
+                                    <img src="{{asset('img/no_image.png')}}" class="yy-order-thumb" alt="">
                                 @endif
                                 <span class="yy-order-name">{{$item['name']}}</span>
                             </div>

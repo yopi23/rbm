@@ -59,7 +59,7 @@
     padding:18px 0; display:flex; justify-content:center; gap:40px; flex-wrap:wrap;
 }
 #yy-wrap .yy-brands img {
-    height:30px; width:auto; filter:grayscale(100%) opacity(0.6); transition:opacity .3s, filter .3s;
+    height:30px; width:80px; object-fit:contain; filter:grayscale(100%) opacity(0.6); transition:opacity .3s, filter .3s;
 }
 #yy-wrap .yy-brands img:hover { opacity:1; filter:grayscale(0%); }
 
@@ -143,12 +143,12 @@
 
 <!-- BRANDS -->
 <div class="yy-brands">
-    <img src="{{ asset('public/') }}/img/ip.png"      alt="iPhone">
-    <img src="{{ asset('public/') }}/img/oppo.png"    alt="Oppo">
-    <img src="{{ asset('public/') }}/img/samsung.png" alt="Samsung">
-    <img src="{{ asset('public/') }}/img/vivo.png"    alt="Vivo">
-    <img src="{{ asset('public/') }}/img/xiaomi.png"  alt="Xiaomi">
-    <img src="{{ asset('public/') }}/img/huawei.png"  alt="Huawei">
+    <img src="{{ asset('img/ip.png') }}"      alt="iPhone">
+    <img src="{{ asset('img/oppo.png') }}"    alt="Oppo">
+    <img src="{{ asset('img/samsung.png') }}" alt="Samsung">
+    <img src="{{ asset('img/vivo.png') }}"    alt="Vivo">
+    <img src="{{ asset('img/xiaomi.png') }}"  alt="Xiaomi">
+    <img src="{{ asset('img/huawei.png') }}"  alt="Huawei">
 </div>
 
 <!-- PRODUCT GRID -->
@@ -164,9 +164,9 @@
             <div class="yy-prod-card" data-aos="fade-up" data-aos-delay="80">
                 <!-- Image -->
                 @if ($item->foto_barang != '-')
-                    <img src="{{ asset('public/uploads/' . $item->foto_barang) }}" class="yy-prod-img" alt="{{ $item->nama_barang }}">
+                    <img src="{{ asset('uploads/' . $item->foto_barang) }}" class="yy-prod-img" alt="{{ $item->nama_barang }}">
                 @else
-                    <img src="{{ asset('public/img/no_image.png') }}" class="yy-prod-img" alt="No Image">
+                    <img src="{{ asset('img/no_image.png') }}" class="yy-prod-img" alt="No Image">
                 @endif
 
                 <div class="yy-prod-body">
@@ -181,7 +181,7 @@
                             {{ $item->stok_barang > 0 ? 'Tersedia' : 'Kosong' }}
                         </span>
                         @if ($ismember)
-                            <form action="{{ route('add_produk_cart', $item->id_produk) }}" method="POST" style="margin:0;">
+                            <form action="{{ route('add_produk_cart', $item->id_produk) }}" method="POST" class="ajax-cart-form" style="margin:0;">
                                 @csrf
                                 @method('PUT')
                                 <input type="hidden" name="kode_invite" value="{{ $request->ref }}">

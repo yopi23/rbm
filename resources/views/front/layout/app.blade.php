@@ -378,7 +378,7 @@
             </a>
             <a href="{{ route('spareparts') }}"
                class="{{ request()->routeIs('spareparts') ? 'active' : '' }}">
-                <i class="bx bx-cube"></i> Sparepart
+                <i class="bx bx-cube"></i> Sparepart & Aksesoris
             </a>
             <a href="{{ route('service') }}"
                class="{{ request()->routeIs('service') ? 'active' : '' }}">
@@ -441,7 +441,7 @@
             <i class="bx bx-phone"></i> Produk
         </a>
         <a href="{{ route('spareparts') }}" class="{{ request()->routeIs('spareparts') ? 'active' : '' }}">
-            <i class="bx bx-cube"></i> Sparepart
+            <i class="bx bx-cube"></i> Sparepart & Aksesoris
         </a>
         <a href="{{ route('service') }}" class="{{ request()->routeIs('service') ? 'active' : '' }}">
             <i class="bx bx-wrench"></i> Service
@@ -471,6 +471,25 @@
 <!-- ═══════════════════════════════════════════
      PAGE CONTENT
      ═══════════════════════════════════════════ -->
+@if(session('success'))
+<div id="yy-toast-global" style="position:fixed; top:80px; right:20px; background:rgba(0,201,167,0.95); color:#fff; padding:12px 24px; border-radius:10px; font-weight:600; box-shadow:0 10px 25px rgba(0,201,167,0.3); z-index:99999; display:flex; align-items:center; gap:8px; animation: slideInRight 0.3s ease-out forwards; backdrop-filter:blur(5px);">
+    <i class="bx bx-check-circle" style="font-size:1.2rem;"></i> {{ session('success') }}
+</div>
+<script>
+    setTimeout(function(){
+        let t = document.getElementById('yy-toast-global');
+        if(t) {
+            t.style.opacity = '0';
+            t.style.transition = 'opacity 0.3s ease';
+            setTimeout(() => t.remove(), 300);
+        }
+    }, 3500);
+</script>
+<style>
+@keyframes slideInRight { from { transform: translateX(100%); opacity:0; } to { transform: translateX(0); opacity:1; } }
+</style>
+@endif
+
 <div id="yy-page">
     @yield('content-app')
 </div>
@@ -502,7 +521,7 @@
             <ul>
                 <li><a href="{{ route('home') }}"><i class="bx bx-chevron-right"></i> Home</a></li>
                 <li><a href="{{ route('product') }}"><i class="bx bx-chevron-right"></i> Produk</a></li>
-                <li><a href="{{ route('spareparts') }}"><i class="bx bx-chevron-right"></i> Sparepart</a></li>
+                <li><a href="{{ route('spareparts') }}"><i class="bx bx-chevron-right"></i> Sparepart & Aksesoris</a></li>
                 <li><a href="{{ route('service') }}"><i class="bx bx-chevron-right"></i> Status Service</a></li>
             </ul>
         </div>
@@ -734,6 +753,65 @@ window.addEventListener('load', initPureCounter);
                 console.error('SPA Load Error:', err);
                 window.location.href = href; // Fallback
             });
+    });
+
+    // AJAX Cart Intercept
+    document.addEventListener('submit', function(e) {
+        if (!e.target.classList.contains('ajax-cart-form')) return;
+        e.preventDefault();
+        
+        const form = e.target;
+        const btn = form.querySelector('button[type="submit"]');
+        if(!btn) return;
+        
+        const originalBtnHtml = btn.innerHTML;
+        
+        // Loading state
+        btn.innerHTML = '<i class="bx bx-loader-alt bx-spin"></i> Memuat...';
+        btn.disabled = true;
+
+        fetch(form.action, {
+            method: form.method,
+            body: new FormData(form),
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(res => res.json())
+        .then(data => {
+            btn.innerHTML = originalBtnHtml;
+            btn.disabled = false;
+            
+            if(data.success) {
+                // Update badge
+                const badges = document.querySelectorAll('.yy-cart-badge, .yy-mobile-cart-badge');
+                badges.forEach(b => b.textContent = data.cart_count);
+                if (badges.length === 0 && data.cart_count > 0) {
+                    const cartLinks = document.querySelectorAll('.yy-cart-link');
+                    cartLinks.forEach(link => {
+                        const span = document.createElement('span');
+                        span.className = 'yy-cart-badge';
+                        span.textContent = data.cart_count;
+                        link.appendChild(span);
+                    });
+                }
+                
+                // Show toast
+                let t = document.getElementById('yy-toast-global');
+                if(!t) {
+                    t = document.createElement('div');
+                    t.id = 'yy-toast-global';
+                    t.style.cssText = 'position:fixed; top:80px; right:20px; background:rgba(0,201,167,0.95); color:#fff; padding:12px 24px; border-radius:10px; font-weight:600; box-shadow:0 10px 25px rgba(0,201,167,0.3); z-index:99999; display:flex; align-items:center; gap:8px; animation: slideInRight 0.3s ease-out forwards; backdrop-filter:blur(5px); transition:opacity 0.3s ease;';
+                    document.body.appendChild(t);
+                }
+                t.style.opacity = '1';
+                t.innerHTML = '<i class="bx bx-check-circle" style="font-size:1.2rem;"></i> ' + data.message;
+                setTimeout(() => { t.style.opacity = '0'; }, 3000);
+            }
+        })
+        .catch(err => {
+            console.error('AJAX Cart Error:', err);
+            btn.innerHTML = originalBtnHtml;
+            btn.disabled = false;
+        });
     });
 
     // Handle Back/Forward

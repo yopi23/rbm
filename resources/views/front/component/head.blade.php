@@ -5,7 +5,7 @@
         <div class="logo">
           <h1 class="text-light"><a href="{{route('home')}}"><span>YOYOYCELL</span></a></h1>
           <!-- Uncomment below if you prefer to use an image logo -->
-          <!-- <a href="index.html"><img src="{{asset('public/front/')}}/assets/img/logo.png" alt="" class="img-fluid"></a>-->
+          <!-- <a href="index.html"><img src="{{asset('front/')}}/assets/img/logo.png" alt="" class="img-fluid"></a> -->
         </div>
 
         <nav id="navbar" class="navbar">

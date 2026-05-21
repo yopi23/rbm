@@ -15,27 +15,27 @@
         <div class="row">
 
           <div class="col-lg-2 col-md-4 col-6 d-flex align-items-center" data-aos="zoom-in" data-aos-delay="100">
-            <img src="{{asset('public/')}}/img/ip.png" class="img-fluid" alt="">
+            <img src="{{asset('')}}/img/ip.png" class="img-fluid" alt="">
           </div>
 
           <div class="col-lg-2 col-md-4 col-6 d-flex align-items-center" data-aos="zoom-in" data-aos-delay="200">
-            <img src="{{asset('public/')}}/img/oppo.png" class="img-fluid" alt="">
+            <img src="{{asset('')}}/img/oppo.png" class="img-fluid" alt="">
           </div>
 
           <div class="col-lg-2 col-md-4 col-6 d-flex align-items-center" data-aos="zoom-in" data-aos-delay="300">
-            <img src="{{asset('public/')}}/img/samsung.png" class="img-fluid" alt="">
+            <img src="{{asset('')}}/img/samsung.png" class="img-fluid" alt="">
           </div>
 
           <div class="col-lg-2 col-md-4 col-6 d-flex align-items-center" data-aos="zoom-in" data-aos-delay="400">
-            <img src="{{asset('public/')}}/img/vivo.png" class="img-fluid" alt="">
+            <img src="{{asset('')}}/img/vivo.png" class="img-fluid" alt="">
           </div>
 
           <div class="col-lg-2 col-md-4 col-6 d-flex align-items-center" data-aos="zoom-in" data-aos-delay="500">
-            <img src="{{asset('public/')}}/img/xiaomi.png" class="img-fluid" alt="">
+            <img src="{{asset('')}}/img/xiaomi.png" class="img-fluid" alt="">
           </div>
 
           <div class="col-lg-2 col-md-4 col-6 d-flex align-items-center" data-aos="zoom-in" data-aos-delay="600">
-            <img src="{{asset('public/')}}/img/huawei.png" class="img-fluid" alt="">
+            <img src="{{asset('')}}/img/huawei.png" class="img-fluid" alt="">
           </div>
 
         </div>
@@ -73,9 +73,9 @@
                               <tr>
                                 <td>{{$no++}}</td>
                                 <td>@if ($item['photo'] != '-')
-                                    <img src="{{asset('public/uploads/'.$item['photo'])}}" width="50">
+                                    <img src="{{asset('uploads/'.$item['photo'])}}" width="50">
                                     @else
-                                        <img src="{{asset('public/img/no_image.png')}}" width="50">
+                                        <img src="{{asset('img/no_image.png')}}" width="50">
                                     @endif {{$item['name']}}</td>
                                 <td class="text-center">Rp{{number_format($item['price'])}},-</td>
                                 <td class="text-center">{{number_format($item['qty'])}}</td>
@@ -91,9 +91,9 @@
                               <tr>
                                 <td>{{$no++}}</td>
                                 <td>@if ($item['photo'] != '-')
-                                        <img src="{{asset('public/uploads/'.$item['photo'])}}" width="50">
+                                        <img src="{{asset('uploads/'.$item['photo'])}}" width="50">
                                     @else
-                                        <img src="{{asset('public/img/no_image.png')}}" width="50">
+                                        <img src="{{asset('img/no_image.png')}}" width="50">
                                     @endif {{$item['name']}}</td>
                                 <td class="text-center">Rp{{number_format($item['price'])}},-</td>
                                 <td class="text-center">{{number_format($item['qty'])}}</td>

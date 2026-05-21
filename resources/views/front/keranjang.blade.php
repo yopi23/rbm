@@ -32,7 +32,7 @@
     background:#ffffff; border-bottom:1px solid var(--yy-border);
     padding:18px 0; display:flex; justify-content:center; gap:40px; flex-wrap:wrap;
 }
-#yy-wrap .yy-brands img { height:28px; width:auto; filter:grayscale(100%) opacity(0.6); transition:opacity .3s, filter .3s; }
+#yy-wrap .yy-brands img { height:28px; width:80px; object-fit:contain; filter:grayscale(100%) opacity(0.6); transition:opacity .3s, filter .3s; }
 #yy-wrap .yy-brands img:hover { opacity:1; filter:grayscale(0%); }
 
 /* alerts */
@@ -97,6 +97,25 @@
 #yy-wrap .yy-qty-val { color:var(--yy-white); font-weight:600; font-size:.92rem; }
 #yy-wrap .yy-subtotal-val { color:var(--yy-accent); font-weight:700; font-size:.95rem; }
 
+/* yy-wrap base overrides for keranjang */
+#yy-wrap { padding-top: 80px; }
+
+.yy-qty-wrapper {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 95px; background: #f1f5f9; border: 1px solid #e2e8f0;
+    border-radius: 20px; padding: 3px; margin: 0 auto;
+}
+.yy-qty-btn {
+    width: 28px; height: 28px; border: none; border-radius: 50%;
+    background: transparent; cursor: pointer; display: flex; align-items: center;
+    justify-content: center; font-size: 1.1rem; color: #64748b; transition: all 0.2s ease;
+}
+.yy-qty-btn:hover {
+    background: #ffffff; color: var(--yy-accent); box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+.yy-qty-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.yy-qty-val { font-weight: 600; font-size: 0.95rem; color: var(--yy-text); width: 24px; text-align: center; user-select: none; }
+
 /* delete btn */
 #yy-wrap .yy-btn-del {
     width:34px; height:34px; border-radius:8px; border:1px solid rgba(239,68,68,.3);
@@ -159,12 +178,12 @@
 
 <!-- BRANDS -->
 <div class="yy-brands">
-    <img src="{{asset('public/')}}/img/ip.png"      alt="iPhone">
-    <img src="{{asset('public/')}}/img/oppo.png"    alt="Oppo">
-    <img src="{{asset('public/')}}/img/samsung.png" alt="Samsung">
-    <img src="{{asset('public/')}}/img/vivo.png"    alt="Vivo">
-    <img src="{{asset('public/')}}/img/xiaomi.png"  alt="Xiaomi">
-    <img src="{{asset('public/')}}/img/huawei.png"  alt="Huawei">
+    <img src="{{asset('img/ip.png')}}"      alt="iPhone">
+    <img src="{{asset('img/oppo.png')}}"    alt="Oppo">
+    <img src="{{asset('img/samsung.png')}}" alt="Samsung">
+    <img src="{{asset('img/vivo.png')}}"    alt="Vivo">
+    <img src="{{asset('img/xiaomi.png')}}"  alt="Xiaomi">
+    <img src="{{asset('img/huawei.png')}}"  alt="Huawei">
 </div>
 
 <!-- FLASH MESSAGES -->
@@ -204,9 +223,13 @@
                     <tr>
                         <th style="width:50px">#</th>
                         <th>Produk</th>
+                        @if($isMember)
                         <th class="yy-right">Harga</th>
+                        @endif
                         <th class="yy-center">Qty</th>
+                        @if($isMember)
                         <th class="yy-right">Subtotal</th>
+                        @endif
                         <th>Aksi</th>
                     </tr>
                 </thead>
@@ -225,18 +248,28 @@
                             <td>
                                 <div class="yy-cart-product">
                                     @if ($item['photo'] != '-')
-                                        <img src="{{asset('public/uploads/'.$item['photo'])}}" class="yy-cart-thumb" alt="">
+                                        <img src="{{asset('uploads/'.$item['photo'])}}" class="yy-cart-thumb" alt="">
                                     @else
-                                        <img src="{{asset('public/img/no_image.png')}}" class="yy-cart-thumb" alt="">
+                                        <img src="{{asset('img/no_image.png')}}" class="yy-cart-thumb" alt="">
                                     @endif
                                     <span class="yy-cart-product-name">{{$item['name']}}</span>
                                 </div>
                             </td>
+                            @if($isMember)
                             <td class="yy-right"><span class="yy-price-val">Rp {{number_format($item['price'])}},-</span></td>
-                            <td class="yy-center"><span class="yy-qty-val">{{$item['qty']}}</span></td>
+                            @endif
+                            <td class="yy-center">
+                                <div class="yy-qty-wrapper">
+                                    <button class="yy-qty-btn" onclick="updateCartQty('{{ route('update_qty_produk', $id) }}', 'minus', this)"><i class="bx bx-minus"></i></button>
+                                    <span class="yy-qty-val">{{$item['qty']}}</span>
+                                    <button class="yy-qty-btn" onclick="updateCartQty('{{ route('update_qty_produk', $id) }}', 'plus', this)"><i class="bx bx-plus"></i></button>
+                                </div>
+                            </td>
+                            @if($isMember)
                             <td class="yy-right"><span class="yy-subtotal-val">Rp {{number_format($item['price'] * $item['qty'])}},-</span></td>
+                            @endif
                             <td>
-                                <form action="{{route('delete_produk_cart',$id)}}" method="POST">
+                                <form action="{{route('delete_produk_cart',$id)}}" method="POST" class="ajax-cart-delete-form" style="margin:0;">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="yy-btn-del" title="Hapus"><i class="bx bxs-trash"></i></button>
@@ -258,18 +291,28 @@
                             <td>
                                 <div class="yy-cart-product">
                                     @if ($item['photo'] != '-')
-                                        <img src="{{asset('public/uploads/'.$item['photo'])}}" class="yy-cart-thumb" alt="">
+                                        <img src="{{asset('uploads/'.$item['photo'])}}" class="yy-cart-thumb" alt="">
                                     @else
-                                        <img src="{{asset('public/img/no_image.png')}}" class="yy-cart-thumb" alt="">
+                                        <img src="{{asset('img/no_image.png')}}" class="yy-cart-thumb" alt="">
                                     @endif
                                     <span class="yy-cart-product-name">{{$item['name']}}</span>
                                 </div>
                             </td>
+                            @if($isMember)
                             <td class="yy-right"><span class="yy-price-val">Rp {{number_format($item['price'])}},-</span></td>
-                            <td class="yy-center"><span class="yy-qty-val">{{$item['qty']}}</span></td>
+                            @endif
+                            <td class="yy-center">
+                                <div class="yy-qty-wrapper">
+                                    <button class="yy-qty-btn" onclick="updateCartQty('{{ route('update_qty_sparepart', $id) }}', 'minus', this)"><i class="bx bx-minus"></i></button>
+                                    <span class="yy-qty-val">{{$item['qty']}}</span>
+                                    <button class="yy-qty-btn" onclick="updateCartQty('{{ route('update_qty_sparepart', $id) }}', 'plus', this)"><i class="bx bx-plus"></i></button>
+                                </div>
+                            </td>
+                            @if($isMember)
                             <td class="yy-right"><span class="yy-subtotal-val">Rp {{number_format($item['price'] * $item['qty'])}},-</span></td>
+                            @endif
                             <td>
-                                <form action="{{route('delete_sparepart_cart',$id)}}" method="POST">
+                                <form action="{{route('delete_sparepart_cart',$id)}}" method="POST" class="ajax-cart-delete-form" style="margin:0;">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="yy-btn-del" title="Hapus"><i class="bx bxs-trash"></i></button>
@@ -283,6 +326,7 @@
 
             <!-- Footer -->
             <div class="yy-cart-footer">
+                @if($isMember)
                 <div>
                     <div class="yy-total-label">Total ({{ $itemCount }} item)</div>
                     <div class="yy-total-value">Rp <span>{{number_format($total)}}</span>,-</div>
@@ -290,6 +334,36 @@
                 <a href="{{route('checkout')}}" class="yy-btn-checkout">
                     <i class="bx bxs-basket"></i> Lanjut Checkout
                 </a>
+                @else
+                @php
+                    $waText = "Halo Admin, saya ingin memesan:\n\n";
+                    $i = 1;
+                    if(session('cart_produk')){
+                        foreach(session('cart_produk') as $it) {
+                            $waText .= $i++ . ". " . $it['name'] . " - " . $it['qty'] . " pcs\n";
+                        }
+                    }
+                    if(session('cart_sparepart')){
+                        foreach(session('cart_sparepart') as $it) {
+                            $waText .= $i++ . ". " . $it['name'] . " - " . $it['qty'] . " pcs\n";
+                        }
+                    }
+                    $waText .= "\nMohon info harga dan ketersediaan. Terima kasih!";
+                    
+                    $phone = isset($toko) && $toko->nomor_cs ? $toko->nomor_cs : '6285603124871';
+                    $phone = preg_replace('/[^0-9]/', '', $phone);
+                    if(substr($phone, 0, 1) == '0') {
+                        $phone = '62' . substr($phone, 1);
+                    }
+                @endphp
+                <div>
+                    <div class="yy-total-label">Total Item</div>
+                    <div class="yy-total-value"><span>{{ $itemCount }}</span> Item</div>
+                </div>
+                <a href="https://wa.me/{{ $phone }}?text={{ urlencode($waText) }}" target="_blank" class="yy-btn-checkout" style="background:#25D366; color:#fff;">
+                    <i class="bx bxl-whatsapp" style="font-size:1.2rem;"></i> Pesan via WhatsApp
+                </a>
+                @endif
             </div>
         </div>
 
@@ -305,4 +379,101 @@
 </section>
 
 </div>
+
+<div id="yy-scripts-wrapper">
+<script>
+    function updateCartUI(data, row = null) {
+        // Update badges
+        document.querySelectorAll('.yy-cart-badge, .yy-mobile-cart-badge').forEach(b => {
+            b.textContent = data.cart_count;
+        });
+
+        // Update totals
+        const isMember = {{ $isMember ? 'true' : 'false' }};
+        const totalValueEl = document.querySelector('.yy-cart-footer .yy-total-value span');
+        const totalLabelEl = document.querySelector('.yy-cart-footer .yy-total-label');
+        
+        if(isMember && totalValueEl) {
+            totalValueEl.textContent = data.cart_total_formatted;
+            if(totalLabelEl) totalLabelEl.textContent = 'Total (' + data.cart_count + ' item)';
+        } else if(totalValueEl) {
+            totalValueEl.textContent = data.cart_count;
+        }
+
+        // If cart is empty, reload to show empty state
+        if(data.cart_count === 0) {
+            window.location.reload();
+        }
+
+        // Update row specific values if provided
+        if(row && data.qty !== undefined) {
+            const qtyVal = row.querySelector('.yy-qty-val');
+            if(qtyVal) qtyVal.textContent = data.qty;
+            const subtotalVal = row.querySelector('.yy-subtotal-val');
+            if(subtotalVal) subtotalVal.textContent = 'Rp ' + data.item_subtotal_formatted + ',-';
+        }
+    }
+
+    function updateCartQty(url, action, btn) {
+        const row = btn.closest('tr');
+        const fd = new FormData();
+        fd.append('_token', '{{ csrf_token() }}');
+        fd.append('_method', 'PUT');
+        fd.append('action', action);
+
+        btn.disabled = true;
+
+        fetch(url, {
+            method: 'POST',
+            body: fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(res => res.json())
+        .then(data => {
+            btn.disabled = false;
+            if(data.success) {
+                updateCartUI(data, row);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            btn.disabled = false;
+        });
+    }
+
+    // Handle AJAX delete form
+    document.querySelectorAll('.ajax-cart-delete-form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const btn = this.querySelector('button[type="submit"]');
+            const row = this.closest('tr');
+            
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin"></i>';
+
+            fetch(this.action, {
+                method: 'POST',
+                body: new FormData(this),
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    row.remove();
+                    updateCartUI(data);
+                } else {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bx bxs-trash"></i>';
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bx bxs-trash"></i>';
+            });
+        });
+    });
+</script>
+</div>
+
 @endsection

@@ -317,6 +317,7 @@ class SparePartController extends Controller
         $create = KategoriSparepart::create([
             'foto_kategori' => $foto,
             'nama_kategori' => $request->nama_kategori,
+            'is_active' => $request->is_active ?? 1,
             'kode_owner' => $this->getThisUser()->id_upline
         ]);
 
@@ -531,7 +532,8 @@ class SparePartController extends Controller
             }
             $data_kategori->update([
                 'foto_kategori' => $foto,
-                'nama_kategori' => $request->nama_kategori
+                'nama_kategori' => $request->nama_kategori,
+                'is_active' => $request->is_active ?? 1
             ]);
             if ($data_kategori) {
                 return redirect()->route('kategori_sparepart')

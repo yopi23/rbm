@@ -12,46 +12,23 @@
 /* ── Hero ── */
 #content-app-wrapper .yy-hero {
     position: relative;
-    min-height: 380px;
+    width: 100%;
+    background: #ffffff;
+    padding: 30px 20px 0;
     display: flex;
-    align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 50%, #ffffff 100%);
+}
+#content-app-wrapper .yy-hero-container {
+    width: 100%;
+    max-width: 1300px;
+    border-radius: 24px;
     overflow: hidden;
-    padding: 60px 20px;
+    box-shadow: 0 12px 36px rgba(0, 168, 130, 0.15);
 }
-#content-app-wrapper .yy-hero::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background:
-        radial-gradient(ellipse 80% 60% at 20% 50%, rgba(0,201,167,.12) 0%, transparent 70%),
-        radial-gradient(ellipse 60% 50% at 80% 60%, rgba(0,168,130,.08) 0%, transparent 70%);
-    pointer-events: none;
-}
-#content-app-wrapper .yy-hero::after {
-    content: '';
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--yy-accent), transparent);
-}
-#content-app-wrapper .yy-hero-inner {
-    position: relative; z-index: 1; text-align: center; max-width: 780px;
-}
-#content-app-wrapper .yy-hero h1 {
-    font-size: clamp(1.8rem, 4vw, 2.8rem);
-    font-weight: 700;
-    color: var(--yy-white);
-    margin-bottom: 10px;
-    letter-spacing: -0.5px;
-}
-#content-app-wrapper .yy-hero h1 span { color: var(--yy-accent); }
-#content-app-wrapper .yy-hero h2 {
-    font-size: clamp(1rem, 2vw, 1.25rem);
-    font-weight: 400;
-    color: var(--yy-text-dim);
-    margin: 0;
+#content-app-wrapper .yy-hero-container img {
+    width: 100%;
+    height: auto;
+    display: block;
 }
 
 /* ── Brand Bar (logos) ── */
@@ -70,8 +47,9 @@
     flex-wrap: wrap;
 }
 #content-app-wrapper .yy-brands img {
-    height: 36px;
-    width: auto;
+    height: 32px;
+    width: 90px;
+    object-fit: contain;
     filter: grayscale(100%) opacity(0.6);
     transition: opacity .3s, filter .3s;
 }
@@ -323,21 +301,20 @@
 
 <!-- ── HERO ── -->
 <section class="yy-hero">
-    <div class="yy-hero-inner" data-aos="fade-in" data-aos-delay="200">
-        <h1>SELAMAT DATANG DI <span>YOYOYCELL</span></h1>
-        <h2>Service &amp; Grosir Sparepart, Handphone dan Lainnya</h2>
+    <div class="yy-hero-container" data-aos="fade-in" data-aos-duration="1000">
+        <img src="{{asset('img/mascot-banner.png')}}" alt="Service HP iPhone dan Android Cepat, Aman & Bergaransi">
     </div>
 </section>
 
 <!-- ── BRAND LOGOS ── -->
 <section class="yy-brands">
     <div class="yy-brands-track">
-        <img src="{{asset('public/')}}/img/ip.png"      alt="iPhone">
-        <img src="{{asset('public/')}}/img/oppo.png"    alt="Oppo">
-        <img src="{{asset('public/')}}/img/samsung.png" alt="Samsung">
-        <img src="{{asset('public/')}}/img/vivo.png"    alt="Vivo">
-        <img src="{{asset('public/')}}/img/xiaomi.png"  alt="Xiaomi">
-        <img src="{{asset('public/')}}/img/huawei.png"  alt="Huawei">
+        <img src="{{asset('img/ip.png')}}"      alt="iPhone">
+        <img src="{{asset('img/oppo.png')}}"    alt="Oppo">
+        <img src="{{asset('img/samsung.png')}}" alt="Samsung">
+        <img src="{{asset('img/vivo.png')}}"    alt="Vivo">
+        <img src="{{asset('img/xiaomi.png')}}"  alt="Xiaomi">
+        <img src="{{asset('img/huawei.png')}}"  alt="Huawei">
     </div>
 </section>
 
@@ -386,7 +363,7 @@
             <div class="yy-stat-number">
                 <span data-purecounter-start="0" data-purecounter-end="{{$sparepart}}" data-purecounter-duration="1" class="purecounter">{{$sparepart}}</span><span>+</span>
             </div>
-            <div class="yy-stat-label">Sparepart</div>
+            <div class="yy-stat-label">Sparepart & Aksesori</div>
         </div>
         <div class="yy-stat-item" data-aos="zoom-in" data-aos-delay="300">
             <div class="yy-stat-number">
@@ -452,9 +429,9 @@
         <div class="yy-team-card" data-aos="zoom-in" data-aos-delay="100">
             <div class="yy-team-photo">
                 @if ($item->foto_user != '-')
-                    <div style="background-image:url('{{asset('public')}}/uploads/{{$item->foto_user}}'); height:200px; background-size:cover; background-position:center;"></div>
+                    <div style="background-image:url('{{asset('uploads/'.$item->foto_user)}}'); height:200px; background-size:cover; background-position:center;"></div>
                 @else
-                    <img src="{{asset('public/')}}img/user-default.png" alt="">
+                    <img src="{{asset('img/user-default.png')}}" alt="">
                 @endif
                 <div class="yy-jabatan-badge">
                     @switch($item->jabatan)
