@@ -41,6 +41,42 @@
                 </form>
             </div>
             </div>
+            
+            <!-- Shift Logs Table -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h3 class="card-title">Log Aktivitas Shift (Audit)</h3>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-striped table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Waktu</th>
+                                <th>Tipe Aktivitas</th>
+                                <th>Deskripsi</th>
+                                <th>User</th>
+                                <th>Nominal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($shiftLogs as $log)
+                            <tr>
+                                <td>{{ \Carbon\Carbon::parse($log->created_at)->format('d M Y H:i:s') }}</td>
+                                <td><span class="badge badge-info">{{ $log->action_type }}</span></td>
+                                <td>{{ $log->description }}</td>
+                                <td>{{ $log->user->name ?? '-' }}</td>
+                                <td>{{ $log->amount > 0 ? 'Rp ' . number_format($log->amount, 0, ',', '.') : '-' }}</td>
+                            </tr>
+                            @empty
+                            <tr>
+                                <td colspan="5" class="text-center">Belum ada aktivitas tercatat pada shift ini.</td>
+                            </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </div>
     </div>
         </div>

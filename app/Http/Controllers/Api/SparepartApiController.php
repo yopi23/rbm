@@ -1009,7 +1009,6 @@ class SparepartApiController extends Controller
 
         $service = modelServices::findOrFail($serviceId);
 
-        // Fetch all associated spare parts (toko and luar)
         $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
             ->where('detail_part_services.kode_services', $serviceId)
             ->get([
@@ -1018,16 +1017,17 @@ class SparepartApiController extends Controller
                 'detail_part_services.qty_part', 
                 'detail_part_services.harga_garansi',
                 'detail_part_services.is_tanggungan_teknisi',
+                'detail_part_services.user_input',
                 'spareparts.harga_jual as harga_jual_master'
             ]);
 
         $part_luar_toko_service = DetailPartLuarService::where('kode_services', $serviceId)
-            ->get(['harga_part', 'qty_part', 'is_tanggungan_teknisi']);
+            ->get(['harga_part', 'qty_part', 'is_tanggungan_teknisi', 'user_input']);
 
         // Recalculate total_part (harga_sp) dan total_garansi
         $total_part_for_service = 0; // Harga jual part (untuk customer/harga_sp)
         $total_part_for_profit = 0;  // Harga jual part (yang ditanggung toko, mengurangi laba kotor)
-        $total_penalty_cost = 0;    // Harga modal part (yang ditanggung teknisi, mengurangi komisi)
+        $penalties_per_teknisi = []; // array to store penalties per user
         $total_garansi = 0;
 
         foreach ($part_toko_service as $part) {
@@ -1039,7 +1039,7 @@ class SparepartApiController extends Controller
 
             if ($part->is_tanggungan_teknisi) {
                 $jual_master = ($part->harga_jual_master ?: 0) * $part->qty_part;
-    $total_penalty_cost += $jual_master;
+                $penalties_per_teknisi[$part->user_input] = ($penalties_per_teknisi[$part->user_input] ?? 0) + $jual_master;
             } else {
                 $total_part_for_profit += $jual;
             }
@@ -1050,7 +1050,7 @@ class SparepartApiController extends Controller
             $total_part_for_service += $jual;
 
             if ($part->is_tanggungan_teknisi) {
-                $total_penalty_cost += $jual; // Part luar modal = jual
+                $penalties_per_teknisi[$part->user_input] = ($penalties_per_teknisi[$part->user_input] ?? 0) + $jual;
             } else {
                 $total_part_for_profit += $jual;
             }
@@ -1058,6 +1058,7 @@ class SparepartApiController extends Controller
 
         // Update the service's harga_sp (Total harga sparepart yang dipasang)
         $service->update(['harga_sp' => $total_part_for_service]);
+        $total_penalty_cost = array_sum($penalties_per_teknisi);
         Log::info("Internal: Service Harga SP updated to: $total_part_for_service, Total Garansi: $total_garansi, Penalty: $total_penalty_cost for Service ID: $serviceId");
 
         // Initialize variables yang akan di-return
@@ -1068,39 +1069,42 @@ class SparepartApiController extends Controller
             // --- LOGIKA UNTUK SERVICE KLAIM GARANSI ---
             Log::info("Internal: Service ID {$serviceId} is a warranty claim. Commission set to 0. Penalty still apply if any.");
             
-            $fix_profit_teknisi = -$total_penalty_cost;
+            $fix_profit_teknisi = 0;
 
-            // Hapus komisi lama jika ada (untuk mengembalikan saldo teknisi)
-            $records = ProfitPresentase::where('kode_service', $serviceId)->orderBy('id')->get();
-            if ($records->count() > 0 || $total_penalty_cost > 0) {
-                $totalOld = $records->sum('profit');
-                
-                $primary = $records->first() ?: new ProfitPresentase(['kode_service' => $serviceId]);
-                
-                $id_teknisi = $service->id_teknisi ?: ($primary->kode_user ?? null);
-                $teknisi = $id_teknisi ? UserDetail::where('kode_user', $id_teknisi)->first() : null;
-                
-                if ($teknisi) {
-                    $teknisi->decrement('saldo', $totalOld);
-                    $teknisi->increment('saldo', $fix_profit_teknisi); 
+            // Hapus semua komisi/penalti lama untuk revert saldo
+            $oldRecords = ProfitPresentase::where('kode_service', $serviceId)->get();
+            foreach ($oldRecords as $old) {
+                $old_user = UserDetail::where('kode_user', $old->kode_user)->first();
+                if ($old_user) {
+                    $old_user->decrement('saldo', $old->profit);
                 }
+                $old->delete();
+            }
 
-                $primary->fill([
-                    'kode_service' => $serviceId,
-                    'tgl_profit' => now(),
-                    'kode_user' => $id_teknisi,
-                    'profit' => $fix_profit_teknisi,
-                    'profit_toko' => 0,
-                    'saldo' => $teknisi ? $teknisi->fresh()->saldo : ($primary->saldo ?? 0),
-                ])->save();
-                
-                ProfitPresentase::where('kode_service', $serviceId)->where('id', '!=', $primary->id)->delete();
+            // Apply Penalties (karena klaim garansi, teknisi pembuat salah tetap kena penalti)
+            foreach ($penalties_per_teknisi as $penalized_user_id => $penalty_amount) {
+                if ($penalty_amount > 0) {
+                    $penalized_user = UserDetail::where('kode_user', $penalized_user_id)->first();
+                    $penalized_setting = SalarySetting::where('user_id', $penalized_user_id)->first();
+                    if ($penalized_user) {
+                        $penalized_user->decrement('saldo', $penalty_amount);
+                        $penalized_komisi = ProfitPresentase::create([
+                            'kode_service' => $serviceId,
+                            'tgl_profit' => now(),
+                            'kode_presentase' => $penalized_setting ? $penalized_setting->id : 0,
+                            'kode_user' => $penalized_user_id,
+                            'profit' => -$penalty_amount,
+                            'profit_toko' => $penalty_amount,
+                        ]);
+                        $penalized_komisi->update(['saldo' => $penalized_user->fresh()->saldo]);
+                    }
+                }
             }
 
             return [
                 'service_id' => $service->id,
                 'new_harga_sp' => $service->harga_sp,
-                'new_profit' => $fix_profit_teknisi,
+                'new_profit' => 0,
                 'total_garansi' => $total_garansi,
                 'penalty_applied' => $total_penalty_cost,
                 'info' => 'Warranty claim. Commission: 0, Penalty: ' . $total_penalty_cost
@@ -1113,45 +1117,42 @@ class SparepartApiController extends Controller
                 $serviceId = $service->id;
                 $id_teknisi = $service->id_teknisi;
 
-                DB::transaction(function () use ($service, $serviceId, $id_teknisi, $total_part_for_profit, $total_penalty_cost, $total_garansi, &$fix_profit_teknisi, &$profit_untuk_toko) {
+                DB::transaction(function () use ($service, $serviceId, $id_teknisi, $total_part_for_profit, $penalties_per_teknisi, $total_garansi, &$fix_profit_teknisi, &$profit_untuk_toko) {
+                    
+                    // 1. Revert ALL old profits/penalties for this service
+                    $oldProfitRecords = ProfitPresentase::where('kode_service', $serviceId)->get();
+                    foreach ($oldProfitRecords as $old) {
+                        $old_user = UserDetail::where('kode_user', $old->kode_user)->first();
+                        if ($old_user) {
+                            $old_user->decrement('saldo', $old->profit);
+                        }
+                        $old->delete();
+                    }
+
+                    // 2. Calculate and apply Commission for the service technician
                     $presentaseSetting = SalarySetting::where('user_id', $id_teknisi)->first();
                     $teknisi = UserDetail::where('kode_user', $id_teknisi)->first();
 
-                    if (!$teknisi || !$presentaseSetting) {
-                        Log::warning("Internal: Technician or SalarySetting not found for ID: {$id_teknisi}. Commission not updated.");
-                        return;
-                    }
+                    if ($teknisi && $presentaseSetting) {
+                        $total_service_profit = $service->total_biaya - ($total_part_for_profit + $total_garansi);
 
-                    // Hapus profit lama dari saldo teknisi (jika ada)
-                    $oldProfitRecords = ProfitPresentase::where('kode_service', $serviceId)->orderBy('id')->get();
-                    $totalOld = $oldProfitRecords->sum('profit');
-                    if ($totalOld != 0) {
-                        $teknisi->decrement('saldo', $totalOld);
-                        Log::info("Internal: Old profits deducted total: {$totalOld} from Technician ID: {$id_teknisi}");
-                    }
+                        Log::info("Internal: Profit calculation - Total Biaya: {$service->total_biaya}, Part (Shared): {$total_part_for_profit}, Total Garansi: {$total_garansi}, Service Profit: {$total_service_profit}");
 
-                    // Hitung ulang profit dari service (HANYA part yang tidak ditanggung teknisi)
-                    $total_service_profit = $service->total_biaya - ($total_part_for_profit + $total_garansi);
+                        $base_commission = 0;
+                        if ($presentaseSetting->compensation_type === 'percentage') {
+                            if ($total_service_profit < 0) {
+                                $base_commission = $total_service_profit * $presentaseSetting->max_percentage / 100;
+                            } else {
+                                $base_commission = $total_service_profit * $presentaseSetting->percentage_value / 100;
+                            }
+                        } 
+                        
+                        // Final commission untuk teknisi penyelesai (tanpa dipotong penalti teknisi lain)
+                        $fix_profit_teknisi = $base_commission;
+                        $profit_untuk_toko = $total_service_profit - $base_commission;
 
-                    Log::info("Internal: Profit calculation - Total Biaya: {$service->total_biaya}, Part (Shared): {$total_part_for_profit}, Total Garansi: {$total_garansi}, Service Profit: {$total_service_profit}");
+                        Log::info("Internal Calculation: Base Commission: {$base_commission}, Final untuk teknisi {$id_teknisi}: {$fix_profit_teknisi}");
 
-                    $base_commission = 0;
-                    if ($presentaseSetting->compensation_type === 'percentage') {
-                        if ($total_service_profit < 0) {
-                            $base_commission = $total_service_profit * $presentaseSetting->max_percentage / 100;
-                        } else {
-                            $base_commission = $total_service_profit * $presentaseSetting->percentage_value / 100;
-                        }
-                    } 
-                    
-                    // Final commission = Base Commission - Penalty Cost
-                    $fix_profit_teknisi = $base_commission - $total_penalty_cost;
-                    $profit_untuk_toko = $total_service_profit - $base_commission;
-
-                    Log::info("Internal Calculation: Base Commission: {$base_commission}, Penalty: {$total_penalty_cost}, Final: {$fix_profit_teknisi}");
-
-                    $komisi = null;
-                    if ($oldProfitRecords->isEmpty()) {
                         $komisi = ProfitPresentase::create([
                             'kode_service'    => $serviceId,
                             'tgl_profit'      => now(),
@@ -1160,26 +1161,35 @@ class SparepartApiController extends Controller
                             'profit'          => $fix_profit_teknisi,
                             'profit_toko'     => $profit_untuk_toko,
                         ]);
+
+                        $teknisi->increment('saldo', $fix_profit_teknisi);
+                        $komisi->update(['saldo' => $teknisi->fresh()->saldo]);
+                        Log::info("Internal: Technician {$id_teknisi} new saldo: {$teknisi->fresh()->saldo}");
                     } else {
-                        $primary = $oldProfitRecords->first();
-                        $primary->update([
-                            'tgl_profit'      => now(),
-                            'kode_presentase' => $presentaseSetting->id,
-                            'kode_user'       => $id_teknisi,
-                            'profit'          => $fix_profit_teknisi,
-                            'profit_toko'     => $profit_untuk_toko,
-                        ]);
-                        ProfitPresentase::where('kode_service', $serviceId)->where('id', '!=', $primary->id)->delete();
-                        $komisi = $primary;
+                        Log::warning("Internal: Technician or SalarySetting not found for ID: {$id_teknisi}. Commission not updated.");
                     }
 
-                    // Tambahkan profit baru (bisa positif atau negatif) ke saldo teknisi
-                    $teknisi->increment('saldo', $fix_profit_teknisi);
-
-                    // Update saldo final di record komisi
-                    $komisi->update(['saldo' => $teknisi->fresh()->saldo]);
-
-                    Log::info("Internal: Technician new saldo: {$teknisi->fresh()->saldo} for Technician ID: {$id_teknisi}");
+                    // 3. Apply Penalties ke teknisi yang bersangkutan
+                    foreach ($penalties_per_teknisi as $penalized_user_id => $penalty_amount) {
+                        if ($penalty_amount > 0) {
+                            $penalized_user = UserDetail::where('kode_user', $penalized_user_id)->first();
+                            $penalized_setting = SalarySetting::where('user_id', $penalized_user_id)->first();
+                            if ($penalized_user) {
+                                $penalized_user->decrement('saldo', $penalty_amount);
+                                
+                                $penalized_komisi = ProfitPresentase::create([
+                                    'kode_service'    => $serviceId,
+                                    'tgl_profit'      => now(),
+                                    'kode_presentase' => $penalized_setting ? $penalized_setting->id : 0,
+                                    'kode_user'       => $penalized_user_id,
+                                    'profit'          => -$penalty_amount,
+                                    'profit_toko'     => $penalty_amount,
+                                ]);
+                                $penalized_komisi->update(['saldo' => $penalized_user->fresh()->saldo]);
+                                Log::info("Internal: Penalty {$penalty_amount} applied to Technician ID: {$penalized_user_id}");
+                            }
+                        }
+                    }
                 });
             }
         }
@@ -1269,7 +1279,7 @@ class SparepartApiController extends Controller
                     $existingPart->update([
                         'qty_part' => $newTotalQtyForService,
                         'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
-                        'user_input' => auth()->user()->id,
+                        'user_input' => $request->id_teknisi ?? auth()->user()->id,
                     ]);
 
                     // Use logStockChange to update stock and variant
@@ -1300,9 +1310,16 @@ class SparepartApiController extends Controller
                         'detail_harga_part_service' => $sparepart->harga_jual,
                         'qty_part' => $qtyToAdd,
                         'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
-                        'user_input' => auth()->user()->id,
+                        'user_input' => $request->id_teknisi ?? auth()->user()->id,
                     ]);
-                    
+
+                    // Record shift log for sparepart usage
+                    \App\Models\ShiftLog::record(
+                        'SPAREPART_USAGE',
+                        "Pemakaian Tambahan Sparepart: {$sparepart->nama_sparepart} x {$qtyToAdd} untuk Service #{$serviceId}",
+                        $sparepart->id,
+                        \App\Models\Sparepart::class
+                    );
                     // REMOVED: $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
                     // Handled by PartServiceObserver -> logStockChange (which also updates variant stock)
                 }
@@ -1399,7 +1416,7 @@ class SparepartApiController extends Controller
                 $detailPartService->update([
                     'qty_part' => $newQty,
                     'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? $detailPartService->is_tanggungan_teknisi,
-                    'user_input' => auth()->user()->id,
+                    'user_input' => $request->id_teknisi ?? auth()->user()->id,
                 ]);
 
                 // Use logStockChange to update stock and variant
@@ -1570,7 +1587,7 @@ class SparepartApiController extends Controller
                 'qty_part' => $request->qty_part,
                 'is_potong_kas' => $request->has('is_potong_kas') ? $request->is_potong_kas : 1,
                 'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
-                'user_input' => auth()->user()->id,
+                'user_input' => $request->id_teknisi ?? auth()->user()->id,
             ]);
 
             // PERUBAHAN: Hitung total biaya dan catat sebagai kas keluar JIKA is_potong_kas true
@@ -1664,7 +1681,7 @@ class SparepartApiController extends Controller
                 'qty_part' => $request->qty_part,
                 'is_potong_kas' => $is_potong_kas_baru,
                 'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? $update->is_tanggungan_teknisi,
-                'user_input' => auth()->user()->id,
+                'user_input' => $request->id_teknisi ?? auth()->user()->id,
             ]);
 
             $this->performCommissionRecalculation($serviceId);
@@ -1859,7 +1876,7 @@ class SparepartApiController extends Controller
                         'qty_part' => $newTotalQtyForService,
                         'detail_harga_part_service' => $hargaPartService,
                         'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
-                        'user_input' => auth()->user()->id,
+                        'user_input' => $request->id_teknisi ?? auth()->user()->id,
                     ]);
                     $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
 
@@ -1881,7 +1898,7 @@ class SparepartApiController extends Controller
                         'detail_harga_part_service' => $hargaPartService,
                         'qty_part' => $request->qty_part,
                         'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
-                        'user_input' => auth()->user()->id,
+                        'user_input' => $request->id_teknisi ?? auth()->user()->id,
                     ]);
                     $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
                 }
@@ -1899,6 +1916,13 @@ class SparepartApiController extends Controller
 
                     Log::info("Warranty cost recorded to ledger: {$biayaModalPart} for service ID {$service->id}");
                 }
+                // Record Shift Log for SPAREPART_USAGE via API
+                \App\Models\ShiftLog::record(
+                    'SPAREPART_USAGE',
+                    "Penggunaan Sparepart (API): {$sparepart->nama_sparepart} x {$request->qty_part} untuk Service #{$service->kode_service}",
+                    $sparepart->id,
+                    \App\Models\Sparepart::class
+                );
 
                 DB::commit();
 
@@ -2041,7 +2065,7 @@ class SparepartApiController extends Controller
                 'qty_part' => $request->qty_part,
                 'is_potong_kas' => $request->has('is_potong_kas') ? $request->is_potong_kas : 1,
                 'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
-                'user_input' => auth()->user()->id,
+                'user_input' => $request->id_teknisi ?? auth()->user()->id,
             ]);
 
             // PERUBAHAN: Hitung total biaya dan catat sebagai kas keluar JIKA is_potong_kas true
@@ -2050,6 +2074,14 @@ class SparepartApiController extends Controller
                 $deskripsi = "Biaya Part Luar: {$request->nama_part} (x{$request->qty_part}) untuk Service {$service->kode_service}";
                 $this->catatKas($service, 0, $totalCost, $deskripsi);
             }
+
+            // Record Shift Log for SPAREPART_USAGE via API
+            \App\Models\ShiftLog::record(
+                'SPAREPART_USAGE',
+                "Penggunaan Sparepart Luar (API): {$request->nama_part} x {$request->qty_part} untuk Service #{$service->kode_service}",
+                $create->id,
+                \App\Models\DetailPartLuarService::class
+            );
 
             DB::commit(); // PERUBAHAN: Commit transaksi
 
@@ -2123,7 +2155,7 @@ class SparepartApiController extends Controller
                 'qty_part' => $request->qty_part,
                 'is_potong_kas' => $is_potong_kas_baru,
                 'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
-                'user_input' => auth()->user()->id,
+                'user_input' => $request->id_teknisi ?? auth()->user()->id,
             ]);
 
             DB::commit(); // PERUBAHAN: Commit transaksi
@@ -2409,7 +2441,7 @@ class SparepartApiController extends Controller
                 'tgl_mulai_garansi' => $request->tgl_mulai_garansi,
                 'tgl_exp_garansi' => $request->tgl_exp_garansi,
                 'catatan_garansi' => $request->catatan_garansi ?? '-',
-                'user_input' => auth()->user()->id,
+                'user_input' => $request->id_teknisi ?? auth()->user()->id,
                 'kode_owner' => $this->getThisUser()->id_upline,
             ]);
 
@@ -2535,11 +2567,11 @@ class SparepartApiController extends Controller
                 'tgl_mulai_garansi' => $request->tgl_mulai_garansi,
                 'tgl_exp_garansi' => $request->tgl_exp_garansi,
                 'catatan_garansi' => $request->catatan_garansi ?? '-',
-                'user_input' => auth()->user()->id,
+                'user_input' => $request->id_teknisi ?? auth()->user()->id,
             ]);
 
             if ($request->has('keterangan_teknisi')) {
-                $service = \App\Models\modelServices::where('kode_service', $data->kode_garansi)->first();
+                $service = modelServices::where('kode_service', $data->kode_garansi)->first();
                 if ($service) {
                     $service->keterangan_teknisi = $request->keterangan_teknisi;
                     $service->save();

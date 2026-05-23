@@ -364,6 +364,14 @@ class DashboardController extends Controller
             ]);
 
             if ($create) {
+                // Record shift log
+                \App\Models\ShiftLog::record(
+                    'INPUT_SERVICE',
+                    "Input Service a/n {$request->nama_pelanggan}, Type: {$request->type_unit}, Ket: {$request->ket}, Biaya: {$request->biaya_servis}",
+                    $create->id,
+                    \App\Models\Sevices::class
+                );
+
                 $dpAmount = $request->dp ?? 0;
                 if ($dpAmount > 0) {
                     $kategoriId = $request->input('id_kategorilaci');
@@ -431,6 +439,14 @@ class DashboardController extends Controller
                                 auth()->user()->id,
                                 $stok_awal,
                                 $stok_baru
+                            );
+
+                            // Record shift log for sparepart usage
+                            \App\Models\ShiftLog::record(
+                                'SPAREPART_USAGE',
+                                "Pemakaian Sparepart: {$update_sparepart->nama_sparepart} x {$request['qty_kode_sparepart'][$i]} untuk Service #{$data_service->kode_service}",
+                                $update_sparepart->id,
+                                \App\Models\Sparepart::class
                             );
                         }
                     }
@@ -783,6 +799,14 @@ class DashboardController extends Controller
                 'data_unit' => $request->data_unit,
                 'shift_id' => $shiftId,
             ]);
+
+            // Record shift log
+            \App\Models\ShiftLog::record(
+                'INPUT_SERVICE',
+                "Input Service a/n {$request->nama_kontak}, Type: {$request->type_unit}, Ket: {$request->keterangan}, Biaya: {$finalTotalBiaya}",
+                $service->id,
+                \App\Models\Sevices::class
+            );
 
             // --- 5. Proses Spare Part (jika ada) ---
             if ($request->has('items') && is_array($request->items)) {

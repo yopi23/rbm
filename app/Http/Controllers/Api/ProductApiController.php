@@ -57,10 +57,12 @@ class ProductApiController extends Controller
                 $query->where('kode_spl', $request->input('supplier_id'));
             }
 
-            // Filter is_active (withoutGlobalScope to allow filtering both active/inactive)
+            // Selalu hapus ActiveScope agar internal bisa melihat semua produk
+            $query->withoutGlobalScope(\App\Scopes\ActiveScope::class);
+
+            // Filter is_active hanya jika dikirimkan dari frontend
             if ($request->has('is_active')) {
-                $query->withoutGlobalScope(\App\Scopes\ActiveScope::class)
-                    ->where('spareparts.is_active', filter_var($request->input('is_active'), FILTER_VALIDATE_BOOLEAN));
+                $query->where('spareparts.is_active', filter_var($request->input('is_active'), FILTER_VALIDATE_BOOLEAN));
             }
 
             // Filter by category visibility
@@ -184,6 +186,7 @@ class ProductApiController extends Controller
                     'kode_owner' => $ownerId,
                     'kode_spl' => $request->kode_spl,
                     'is_active' => $request->input('is_active', 1),
+                    'is_visible_on_web' => $request->input('is_visible_on_web', 1),
                     'foto_sparepart' => !empty($uploadedPhotoPaths) ? $uploadedPhotoPaths : '-',
                 ]);
 
@@ -198,10 +201,14 @@ class ProductApiController extends Controller
                     'stock' => $product->stok_sparepart,
                 ]);
 
+                $freshProduct = Sparepart::withoutGlobalScope(\App\Scopes\ActiveScope::class)
+                    ->with(['kategori', 'supplier', 'variants.attributeValues.attribute'])
+                    ->find($product->id);
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Produk berhasil ditambahkan.',
-                    'data' => $this->formatProduct($product->fresh(['kategori', 'supplier', 'variants.attributeValues.attribute']))
+                    'data' => $this->formatProduct($freshProduct)
                 ], 201);
             });
 
@@ -262,7 +269,9 @@ class ProductApiController extends Controller
         }
 
         $ownerId = $this->getThisUser()->id_upline;
-        $product = Sparepart::where('kode_owner', $ownerId)->find($id);
+        $product = Sparepart::withoutGlobalScope(\App\Scopes\ActiveScope::class)
+            ->where('kode_owner', $ownerId)
+            ->find($id);
 
         if (!$product) {
             return response()->json([
@@ -356,7 +365,8 @@ class ProductApiController extends Controller
                     'harga_ecer',
                     'harga_pasang',
                     'kode_spl',
-                    'is_active'
+                    'is_active',
+                    'is_visible_on_web'
                 ]));
 
                 // Update photo column
@@ -376,10 +386,14 @@ class ProductApiController extends Controller
                     ]);
                 }
 
+                $freshProduct = Sparepart::withoutGlobalScope(\App\Scopes\ActiveScope::class)
+                    ->with(['kategori', 'supplier', 'variants.attributeValues.attribute'])
+                    ->find($product->id);
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Produk berhasil diupdate.',
-                    'data' => $this->formatProduct($product->fresh(['kategori', 'supplier', 'variants.attributeValues.attribute']))
+                    'data' => $this->formatProduct($freshProduct)
                 ]);
             });
 
@@ -408,7 +422,9 @@ class ProductApiController extends Controller
 
         try {
             $ownerId = $this->getThisUser()->id_upline;
-            $product = Sparepart::where('kode_owner', $ownerId)->find($id);
+            $product = Sparepart::withoutGlobalScope(\App\Scopes\ActiveScope::class)
+                ->where('kode_owner', $ownerId)
+                ->find($id);
 
             if (!$product) {
                 return response()->json([
@@ -476,9 +492,9 @@ class ProductApiController extends Controller
         })->values();
 
         // Format variants with attribute values
-        $variants = $product->variants->map(function ($variant) {
+        $variants = $product->variants->map(function ($variant) use ($product) {
             $attributeString = $variant->attributeValues->map(fn ($av) => $av->value)->join(', ');
-            $displayName = $variant->sparepart->nama_sparepart . ($attributeString ? ' - ' . $attributeString : '');
+            $displayName = $product->nama_sparepart . ($attributeString ? ' - ' . $attributeString : '');
 
             return [
                 'variant_id' => $variant->id,
@@ -510,6 +526,7 @@ class ProductApiController extends Controller
             'harga_ecer' => (int)$product->harga_ecer,
             'harga_pasang' => (int)$product->harga_pasang,
             'is_active' => (bool)$product->is_active,
+            'is_visible_on_web' => (bool)$product->is_visible_on_web,
             'main_photo' => $mainPhoto,
             'main_photo_url' => $mainPhotoUrl,
             'photos' => $photos,

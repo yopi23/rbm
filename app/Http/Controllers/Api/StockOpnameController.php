@@ -843,6 +843,14 @@ class StockOpnameController extends Controller
                 'kode_owner' => $kode_owner,
             ]);
 
+            // Record shift log for Stock Opname Add Item
+            \App\Models\ShiftLog::record(
+                'STOCK_OPNAME',
+                "Stock Opname Tambah Item Baru: {$sparepart->nama_sparepart}. Stok Aktual: {$request->stock_aktual}",
+                $detail->id,
+                \App\Models\StockOpnameDetail::class
+            );
+
             DB::commit();
 
             return response()->json([
@@ -997,6 +1005,16 @@ class StockOpnameController extends Controller
             if ($pendingCount === 0) {
                 $period->status = 'completed';
                 $period->save();
+            }
+
+            // Record shift log for Stock Opname Item Check
+            if ($selisih != 0) {
+                \App\Models\ShiftLog::record(
+                    'STOCK_OPNAME',
+                    "Stock Opname Pemeriksaan Item: {$sparepart->nama_sparepart}. Tercatat: {$stockTercatat}, Aktual: {$stockAktual}, Selisih: {$selisih}",
+                    $detail->id,
+                    \App\Models\StockOpnameDetail::class
+                );
             }
 
             DB::commit();
@@ -1213,6 +1231,14 @@ class StockOpnameController extends Controller
                     'user_input' => $user->id,
                 ]);
             }
+
+            // Record shift log for Stock Opname Adjustment
+            \App\Models\ShiftLog::record(
+                'STOCK_OPNAME',
+                "Stock Opname Koreksi Manual: {$sparepart->nama_sparepart}. Koreksi: {$adjustmentQty}, Stok Baru: {$newStock}. Alasan: {$request->alasan_adjustment}",
+                $adjustment->id,
+                \App\Models\StockOpnameAdjustment::class
+            );
 
             DB::commit();
 

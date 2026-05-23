@@ -450,6 +450,50 @@
                     <small><i class="fas fa-info-circle"></i> Tabel ini menampilkan semua pergerakan uang yang tercatat di sistem selama shift ini berlangsung.</small>
                 </div>
             </div>
+
+            <!-- Shift Logs Table -->
+            <div class="card card-secondary card-outline mt-4">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-clipboard-list"></i> Log Aktivitas Shift (Audit)
+                    </h3>
+                    <div class="card-tools">
+                        <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table table-striped table-hover table-bordered m-0">
+                            <thead class="bg-light sticky-top">
+                                <tr>
+                                    <th>Waktu</th>
+                                    <th>Tipe Aktivitas</th>
+                                    <th>Deskripsi</th>
+                                    <th>User</th>
+                                    <th class="text-right">Nominal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($shiftLogs as $log)
+                                <tr>
+                                    <td>{{ \Carbon\Carbon::parse($log->created_at)->format('d M H:i:s') }}</td>
+                                    <td><span class="badge badge-info">{{ $log->action_type }}</span></td>
+                                    <td>{{ $log->description }}</td>
+                                    <td>{{ $log->user->name ?? '-' }}</td>
+                                    <td class="text-right">{{ $log->amount > 0 ? 'Rp ' . number_format($log->amount, 0, ',', '.') : '-' }}</td>
+                                </tr>
+                                @empty
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">Belum ada aktivitas tercatat pada shift ini.</td>
+                                </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
 </div>

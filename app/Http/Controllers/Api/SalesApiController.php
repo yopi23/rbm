@@ -636,7 +636,9 @@ class SalesApiController extends Controller
 
             // Buat query dasar
             $query = DB::table('spareparts')
-                ->where('kode_owner', '=', $ownerCode);
+                ->where('kode_owner', '=', $ownerCode)
+                ->where('is_active', 1)
+                ->where('is_visible_on_web', 1);
 
             // Filter by category if provided
             if ($categoryId) {
@@ -875,6 +877,15 @@ class SalesApiController extends Controller
                 );
             }
         }
+
+        // Record Shift Log for Sales via API
+        \App\Models\ShiftLog::record(
+            $statusPenjualan == '1' ? 'SALES' : 'DRAFT_SALES',
+            ($statusPenjualan == '1' ? 'Penjualan (API)' : 'Draf Penjualan (API)') . " #{$sale->kode_penjualan} - Total: Rp " . number_format($totalPenjualan, 0, ',', '.'),
+            $sale->id,
+            \App\Models\Penjualan::class,
+            $totalBayar
+        );
 
         return response()->json([
             'status' => $stockErrors ? 'partial_success' : 'success',

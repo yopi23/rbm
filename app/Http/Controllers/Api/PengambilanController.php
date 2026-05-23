@@ -173,6 +173,15 @@ class PengambilanController extends Controller
                 );
             }
 
+            // Record Shift Log for Unit Pickup via API
+            \App\Models\ShiftLog::record(
+                'PICKUP_UNIT',
+                "Pengambilan Unit (API) #{$pengambilan->kode_pengambilan} a/n {$request->nama_pengambilan} sejumlah " . count($request->service_ids) . " unit dengan total bayar Rp " . number_format($total_bayar, 0, ',', '.'),
+                $pengambilan->id,
+                \App\Models\Pengambilan::class,
+                $total_bayar
+            );
+
             DB::commit();
 
             return response()->json([

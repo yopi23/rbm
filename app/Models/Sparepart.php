@@ -25,6 +25,7 @@ class Sparepart extends Model
         'kode_owner',
         'kode_spl',
         'is_active',
+        'is_visible_on_web',
     ];
 
     /**

@@ -185,6 +185,15 @@ class UserController extends Controller
                 );
             }
 
+            // Record shift log
+            \App\Models\ShiftLog::record(
+                'WITHDRAWAL',
+                "Penarikan " . ($statusPenarikan == '1' ? '(Disetujui)' : '(Pending)') . " sejumlah Rp " . number_format($jumlahPenarikan, 0, ',', '.') . " oleh {$pegawais->fullname}",
+                $create->id,
+                \App\Models\Penarikan::class,
+                $jumlahPenarikan
+            );
+
             DB::commit();
 
             // Status WhatsApp notification
@@ -311,6 +320,15 @@ class UserController extends Controller
                     true,
                     false
                 );
+
+                // Record shift log for approval
+                \App\Models\ShiftLog::record(
+                    'WITHDRAWAL_APPROVED',
+                    "Penarikan sebesar Rp " . number_format($data->jumlah_penarikan, 0, ',', '.') . " oleh {$pegawais->fullname} disetujui",
+                    $data->id,
+                    \App\Models\Penarikan::class,
+                    $data->jumlah_penarikan
+                );
             }
             // 2. Rejected (Any -> 2)
             elseif ($request->status_penarikan == '2' && $oldStatus != '2') {
@@ -318,6 +336,14 @@ class UserController extends Controller
                 $pegawais->update([
                     'saldo' => $new_saldo
                 ]);
+
+                // Record shift log for rejection
+                \App\Models\ShiftLog::record(
+                    'WITHDRAWAL_REJECTED',
+                    "Penarikan sebesar Rp " . number_format($data->jumlah_penarikan, 0, ',', '.') . " oleh {$pegawais->fullname} ditolak",
+                    $data->id,
+                    \App\Models\Penarikan::class
+                );
             }
 
             return redirect()->route('profile')->with([

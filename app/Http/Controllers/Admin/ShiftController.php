@@ -117,8 +117,11 @@ class ShiftController extends Controller
         $pengeluaranTokos = $shift->pengeluaranTokos;
         $pengeluaranOperasionals = $shift->pengeluaranOperasionals;
 
+        // Fetch shift logs
+        $shiftLogs = \App\Models\ShiftLog::where('shift_id', $shift->id)->orderBy('created_at', 'desc')->get();
+
         $page = 'Detail Shift #' . $shift->id;
-        return view('admin.page.shift.show', compact('shift', 'expectedCash', 'cashIn', 'cashOut', 'penjualans', 'services', 'pengeluaranTokos', 'pengeluaranOperasionals', 'sparepartReport', 'page'));
+        return view('admin.page.shift.show', compact('shift', 'expectedCash', 'cashIn', 'cashOut', 'penjualans', 'services', 'pengeluaranTokos', 'pengeluaranOperasionals', 'sparepartReport', 'page', 'shiftLogs'));
     }
 
     public function close($id)
@@ -139,8 +142,11 @@ class ShiftController extends Controller
             ->sum('kredit');
         $expectedCash = $shift->modal_awal + $cashIn - $cashOut;
         
+        // Fetch shift logs
+        $shiftLogs = \App\Models\ShiftLog::where('shift_id', $shift->id)->orderBy('created_at', 'desc')->get();
+
         $page = 'Tutup Shift';
-        return view('admin.page.shift.close', compact('shift', 'expectedCash', 'page'));
+        return view('admin.page.shift.close', compact('shift', 'expectedCash', 'page', 'shiftLogs'));
     }
 
     public function update(Request $request, $id)

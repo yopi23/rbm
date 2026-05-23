@@ -15,7 +15,8 @@ class SparepartController extends Controller
         $query = Sparepart::join('kategori_spareparts','spareparts.kode_kategori','=','kategori_spareparts.id')
             ->where(function($q) {
                 $q->where('kategori_spareparts.is_active', 1)->orWhereNull('kategori_spareparts.is_active');
-            });
+            })
+            ->where('spareparts.is_visible_on_web', 1);
 
         if ($request->filled('q')) {
             $query->where('nama_sparepart', 'LIKE', '%' . $request->q . '%');
@@ -61,6 +62,7 @@ class SparepartController extends Controller
     {
         $sparepart = Sparepart::with('kategori')
             ->where('spareparts.id', $id)
+            ->where('spareparts.is_visible_on_web', 1)
             ->first();
 
         if (!$sparepart) {

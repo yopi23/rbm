@@ -147,6 +147,15 @@ class UserDataController extends Controller
                 $this->catatKas($create, 0, $transferAmount, 'Penarikan Saldo API (Transfer) oleh: ' . $pegawais->fullname, null, false);
             }
 
+            // Record Shift Log for Withdrawal Request via API
+            \App\Models\ShiftLog::record(
+                'WITHDRAWAL',
+                "Penarikan Saldo (API) oleh {$pegawais->fullname} sejumlah Rp " . number_format($jumlahPenarikan, 0, ',', '.'),
+                $create->id,
+                \App\Models\Penarikan::class,
+                $jumlahPenarikan
+            );
+
 
                 // 3. Logika Notifikasi WhatsApp (tetap sama)
                 $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
@@ -277,6 +286,15 @@ class UserDataController extends Controller
             if ($transferAmount > 0) {
                 $this->catatKas($create, 0, $transferAmount, "Penarikan admin untuk {$targetEmployee->fullname} [Transfer]", null, false);
             }
+
+            // Record Shift Log for Admin Withdrawal Request via API
+            \App\Models\ShiftLog::record(
+                'WITHDRAWAL',
+                "Penarikan Saldo (API Admin) untuk {$targetEmployee->fullname} sejumlah Rp " . number_format($jumlahPenarikan, 0, ',', '.'),
+                $create->id,
+                \App\Models\Penarikan::class,
+                $jumlahPenarikan
+            );
 
             DB::commit();
             return response()->json(['success' => true, 'data' => $create], 201);

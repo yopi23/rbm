@@ -163,6 +163,14 @@ class PenjualanController extends Controller
                     auth()->user()->id
                 );
 
+                // Record shift log for updating sparepart qty in draft
+                \App\Models\ShiftLog::record(
+                    'DRAFT_SALES_UPDATE_QTY',
+                    "Tambah Qty Sparepart: {$update->nama_sparepart} (Qty Tambahan: {$request->qty_sparepart}) ke Penjualan #{$request->kode_penjualan}",
+                    $update->id,
+                    \App\Models\Sparepart::class
+                );
+
                 return redirect()->back();
             }
         }
@@ -189,6 +197,14 @@ class PenjualanController extends Controller
                 'updated_at' => Carbon::now(),
             ]);
             if ($create) {
+                // Record shift log for adding sparepart to draft
+                \App\Models\ShiftLog::record(
+                    'DRAFT_SALES_ADD_ITEM',
+                    "Tambah Sparepart: {$update->nama_sparepart} x {$request->qty_sparepart} ke Penjualan #{$request->kode_penjualan}",
+                    $update->id,
+                    \App\Models\Sparepart::class
+                );
+
                 // Stock update is handled by SparepartSaleObserver
                 return redirect()->back();
             }
@@ -217,6 +233,14 @@ class PenjualanController extends Controller
         }
         $data->delete();
         if ($data) {
+            // Record shift log for removing sparepart from draft
+            \App\Models\ShiftLog::record(
+                'DRAFT_SALES_REMOVE_ITEM',
+                "Hapus Sparepart dari Penjualan #{$data->kode_penjualan} (Qty yang dihapus: {$data->qty_sparepart})",
+                $data->kode_sparepart,
+                \App\Models\Sparepart::class
+            );
+
             return redirect()->back();
         }
     }
@@ -453,6 +477,15 @@ class PenjualanController extends Controller
         }
 
         if ($penjualan) {
+            $statusText = $penjualan->status_penjualan == '1' ? 'Penjualan' : 'Draf Penjualan';
+            \App\Models\ShiftLog::record(
+                $penjualan->status_penjualan == '1' ? 'SALES' : 'DRAFT_SALES',
+                "{$statusText} {$penjualan->kode_penjualan} a/n {$penjualan->nama_customer} dengan total Rp " . number_format($penjualan->total_penjualan, 0, ',', '.'),
+                $penjualan->id,
+                \App\Models\Penjualan::class,
+                $penjualan->total_penjualan
+            );
+
             return redirect()->back();
         }
     }

@@ -42,11 +42,14 @@ class ShiftApiController extends Controller
             ]);
         }
 
+        $shiftData = $this->formatShiftData($activeShift);
+        $shiftData['shift_logs'] = \App\Models\ShiftLog::with('user')->where('shift_id', $activeShift->id)->orderBy('created_at', 'desc')->get();
+
         return response()->json([
             'success' => true,
             'status' => 'open',
             'message' => 'Active shift found',
-            'data' => $this->formatShiftData($activeShift)
+            'data' => $shiftData
         ]);
     }
 
@@ -524,6 +527,8 @@ class ShiftApiController extends Controller
 
         $totalPendapatan = $cashIn + $transferIn;
 
+        $shiftLogs = \App\Models\ShiftLog::with('user')->where('shift_id', $shift->id)->orderBy('created_at', 'desc')->get();
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -540,7 +545,8 @@ class ShiftApiController extends Controller
                     'selisih' => $shift->selisih,
                 ],
                 'sparepart_analysis' => $sparepartReport,
-                'report_snapshot' => $reportDataRaw
+                'report_snapshot' => $reportDataRaw,
+                'shift_logs' => $shiftLogs
             ]
         ]);
     }

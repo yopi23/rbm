@@ -89,9 +89,21 @@ class PengembalianController extends Controller
                     now()
                 );
             }
+            $servicesDiambil = modelServices::where([['kode_pengambilan', '=', $id]])->get();
             modelServices::where([['kode_pengambilan', '=', $id]])->update([
                 'status_services' => 'Diambil'
             ]);
+
+            foreach ($servicesDiambil as $srv) {
+                // Record shift log
+                \App\Models\ShiftLog::record(
+                    'PICKUP_UNIT',
+                    "Pengambilan Unit Service a/n {$srv->nama_pelanggan} (Kode: {$srv->kode_service}) oleh {$request->nama_pengambilan}",
+                    $srv->id,
+                    \App\Models\Sevices::class
+                );
+            }
+
             return redirect()->back()->with(['success' => 'Pengambilan Berhasil']);
         }
         return redirect()->back()->with(['success' => 'Opss,Something Went Wrong']);
