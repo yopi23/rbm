@@ -226,7 +226,8 @@ class CommissionController extends Controller
                     'profit_presentases.profit as technician_commission',
                     'profit_presentases.profit_toko as store_profit',
                     'user_details.fullname as technician_name',
-                    'user_details.kode_user as technician_id'
+                    'user_details.kode_user as technician_id',
+                    'profit_presentases.is_cair as is_cair'
                 )
                 // Filter Tanggal berdasarkan created_at profit
                 ->whereDate('profit_presentases.created_at', '>=', $startDate)
