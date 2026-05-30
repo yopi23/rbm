@@ -132,6 +132,23 @@ class PengambilanController extends Controller
                 'kode_pengambilan' => $pengambilan->id
             ]);
 
+            // RELEASE TECHNICIAN COMMISSION (SALDO TERTAHAN -> SALDO UTAMA)
+            $pendingCommissions = \App\Models\ProfitPresentase::whereIn('kode_service', $request->service_ids)
+                ->where('is_cair', 0)
+                ->get();
+                
+            foreach ($pendingCommissions as $komisi) {
+                $pegawai = \App\Models\UserDetail::where('kode_user', $komisi->kode_user)->first();
+                if ($pegawai) {
+                    $komisi->update([
+                        'is_cair' => 1,
+                        'saldo' => $pegawai->saldo + $komisi->profit,
+                    ]);
+                    $pegawai->increment('saldo', $komisi->profit);
+                    \Illuminate\Support\Facades\Log::info("API Pengambilan: Commission {$komisi->profit} released for Technician ID: {$komisi->kode_user} on Service ID: {$komisi->kode_service}");
+                }
+            }
+
             $keterangan = 'Ngambil Unit oleh-' . $request->nama_pengambilan;
             if ($dp_amount > 0) {
                 $keterangan .= ' (Total: ' . number_format($total_services) . ', DP: ' . number_format($dp_amount) . ')';

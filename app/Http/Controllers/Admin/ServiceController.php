@@ -558,7 +558,7 @@ class ServiceController extends Controller
             'id_teknisi' => $id_teknisi
         ]);
         if ($update) {
-            // Check for 'Diambil' status to record payment
+            // Check for 'Diambil' status to record payment and release technician commission
             if ($request->status_services == 'Diambil') {
                 // Calculate remaining balance to be paid
                 // We check existing payments in KasPerusahaan to avoid double counting or overcharging
@@ -579,9 +579,40 @@ class ServiceController extends Controller
                         now()
                     );
                 }
+
+                // RELEASE TECHNICIAN COMMISSION (SALDO TERTANAH -> SALDO UTAMA)
+                $komisis = ProfitPresentase::where('kode_service', $id)->where('is_cair', 0)->get();
+                foreach ($komisis as $komisi) {
+                    $pegawais = UserDetail::where('kode_user', $komisi->kode_user)->first();
+                    if ($pegawais) {
+                        $komisi->update([
+                            'is_cair' => 1,
+                            'saldo' => $pegawais->saldo + $komisi->profit,
+                        ]);
+                        $pegawais->increment('saldo', $komisi->profit);
+                    }
+                }
             }
 
             if ($request->status_services == 'Cancel') {
+                // Deduct or remove technician commission if it exists
+                $komisis = ProfitPresentase::where('kode_service', $id)->get();
+                foreach ($komisis as $komisi) {
+                    if ($komisi->profit < 0) {
+                        continue; // Biarkan penalti tetap memotong saldo
+                    }
+                    if ($komisi->is_cair) {
+                        // If commission was already released (e.g. legacy service or manually released),
+                        // decrement the technician's balance.
+                        $pegawais = UserDetail::where('kode_user', $komisi->kode_user)->first();
+                        if ($pegawais) {
+                            $pegawais->decrement('saldo', $komisi->profit);
+                        }
+                    }
+                    // Delete the commission record
+                    $komisi->delete();
+                }
+
                 // Refund DP ke kas jika ada
                 $dpAmount = $update->dp ?? 0;
                 if ($dpAmount > 0) {
@@ -706,12 +737,9 @@ class ServiceController extends Controller
                             'kode_presentase' => $presentase->id,
                             'kode_user' => $id_teknisi,
                             'profit' => $fix_profit,
-                            'saldo' => $pegawais->saldo + $fix_profit,
+                            'saldo' => $pegawais->saldo, // Saldo awal tanpa komisi baru (karena statusnya pending)
+                            'is_cair' => 0, // Pending
                         ]);
-
-                        if ($komisi) {
-                            $pegawais->increment('saldo', $fix_profit);
-                        }
                     }
                 }
 
@@ -980,13 +1008,8 @@ class ServiceController extends Controller
                         'kode_user' => $id_teknisi,
                         'profit' => $fix_profit,
                         'saldo' => $user_detail->saldo,
+                        'is_cair' => 0, // Pending
                     ]);
-
-
-                    // Perbarui saldo user_detail
-
-                    $user_detail->saldo += $fix_profit;
-                    $user_detail->save();
                 }
                 else {
                     // Jika data sudah ada, mungkin lakukan logging atau berikan feedback

@@ -337,4 +337,121 @@ class CommissionController extends Controller
 
         return $user;
     }
+
+    public function getKomisiTertahan(Request $request)
+    {
+        if (!Auth::check()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        $user = Auth::user();
+        $jabatan = $user->jabatan;
+        if (is_null($jabatan)) {
+            $userDetail = DB::table('user_details')->where('kode_user', $user->id)->first();
+            $jabatan = $userDetail ? $userDetail->jabatan : null;
+        }
+
+        if ($jabatan != '0' && $jabatan != '1') {
+            return response()->json(['success' => false, 'message' => 'Unauthorized. Only Admin or Owner can perform this action.'], 403);
+        }
+
+        try {
+            $query = DB::table('profit_presentases')
+                ->join('sevices', 'profit_presentases.kode_service', '=', 'sevices.id')
+                ->join('user_details', 'profit_presentases.kode_user', '=', 'user_details.kode_user')
+                ->select(
+                    'profit_presentases.id as id_profit',
+                    'user_details.kode_user',
+                    'user_details.saldo',
+                    'user_details.fullname as nama_karyawan',
+                    'profit_presentases.profit as nominal',
+                    'profit_presentases.created_at as tanggal',
+                    'sevices.kode_service',
+                    'sevices.nama_pelanggan',
+                    'sevices.type_unit',
+                    'sevices.keterangan'
+                )
+                ->where('profit_presentases.is_cair', 0);
+
+            if ($jabatan == '1') {
+                $query->where('user_details.id_upline', $user->id);
+            }
+
+            $pendingCommissions = $query->orderBy('profit_presentases.created_at', 'desc')->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $pendingCommissions
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil data komisi tertahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function cairkanKomisiTertahan(Request $request)
+    {
+        if (!Auth::check()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        $user = Auth::user();
+        $jabatan = $user->jabatan;
+        if (is_null($jabatan)) {
+            $userDetail = DB::table('user_details')->where('kode_user', $user->id)->first();
+            $jabatan = $userDetail ? $userDetail->jabatan : null;
+        }
+
+        if ($jabatan != '0' && $jabatan != '1') {
+            return response()->json(['success' => false, 'message' => 'Unauthorized. Only Admin or Owner can perform this action.'], 403);
+        }
+
+        $request->validate([
+            'komisi_ids' => 'required|array',
+            'komisi_ids.*' => 'exists:profit_presentases,id'
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $processedCount = 0;
+            $totalAmount = 0;
+            foreach ($request->komisi_ids as $id) {
+                $komisi = \App\Models\ProfitPresentase::find($id);
+                if ($komisi && $komisi->is_cair == 0) {
+                    
+                    // Validasi Kepemilikan Karyawan
+                    $targetUser = \App\Models\UserDetail::where('kode_user', $komisi->kode_user)->first();
+                    if (!$targetUser) continue;
+
+                    // Jika user adalah Owner (1), pastikan karyawan ini ada di bawah upline nya
+                    if ($jabatan == '1' && $targetUser->id_upline != $user->id) {
+                        continue;
+                    }
+
+                    $komisi->is_cair = 1;
+                    $komisi->save();
+
+                    $targetUser->increment('saldo', $komisi->profit);
+                    $komisi->update(['saldo' => $targetUser->fresh()->saldo]);
+                    $processedCount++;
+                    $totalAmount += $komisi->profit;
+                }
+            }
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => "$processedCount komisi tertahan berhasil dicairkan.",
+                'data' => [
+                    'processed_count' => $processedCount,
+                    'total_amount' => $totalAmount
+                ]
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Terjadi kesalahan: ' . $e->getMessage()], 500);
+        }
+    }
 }

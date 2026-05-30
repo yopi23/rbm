@@ -22,8 +22,10 @@
                             </div>
                         @endif
                         @if ($this_user->jabatan != '1')
-                            <small>saldo anda</small>
+                            <small>Saldo Utama (Bisa Ditarik)</small>
                             <h4>Rp.{{ number_format($this_user->saldo) }},-</h4>
+                            <small class="text-warning">Saldo Tertahan (Belum Diambil)</small>
+                            <h5 class="text-warning font-weight-bold">Rp.{{ number_format($saldo_tertahan) }},-</h5>
                         @endif
 
                     @endif
@@ -92,9 +94,11 @@
                             <thead>
                                 <tr>
                                     <th>Nama</th>
-                                    <th>Saldo</th>
-                                    <th>Komisi</th>
+                                    <th>Saldo Utama</th>
+                                    <th>Saldo Tertahan</th>
+                                    <th>Komisi Bulan Ini</th>
                                     <th>Penarikan</th>
+                                    <th>Aksi</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -102,13 +106,78 @@
                                     <tr>
                                         <td>{{ $employee->fullname }}</td>
                                         <td>Rp.{{ number_format($employee->saldo) }},-</td>
+                                        <td class="text-warning font-weight-bold">Rp.{{ number_format($employee->saldo_tertahan) }},-</td>
                                         <td>Rp.{{ number_format($employee->total_komisi) }},-</td>
                                         <td>Rp.{{ number_format($employee->total_penarikan) }},-</td>
+                                        <td>
+                                            @if($employee->saldo_tertahan > 0)
+                                                <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#modal_cairkan_{{ $employee->kode_user }}">
+                                                    Cairkan Komisi
+                                                </button>
+                                            @endif
+                                        </td>
                                     </tr>
                                 @endforeach
                             </tbody>
                         </table>
                     </div>
+                    
+                    @foreach ($employees as $employee)
+                        @if($employee->saldo_tertahan > 0)
+                            <div class="modal fade" id="modal_cairkan_{{ $employee->kode_user }}">
+                                <div class="modal-dialog modal-lg">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h4 class="modal-title">Cairkan Komisi Tertahan - {{ $employee->fullname }}</h4>
+                                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                                <span aria-hidden="true">&times;</span>
+                                            </button>
+                                        </div>
+                                        <form action="{{ route('cairkan_komisi_tertahan') }}" method="POST">
+                                            @csrf
+                                            <div class="modal-body">
+                                                <p>Pilih komisi mana yang ingin diverifikasi dan dicairkan ke saldo utama karyawan ini:</p>
+                                                <div class="table-responsive">
+                                                    <table class="table table-bordered">
+                                                        <thead>
+                                                            <tr>
+                                                                <th><input type="checkbox" id="checkAll_{{ $employee->kode_user }}"></th>
+                                                                <th>Tanggal</th>
+                                                                <th>Pelanggan</th>
+                                                                <th>Servis</th>
+                                                                <th>Komisi</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            @foreach($employee->komisi_pending_list as $kom)
+                                                                <tr>
+                                                                    <td>
+                                                                        <input type="checkbox" name="komisi_ids[]" value="{{ $kom->id }}" class="komisi-checkbox-{{ $employee->kode_user }}">
+                                                                    </td>
+                                                                    <td>{{ \Carbon\Carbon::parse($kom->created_at)->format('d/m/Y H:i') }}</td>
+                                                                    <td>{{ $kom->servis ? $kom->servis->nama_pelanggan : '-' }}</td>
+                                                                    <td>{{ $kom->servis ? $kom->servis->type_unit : '-' }}</td>
+                                                                    <td>Rp.{{ number_format($kom->profit) }},-</td>
+                                                                </tr>
+                                                            @endforeach
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <div class="mt-2 text-right">
+                                                    <strong>Total Tertahan: Rp.{{ number_format($employee->saldo_tertahan) }},-</strong>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer justify-content-between">
+                                                <button type="button" class="btn btn-default" data-dismiss="modal">Tutup</button>
+                                                <button type="submit" class="btn btn-success">Cairkan Terpilih</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
+                    @endforeach
+
                 </div>
             </div>
         @endif
@@ -119,6 +188,9 @@
             <div class="card-header">
                 <ul class="nav nav-pills">
                     <li class="nav-item"><a class="nav-link active" href="#profile" data-toggle="tab">Profile</a></li>
+                    @if ($this_user->jabatan != '0' && $this_user->jabatan != '1')
+                        <li class="nav-item"><a class="nav-link" href="#komisi_pending" data-toggle="tab">Komisi Tertahan ({{ count($servis_tertahan) }})</a></li>
+                    @endif
                     @if ($this_user->jabatan != '0')
                         <li class="nav-item"><a class="nav-link" href="#gaji" data-toggle="tab">Penarikan Gaji</a>
                         </li>
@@ -305,6 +377,46 @@
                                 </table>
                             </div>
                         </div>
+                        @if ($this_user->jabatan != '0' && $this_user->jabatan != '1')
+                        <div class="tab-pane" id="komisi_pending">
+                            <div class="alert alert-info">
+                                <h5><i class="icon fas fa-info"></i> Informasi Saldo Tertahan</h5>
+                                Saldo tertahan adalah estimasi komisi dari servis yang telah Anda selesaikan tetapi **belum diambil oleh pelanggan**. Komisi akan otomatis masuk ke **Saldo Utama** segera setelah pelanggan mengambil unit dan melunasi pembayaran.
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-striped" id="TABLES_PENDING_COMMISSION">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Kode Servis</th>
+                                            <th>Pelanggan</th>
+                                            <th>Unit</th>
+                                            <th>Total Biaya</th>
+                                            <th>Estimasi Komisi</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse ($servis_tertahan as $servis)
+                                            <tr>
+                                                <td>{{ $loop->index + 1 }}</td>
+                                                <td><span class="badge badge-secondary font-weight-bold">{{ $servis->kode_service }}</span></td>
+                                                <td>{{ $servis->nama_pelanggan }}</td>
+                                                <td>{{ $servis->type_unit }}</td>
+                                                <td>Rp.{{ number_format($servis->total_biaya) }},-</td>
+                                                <td class="text-warning font-weight-bold">Rp.{{ number_format($servis->komisi_tertahan) }},-</td>
+                                                <td><span class="badge badge-warning">Menunggu Pengambilan</span></td>
+                                            </tr>
+                                        @empty
+                                            <tr>
+                                                <td colspan="7" class="text-center py-3">Tidak ada komisi yang sedang tertahan. Semua komisi Anda telah cair!</td>
+                                            </tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        @endif
                     @endif
                 </div>
             </div>
@@ -501,12 +613,29 @@
             const incasbon = document.getElementById("inbon");
             const hiddenTBon = document.getElementById("jumlah_penarikan");
 
-            incasbon.addEventListener("input", function(e) {
-                const biaya = e.target.value;
-                const rupiah = formatRupiah(biaya);
-                const numericValue = getNumericValue(biaya);
-                e.target.value = rupiah;
-                hiddenTBon.value = numericValue;
-            });
+            if(incasbon){
+                incasbon.addEventListener("input", function(e) {
+                    const biaya = e.target.value;
+                    const rupiah = formatRupiah(biaya);
+                    const numericValue = getNumericValue(biaya);
+                    e.target.value = rupiah;
+                    hiddenTBon.value = numericValue;
+                });
+            }
+
+            @foreach ($employees as $employee)
+                $('#checkAll_{{ $employee->kode_user }}').change(function() {
+                    $('.komisi-checkbox-{{ $employee->kode_user }}').prop('checked', $(this).prop('checked'));
+                });
+                
+                $('.komisi-checkbox-{{ $employee->kode_user }}').change(function() {
+                    if (false == $(this).prop('checked')) {
+                        $('#checkAll_{{ $employee->kode_user }}').prop('checked', false);
+                    }
+                    if ($('.komisi-checkbox-{{ $employee->kode_user }}:checked').length == $('.komisi-checkbox-{{ $employee->kode_user }}').length) {
+                        $('#checkAll_{{ $employee->kode_user }}').prop('checked', true);
+                    }
+                });
+            @endforeach
         </script>
     @endsection

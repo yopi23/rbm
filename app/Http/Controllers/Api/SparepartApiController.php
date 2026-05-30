@@ -310,11 +310,15 @@ class SparepartApiController extends Controller
 
             // Ambil detail part toko dengan pengecekan jika data join tidak ditemukan
             $part_toko_service = DetailPartServices::leftJoin('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+                ->leftJoin('users', 'detail_part_services.user_input', '=', 'users.id')
                 ->where('detail_part_services.kode_services', $id)
                 ->get([
                     'detail_part_services.id as detail_part_id',
                     'detail_part_services.qty_part',
                     'detail_part_services.detail_harga_part_service',
+                    'detail_part_services.is_tanggungan_teknisi',
+                    'detail_part_services.user_input as id_teknisi',
+                    'users.name as nama_teknisi',
                     'spareparts.nama_sparepart',
                     'spareparts.kode_sparepart',
                     'spareparts.stok_sparepart', // Include current stock for display in UI
@@ -324,6 +328,9 @@ class SparepartApiController extends Controller
                     return [
                         'detail_part_id' => $item->detail_part_id,
                         'qty_part' => $item->qty_part,
+                        'is_tanggungan_teknisi' => $item->is_tanggungan_teknisi,
+                        'id_teknisi' => $item->id_teknisi,
+                        'nama_teknisi' => $item->nama_teknisi,
                         // Ensure 'harga_jual' is prioritized from the spareparts table for display consistency
                         'harga_jual' =>  $item->detail_harga_part_service ?? $item->harga_jual,
                         'nama_sparepart' => $item->nama_sparepart ?? 'Unknown Part',
@@ -333,12 +340,16 @@ class SparepartApiController extends Controller
                 });
 
             // Ambil detail part luar toko
-            $part_luar_toko_service = DetailPartLuarService::where('kode_services', $id)
+            $part_luar_toko_service = DetailPartLuarService::leftJoin('users', 'detail_part_luar_services.user_input', '=', 'users.id')
+                ->where('detail_part_luar_services.kode_services', $id)
                 ->get([
-                    'id as detail_part_luar_id',
-                    'nama_part',
-                    'qty_part',
-                    'harga_part',
+                    'detail_part_luar_services.id as detail_part_luar_id',
+                    'detail_part_luar_services.nama_part',
+                    'detail_part_luar_services.qty_part',
+                    'detail_part_luar_services.harga_part',
+                    'detail_part_luar_services.is_tanggungan_teknisi',
+                    'detail_part_luar_services.user_input as id_teknisi',
+                    'users.name as nama_teknisi',
                 ])
                 ->map(function ($item) {
                     return [
@@ -346,6 +357,9 @@ class SparepartApiController extends Controller
                         'nama_part' => $item->nama_part ?? 'Unknown Part',
                         'qty_part' => $item->qty_part,
                         'harga_part' => $item->harga_part,
+                        'is_tanggungan_teknisi' => $item->is_tanggungan_teknisi,
+                        'id_teknisi' => $item->id_teknisi,
+                        'nama_teknisi' => $item->nama_teknisi,
                     ];
                 });
 
@@ -793,12 +807,17 @@ class SparepartApiController extends Controller
             Garansi::where('kode_garansi', $service->kode_service)->where('type_garansi', 'service')->delete();
 
             // Handle commission rollback if it exists
-            $profitPresentase = ProfitPresentase::where('kode_service', $serviceId)->first();
-            if ($profitPresentase) {
+            $profitPresentases = ProfitPresentase::where('kode_service', $serviceId)->get();
+            foreach ($profitPresentases as $profitPresentase) {
+                if ($profitPresentase->profit < 0) {
+                    continue; // Tanggungan kerusakan tetap berlaku, tidak di-refund
+                }
                 $teknisi = UserDetail::where('kode_user', $profitPresentase->kode_user)->first();
                 if ($teknisi) {
                     // Restore technician's balance by deducting the profit
-                    $teknisi->update(['saldo' => $teknisi->saldo - $profitPresentase->profit]);
+                    if ($profitPresentase->is_cair) {
+                        $teknisi->update(['saldo' => $teknisi->saldo - $profitPresentase->profit]);
+                    }
                 }
                 $profitPresentase->delete();
             }
@@ -1076,7 +1095,9 @@ class SparepartApiController extends Controller
             foreach ($oldRecords as $old) {
                 $old_user = UserDetail::where('kode_user', $old->kode_user)->first();
                 if ($old_user) {
-                    $old_user->decrement('saldo', $old->profit);
+                    if ($old->is_cair) {
+                        $old_user->decrement('saldo', $old->profit);
+                    }
                 }
                 $old->delete();
             }
@@ -1095,6 +1116,7 @@ class SparepartApiController extends Controller
                             'kode_user' => $penalized_user_id,
                             'profit' => -$penalty_amount,
                             'profit_toko' => $penalty_amount,
+                            'is_cair' => 1, // Settled immediately because we decrement saldo instantly
                         ]);
                         $penalized_komisi->update(['saldo' => $penalized_user->fresh()->saldo]);
                     }
@@ -1124,7 +1146,9 @@ class SparepartApiController extends Controller
                     foreach ($oldProfitRecords as $old) {
                         $old_user = UserDetail::where('kode_user', $old->kode_user)->first();
                         if ($old_user) {
-                            $old_user->decrement('saldo', $old->profit);
+                            if ($old->is_cair) {
+                                $old_user->decrement('saldo', $old->profit);
+                            }
                         }
                         $old->delete();
                     }
@@ -1153,6 +1177,8 @@ class SparepartApiController extends Controller
 
                         Log::info("Internal Calculation: Base Commission: {$base_commission}, Final untuk teknisi {$id_teknisi}: {$fix_profit_teknisi}");
 
+                        $isCair = (strtolower($service->status_services) === 'diambil') ? 1 : 0;
+
                         $komisi = ProfitPresentase::create([
                             'kode_service'    => $serviceId,
                             'tgl_profit'      => now(),
@@ -1160,9 +1186,12 @@ class SparepartApiController extends Controller
                             'kode_user'       => $id_teknisi,
                             'profit'          => $fix_profit_teknisi,
                             'profit_toko'     => $profit_untuk_toko,
+                            'is_cair'         => $isCair,
                         ]);
 
-                        $teknisi->increment('saldo', $fix_profit_teknisi);
+                        if ($isCair) {
+                            $teknisi->increment('saldo', $fix_profit_teknisi);
+                        }
                         $komisi->update(['saldo' => $teknisi->fresh()->saldo]);
                         Log::info("Internal: Technician {$id_teknisi} new saldo: {$teknisi->fresh()->saldo}");
                     } else {
@@ -1184,6 +1213,7 @@ class SparepartApiController extends Controller
                                     'kode_user'       => $penalized_user_id,
                                     'profit'          => -$penalty_amount,
                                     'profit_toko'     => $penalty_amount,
+                                    'is_cair'         => 1, // Settled immediately because we decrement saldo instantly
                                 ]);
                                 $penalized_komisi->update(['saldo' => $penalized_user->fresh()->saldo]);
                                 Log::info("Internal: Penalty {$penalty_amount} applied to Technician ID: {$penalized_user_id}");
@@ -2260,17 +2290,22 @@ class SparepartApiController extends Controller
             if ($newStatus === 'Selesai' && $oldStatus !== 'Selesai') {
                 $this->performCommissionRecalculation($id);
             } elseif ($newStatus !== 'Selesai' && $oldStatus === 'Selesai') {
-                $profitPresentase = ProfitPresentase::where('kode_service', $id)->first();
-                if ($profitPresentase) {
+                $profitPresentases = ProfitPresentase::where('kode_service', $id)->get();
+                foreach ($profitPresentases as $profitPresentase) {
+                    if ($profitPresentase->profit < 0) {
+                        continue; // Tanggungan kerusakan tetap berlaku
+                    }
                     $teknisi = UserDetail::where('kode_user', $profitPresentase->kode_user)->first();
                     if ($teknisi) {
-                        $teknisi->update([
-                            'saldo' => $teknisi->saldo - $profitPresentase->profit
-                        ]);
+                        if ($profitPresentase->is_cair) {
+                            $teknisi->update([
+                                'saldo' => $teknisi->saldo - $profitPresentase->profit
+                            ]);
+                        }
                     }
                     $profitPresentase->delete();
-                    Log::info("Komisi dibatalkan untuk Service ID: $id karena status berubah dari Selesai.");
                 }
+                Log::info("Semua komisi/penalti dibatalkan untuk Service ID: $id karena status berubah dari Selesai.");
             }
 
             // Kirim WhatsApp jika selesai
@@ -2346,14 +2381,20 @@ class SparepartApiController extends Controller
             $commissionAmount = 0;
 
             // Handle commission rollback if it exists
-            $profitPresentase = ProfitPresentase::where('kode_service', $id)->first();
-            if ($profitPresentase) {
+            $profitPresentases = ProfitPresentase::where('kode_service', $id)->get();
+            foreach ($profitPresentases as $profitPresentase) {
+                if ($profitPresentase->profit < 0) {
+                    continue; // Tanggungan kerusakan tetap berlaku
+                }
                 $teknisi = UserDetail::where('kode_user', $profitPresentase->kode_user)->first();
                 if ($teknisi) {
-                    $commissionAmount = $profitPresentase->profit;
-                    $teknisi->update(['saldo' => $teknisi->saldo - $commissionAmount]);
+                    $amount = $profitPresentase->profit;
+                    $commissionAmount += $amount;
+                    if ($profitPresentase->is_cair) {
+                        $teknisi->update(['saldo' => $teknisi->saldo - $amount]);
+                    }
                     $commissionReverted = true;
-                    Log::info("Commission of {$commissionAmount} reverted for Service ID: {$id}. Technician ID: {$teknisi->kode_user}. New Saldo: {$teknisi->saldo}");
+                    Log::info("Commission of {$amount} reverted for Service ID: {$id}. Technician ID: {$teknisi->kode_user}. New Saldo: {$teknisi->saldo}");
                 }
                 $profitPresentase->delete();
             }

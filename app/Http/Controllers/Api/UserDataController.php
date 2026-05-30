@@ -24,6 +24,12 @@ class UserDataController extends Controller
             ->where('kode_user', $kode_user)
             ->value('saldo') ?? 0;
 
+        // Hitung total saldo tertahan (komisi dari unit yang belum diambil)
+        $saldo_tertahan = DB::table('profit_presentases')
+            ->where('kode_user', $kode_user)
+            ->where('is_cair', 0)
+            ->sum('profit');
+
         // Hitung total penarikan dalam satu bulan dari tabel penarikan
         $total_penarikan = DB::table('penarikans')
             ->where('kode_user', $kode_user)
@@ -56,6 +62,7 @@ class UserDataController extends Controller
         return response()->json([
             'kode_user' => $kode_user,
             'saldo' =>  $saldo,
+            'saldo_tertahan' => ($saldo_tertahan ?? 0),
             'total_penarikan' => ($total_penarikan ?? 0),
             'total_penarikan_cash' => ($total_penarikan_cash ?? 0),
             'total_penarikan_transfer' => ($total_penarikan_transfer ?? 0),

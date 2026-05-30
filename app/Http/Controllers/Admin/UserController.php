@@ -43,6 +43,19 @@ class UserController extends Controller
             $komisi += $k->profit;
         }
 
+        // Hitung saldo tertahan untuk user yang sedang login
+        $saldo_tertahan = ProfitPresentase::where('kode_user', auth()->user()->id)
+            ->where('is_cair', 0)
+            ->sum('profit');
+
+        // Ambil rincian unit servis yang selesai tapi belum diambil (tertahan)
+        $servis_tertahan = \App\Models\Sevices::where('id_teknisi', auth()->user()->id)
+            ->where('status_services', 'Selesai')
+            ->get();
+        foreach ($servis_tertahan as $servis) {
+            $servis->komisi_tertahan = ProfitPresentase::where('kode_service', $servis->id)->value('profit') ?? 0;
+        }
+
         // Jika pengguna adalah owner/upline atau admin, ambil daftar karyawan
         $employees = [];
         if ($this->getThisUser()->jabatan == '1' || $this->getThisUser()->id == 1) {
@@ -50,24 +63,36 @@ class UserController extends Controller
             foreach ($employees as $employee) {
                 $employee->saldo = $employee->saldo;
                 $employee->total_penarikan = Penarikan::where([
-                    ['kode_user', $employee->id],
+                    ['kode_user', $employee->kode_user],
                     ['created_at', '>=', now()->startOfMonth()],
                     ['created_at', '<=', now()->endOfMonth()]
                 ])->sum('jumlah_penarikan');
 
                 // Ambil riwayat komisi karyawan
                 $employee->riwayat_komisi = ProfitPresentase::where([
-                    ['kode_user', '=', $employee->id],
+                    ['kode_user', '=', $employee->kode_user],
                     ['created_at', '>=', now()->startOfMonth()],
                     ['created_at', '<=', now()->endOfMonth()]
                 ])->get();
 
                 // Hitung total komisi untuk karyawan tertentu
                 $employee->total_komisi = $employee->riwayat_komisi->sum('profit');
+
+                // Hitung saldo tertahan untuk masing-masing karyawan
+                $employee->saldo_tertahan = ProfitPresentase::where('kode_user', $employee->kode_user)
+                    ->where('is_cair', 0)
+                    ->sum('profit');
+
+                $employee->komisi_pending_list = ProfitPresentase::where('kode_user', $employee->kode_user)
+                    ->where('is_cair', 0)
+                    ->get();
+                foreach ($employee->komisi_pending_list as $kom) {
+                    $kom->servis = \App\Models\Sevices::find($kom->kode_service);
+                }
             }
         }
 
-        $content = view('admin.page.profile', compact(['penarikan', 'persentase', 'komisi', 'employees']));
+        $content = view('admin.page.profile', compact(['penarikan', 'persentase', 'komisi', 'employees', 'saldo_tertahan', 'servis_tertahan']));
         return view('admin.layout.blank_page', compact(['page', 'content', 'data']));
     }
     public function update_profile(Request $request, $id)
@@ -363,5 +388,57 @@ class UserController extends Controller
         }
 
         return redirect()->route('profile')->with(['success' => 'Semua status penarikan berhasil diperbarui']);
+    }
+
+    public function cairkanKomisiTertahan(Request $request)
+    {
+        // Hanya owner/admin yang bisa mengakses
+        if (auth()->user()->jabatan != '0' && auth()->user()->jabatan != '1') {
+            return redirect()->back()->with('error', 'Anda tidak memiliki hak akses.');
+        }
+
+        $request->validate([
+            'komisi_ids' => 'required|array',
+            'komisi_ids.*' => 'exists:profit_presentases,id'
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $processedCount = 0;
+            $totalAmount = 0;
+            $thisUser = auth()->user();
+            
+            foreach ($request->komisi_ids as $id) {
+                $komisi = ProfitPresentase::find($id);
+                if ($komisi && $komisi->is_cair == 0) {
+                    
+                    // Validasi Kepemilikan Karyawan
+                    $user = UserDetail::where('kode_user', $komisi->kode_user)->first();
+                    if (!$user) continue;
+
+                    // Jika user adalah Owner (1), pastikan karyawan ini ada di bawah upline nya
+                    if ($thisUser->jabatan == '1' && $user->id_upline != $thisUser->id) {
+                        continue;
+                    }
+
+                    $komisi->is_cair = 1;
+                    $komisi->save();
+
+                    // Tambah saldo ke user
+                    $user->increment('saldo', $komisi->profit);
+                    
+                    // Update riwayat saldo di komisi
+                    $komisi->update(['saldo' => $user->fresh()->saldo]);
+                    
+                    $processedCount++;
+                    $totalAmount += $komisi->profit;
+                }
+            }
+            DB::commit();
+            return redirect()->back()->with('success', "$processedCount Komisi tertahan sebesar Rp " . number_format($totalAmount, 0, ',', '.') . " berhasil dicairkan ke saldo utama karyawan.");
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
+        }
     }
 }

@@ -16,5 +16,6 @@ class ProfitPresentase extends Model
         'profit',
         'saldo',
         'profit_toko',
+        'is_cair',
     ];
 }

@@ -38,11 +38,12 @@ class ServiceApiController extends Controller
         try {
             $today = date('Y-m-d');
 
-            $completedServices = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
-                ->where('status_services', 'Selesai')
+            $completedServices = modelServices::where('sevices.kode_owner', $this->getThisUser()->id_upline)
+                ->where('sevices.status_services', 'Selesai')
                 ->whereDate('sevices.tgl_service', $today)
                 ->join('users', 'sevices.id_teknisi', '=', 'users.id')
-                ->select('sevices.*', 'users.name as teknisi')
+                ->leftJoin('customer_tables', 'sevices.customer_id', '=', 'customer_tables.id')
+                ->select('sevices.*', 'users.name as teknisi', 'customer_tables.alamat as alamat_pelanggan', 'customer_tables.nomor_telepon as nomor_telepon_pelanggan')
                 ->orderBy('sevices.tgl_service', 'desc')
                 ->get();
 
@@ -152,10 +153,11 @@ class ServiceApiController extends Controller
             $date_from = $request->get('date_from');
             $date_to = $request->get('date_to');
 
-            $query = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
-                ->where('status_services', 'Selesai')
+            $query = modelServices::where('sevices.kode_owner', $this->getThisUser()->id_upline)
+                ->where('sevices.status_services', 'Selesai')
                 ->join('users', 'sevices.id_teknisi', '=', 'users.id')
-                ->select('sevices.*', 'users.name as teknisi');
+                ->leftJoin('customer_tables', 'sevices.customer_id', '=', 'customer_tables.id')
+                ->select('sevices.*', 'users.name as teknisi', 'customer_tables.alamat as alamat_pelanggan', 'customer_tables.nomor_telepon as nomor_telepon_pelanggan');
 
             // Apply filters
             if (!empty($search)) {
