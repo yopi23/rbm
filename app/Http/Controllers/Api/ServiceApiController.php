@@ -2280,6 +2280,47 @@ class ServiceApiController extends Controller
                 'updated_at' => now()
             ]);
 
+            // =====================================================================
+            // PENARIKAN KOMISI TEKNISI (TRANSPARAN DENGAN REVERSAL ENTRY) & STATUS GARANSI
+            // =====================================================================
+            $komisis = \App\Models\ProfitPresentase::where('kode_service', $originalService->id)->get();
+            foreach ($komisis as $komisi) {
+                if ($komisi->profit < 0) {
+                    continue; // Biarkan penalti tetap memotong saldo
+                }
+                
+                if ($komisi->is_cair) {
+                    // Jika komisi sudah cair, tarik kembali saldo utama teknisi
+                    $pegawais = \App\Models\UserDetail::where('kode_user', $komisi->kode_user)->first();
+                    if ($pegawais) {
+                        // 1. Kurangi saldo utama teknisi
+                        $pegawais->decrement('saldo', $komisi->profit);
+                        
+                        \App\Models\ProfitPresentase::create([
+                            'tgl_profit' => date('Y-m-d'),
+                            'kode_service' => $newService->id, // Dihubungkan ke service klaim baru
+                            'kode_presentase' => $komisi->kode_presentase,
+                            'kode_user' => $komisi->kode_user,
+                            'profit' => -$komisi->profit, // Komisi minus
+                            'profit_toko' => -$komisi->profit_toko ?? 0, // Toko profit reversal fallback 0
+                            'saldo' => $pegawais->fresh()->saldo, // Saldo terbaru setelah dikurangi
+                            'is_cair' => 1,
+                            'created_at' => now(),
+                            'updated_at' => now()
+                        ]);
+                    }
+                } else {
+                    // Jika komisi belum cair (masih tertahan), cukup hapus komisi tertahan tersebut
+                    $komisi->delete();
+                }
+            }
+
+            // Tandai status garansi menjadi '1' (claimed)
+            $warranty->update([
+                'status_garansi' => '1'
+            ]);
+            // =====================================================================
+
             DB::commit();
 
             return response()->json([

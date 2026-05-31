@@ -197,16 +197,18 @@ class CommissionController extends Controller
         // Namun kita sudah punya $jabatan variable sekarang.
         $kode_owner = $this->getOwnerCode($user); 
 
-        if ($jabatan == '1') {
-            // Admin/Owner
+        if ($jabatan == '0' || $jabatan == '1') {
+            // Admin/Owner bisa pilih teknisi tertentu via parameter 'technician_id'
             $reqTechId = $request->get('technician_id');
-            // Pastikan tidak empty string atau 'null' string
             if (!empty($reqTechId) && $reqTechId !== 'null') {
                 $targetTechnicianId = $reqTechId;
             }
-        } else {
-            // Teknisi / Staff lain
+        } else if ($jabatan == '3') {
+            // Teknisi hanya melihat data sendiri
             $targetTechnicianId = $user->id;
+        } else {
+            // Kasir atau peran lain tidak berhak melihat riwayat saldo teknisi
+            return response()->json(['success' => false, 'message' => 'Unauthorized. Only Admin, Owner, or Technician can view this history.'], 403);
         }
 
         try {
@@ -216,7 +218,7 @@ class CommissionController extends Controller
                 ->leftJoin('user_details', 'profit_presentases.kode_user', '=', 'user_details.kode_user') // Gunakan Left Join agar data tidak hilang jika user terhapus
                 ->select(
                     'profit_presentases.id as commission_id',
-                    'profit_presentases.created_at as tgl_profit', // Gunakan created_at sebagai acuan waktu
+                    DB::raw('CASE WHEN profit_presentases.is_cair = 1 THEN profit_presentases.updated_at ELSE profit_presentases.created_at END as tgl_profit'),
                     'sevices.kode_service',
                     'sevices.nama_pelanggan',
                     'sevices.type_unit',
@@ -229,16 +231,25 @@ class CommissionController extends Controller
                     'user_details.kode_user as technician_id',
                     'profit_presentases.is_cair as is_cair'
                 )
-                // Filter Tanggal berdasarkan created_at profit
-                ->whereDate('profit_presentases.created_at', '>=', $startDate)
-                ->whereDate('profit_presentases.created_at', '<=', $endDate);
+                // Filter Tanggal berdasarkan tgl_profit (created_at jika pending, updated_at jika cair)
+                ->where(function($q) use ($startDate, $endDate) {
+                    $q->where(function($q2) use ($startDate, $endDate) {
+                        $q2->where('profit_presentases.is_cair', 1)
+                           ->whereDate('profit_presentases.updated_at', '>=', $startDate)
+                           ->whereDate('profit_presentases.updated_at', '<=', $endDate);
+                    })->orWhere(function($q2) use ($startDate, $endDate) {
+                        $q2->where('profit_presentases.is_cair', 0)
+                           ->whereDate('profit_presentases.created_at', '>=', $startDate)
+                           ->whereDate('profit_presentases.created_at', '<=', $endDate);
+                    });
+                });
 
             // Terapkan filter berdasarkan Role
-            if ($jabatan == '1') {
-                // Owner melihat data berdasarkan kode_owner di service
+            if ($jabatan != '3') {
+                // Owner, Admin, Kasir melihat data berdasarkan kode_owner di service
                 $query->where('sevices.kode_owner', $kode_owner);
 
-                // Jika Owner memilih teknisi spesifik
+                // Jika memilih teknisi spesifik
                 if ($targetTechnicianId) {
                     $query->where('profit_presentases.kode_user', $targetTechnicianId);
                 }

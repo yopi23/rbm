@@ -78,9 +78,11 @@ class UserDataController extends Controller
         // Cek apakah user ini adalah admin (misalnya jabatan 0 atau 1)
         if (in_array($currentUser->jabatan, [0, 1])) {
             // Ambil semua user di bawah upline yang sama, tapi exclude admin
+            // PERBAIKAN: Gunakan 'kode_user' sebagai 'id' karena kode_user adalah pengidentifikasi unik karyawan 
+            // yang digunakan di seluruh transaksi/penarikan saldo (id tabel adalah increment internal saja).
             $karyawan = UserDetail::where('id_upline', $currentUser->id_upline)
                                 ->whereNotIn('jabatan', [0, 1])
-                                ->select('fullname','saldo','id','jabatan','id_upline')
+                                ->select('fullname','saldo','kode_user as id','jabatan','id_upline')
                                 ->get();
 
             // PERBAIKAN: Cast saldo ke float untuk memastikan tipe data konsisten
@@ -231,6 +233,19 @@ class UserDataController extends Controller
     public function adminWithdrawEmployee(Request $request)
 {
     $user = $this->getThisUser();
+    
+    // Direct debug log file writing
+    file_put_contents(
+        base_path('storage/logs/withdraw_debug.log'),
+        sprintf(
+            "[%s] Admin Withdrawal Request:\nPayload: %s\nAdmin User: %s\n\n",
+            date('Y-m-d H:i:s'),
+            json_encode($request->all()),
+            json_encode($user)
+        ),
+        FILE_APPEND
+    );
+
     // Pastikan admin/owner (jabatan 0 atau 1)
     if (!in_array($user->jabatan, [0, 1])) {
         return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
@@ -257,6 +272,9 @@ class UserDataController extends Controller
     }
 
     $targetEmployee = UserDetail::where('kode_user', $request->kode_user)->first();
+    if (!$targetEmployee) {
+        return response()->json(['success' => false, 'message' => 'Karyawan dengan ID tersebut tidak ditemukan.'], 404);
+    }
     $kode = 'ADM' . date('Ymd') . $user->kode_user . $request->kode_user;
 
     DB::beginTransaction();
