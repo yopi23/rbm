@@ -31,6 +31,8 @@ class PriceSetting extends Model
         return $this->belongsTo(AttributeValue::class);
     }
 
+    protected static $findBestSettingCache = [];
+
     /**
      * Cari aturan harga terbaik berdasarkan prioritas.
      * Prioritas 1: Aturan spesifik untuk Nilai Atribut.
@@ -38,11 +40,16 @@ class PriceSetting extends Model
      *
      * @param int $categoryId
      * @param Collection|array $attributeValueIds
-     * @return self|null
+     * @return array
      */
     public static function findBestSetting(int $categoryId, $attributeValueIds): array
     {
-        $attributeValueIds = collect($attributeValueIds);
+        $attributeValueIds = collect($attributeValueIds)->sort()->values();
+        $cacheKey = $categoryId . ':' . $attributeValueIds->implode(',');
+
+        if (isset(self::$findBestSettingCache[$cacheKey])) {
+            return self::$findBestSettingCache[$cacheKey];
+        }
 
         // 1. Selalu cari aturan umum sebagai dasar/fallback.
         $generalSetting = self::where('kategori_sparepart_id', $categoryId)
@@ -55,10 +62,13 @@ class PriceSetting extends Model
             $specificSetting = self::whereIn('attribute_value_id', $attributeValueIds)->first();
         }
 
-        // 3. Kembalikan keduanya dalam sebuah array.
-        return [
+        $result = [
             'general' => $generalSetting,
             'specific' => $specificSetting,
         ];
+
+        self::$findBestSettingCache[$cacheKey] = $result;
+
+        return $result;
     }
 }

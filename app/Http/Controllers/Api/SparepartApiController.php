@@ -110,8 +110,8 @@ class SparepartApiController extends Controller
 
                 // Format data JSON
                 $enhancedResults = $results->map(function ($item) {
-                    $category = KategoriSparepart::find($item->kode_kategori);
-                    $subcategory = SubKategoriSparepart::find($item->kode_sub_kategori);
+                    $category = KategoriSparepart::findCached($item->kode_kategori);
+                    $subcategory = SubKategoriSparepart::findCached($item->kode_sub_kategori);
 
                     $item->kategori_nama = $category ? $category->nama_kategori : null;
                     $item->sub_kategori_nama = $subcategory ? $subcategory->nama_sub_kategori : null;
@@ -425,7 +425,8 @@ class SparepartApiController extends Controller
             // Split the search query into keywords
             $keywords = array_filter(explode(' ', strtolower($search)));
 
-            $queryBuilder = Sparepart::where('kode_owner', $this->getThisUser()->id_upline);
+            $queryBuilder = Sparepart::where('kode_owner', $this->getThisUser()->id_upline)
+                ->with(['kategori', 'subKategori']);
 
             foreach ($keywords as $keyword) {
                 $queryBuilder->where(function ($q) use ($keyword) {
@@ -450,11 +451,12 @@ class SparepartApiController extends Controller
 
             // Enhance data with category and subcategory names
             $enhancedResults = $results->map(function($item) {
-                $category = KategoriSparepart::find($item->kode_kategori);
-                $subcategory = SubKategoriSparepart::find($item->kode_sub_kategori);
+                $item->kategori_nama = $item->kategori ? $item->kategori->nama_kategori : null;
+                $item->sub_kategori_nama = $item->subKategori ? $item->subKategori->nama_sub_kategori : null;
 
-                $item->kategori_nama = $category ? $category->nama_kategori : null;
-                $item->sub_kategori_nama = $subcategory ? $subcategory->nama_sub_kategori : null;
+                // Remove the eager loaded relation objects from output JSON
+                unset($item->kategori);
+                unset($item->subKategori);
 
                 // Add stock status for easier client-side handling
                 $item->stock_status = 'available';

@@ -30,4 +30,18 @@ class SubKategoriSparepart extends Model
     {
         return $this->hasMany(Sparepart::class, 'kode_sub_kategori');
     }
+
+    protected static $findCache = [];
+
+    /**
+     * Static helper with request-level memoization to avoid redundant database lookups
+     */
+    public static function findCached($id)
+    {
+        if (empty($id)) return null;
+        if (!isset(self::$findCache[$id])) {
+            self::$findCache[$id] = self::find($id);
+        }
+        return self::$findCache[$id];
+    }
 }

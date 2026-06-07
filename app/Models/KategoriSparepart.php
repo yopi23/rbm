@@ -33,4 +33,18 @@ class KategoriSparepart extends Model
     {
         return $this->hasMany(Attribute::class);
     }
+
+    protected static $findCache = [];
+
+    /**
+     * Static helper with request-level memoization to avoid redundant database lookups
+     */
+    public static function findCached($id)
+    {
+        if (empty($id)) return null;
+        if (!isset(self::$findCache[$id])) {
+            self::$findCache[$id] = self::find($id);
+        }
+        return self::$findCache[$id];
+    }
 }

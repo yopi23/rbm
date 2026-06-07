@@ -44,6 +44,7 @@ class ShiftApiController extends Controller
 
         $shiftData = $this->formatShiftData($activeShift);
         $shiftData['shift_logs'] = \App\Models\ShiftLog::with('user')->where('shift_id', $activeShift->id)->orderBy('created_at', 'desc')->get();
+        $shiftData['service_summary'] = $this->getShiftServiceSummary($activeShift);
 
         return response()->json([
             'success' => true,
@@ -192,6 +193,14 @@ class ShiftApiController extends Controller
         $saldoAkhirAktual = $request->saldo_akhir_aktual;
         $selisih = $saldoAkhirAktual - $expectedCash;
 
+        if ($selisih < 0 && (empty($request->note) || trim($request->note) === '')) {
+            return response()->json([
+                'success' => false,
+                'need_reason' => true,
+                'message' => 'Terdapat kekurangan kas sebesar Rp ' . number_format(abs($selisih), 0, ',', '.') . '. Harap berikan alasan kekurangan kas sebelum menutup shift.'
+            ], 422);
+        }
+
         $shift->update([
             'end_time' => now(),
             'saldo_akhir_sistem' => $expectedCash,
@@ -302,12 +311,14 @@ class ShiftApiController extends Controller
             ];
         });
 
+        $serviceSummary = $this->getShiftServiceSummary($shift);
+
         return response()->json([
             'success' => true,
             'message' => 'Shift closed successfully',
             'data' => [
                 'shift' => $shift,
-                'summary' => [
+                'summary' => array_merge([
                     'modal_awal' => $shift->modal_awal,
                     'cash_in' => $cashIn,
                     'cash_out' => $cashOut,
@@ -318,7 +329,7 @@ class ShiftApiController extends Controller
                     'difference' => $selisih,
                     'sparepart_analysis' => $sparepartReport,
                     'transactions' => $mutasiDetails
-                ]
+                ], $serviceSummary)
             ]
         ]);
     }
@@ -335,6 +346,43 @@ class ShiftApiController extends Controller
             'modal_awal' => $shift->modal_awal,
             'status' => $shift->status,
             'created_at' => $shift->created_at,
+        ];
+    }
+
+    private function getShiftServiceSummary($shift)
+    {
+        $startTime = $shift->start_time;
+        $endTime = $shift->end_time ?? now();
+        $ownerId = $shift->kode_owner;
+
+        $serviceMasuk = \App\Models\Sevices::where('kode_owner', $ownerId)
+            ->whereBetween('created_at', [$startTime, $endTime])
+            ->count();
+
+        $serviceSelesai = \App\Models\Sevices::where('kode_owner', $ownerId)
+            ->whereBetween('updated_at', [$startTime, $endTime])
+            ->whereIn('status_services', ['Selesai', 'Diambil'])
+            ->count();
+
+        $serviceDiambil = \App\Models\Sevices::where('kode_owner', $ownerId)
+            ->whereBetween('updated_at', [$startTime, $endTime])
+            ->where('status_services', 'Diambil')
+            ->count();
+
+        $serviceBelumDiambil = \App\Models\Sevices::where('kode_owner', $ownerId)
+            ->where('status_services', 'Selesai')
+            ->count();
+
+        $serviceBelumSelesai = \App\Models\Sevices::where('kode_owner', $ownerId)
+            ->whereIn('status_services', ['Antri', 'Proses'])
+            ->count();
+
+        return [
+            'service_masuk' => $serviceMasuk,
+            'service_selesai' => $serviceSelesai,
+            'service_diambil' => $serviceDiambil,
+            'service_belum_diambil' => $serviceBelumDiambil,
+            'service_belum_selesai' => $serviceBelumSelesai,
         ];
     }
 
@@ -528,12 +576,13 @@ class ShiftApiController extends Controller
         $totalPendapatan = $cashIn + $transferIn;
 
         $shiftLogs = \App\Models\ShiftLog::with('user')->where('shift_id', $shift->id)->orderBy('created_at', 'desc')->get();
+        $serviceSummary = $this->getShiftServiceSummary($shift);
 
         return response()->json([
             'success' => true,
             'data' => [
                 'shift' => $shift,
-                'summary' => [
+                'summary' => array_merge([
                     'modal_awal' => $shift->modal_awal,
                     'cash_in' => $cashIn,
                     'cash_out' => $cashOut,
@@ -543,7 +592,7 @@ class ShiftApiController extends Controller
                     'expected_cash' => $shift->saldo_akhir_sistem ?? ($shift->modal_awal + $cashIn - $cashOut),
                     'actual_cash' => $shift->saldo_akhir_aktual,
                     'selisih' => $shift->selisih,
-                ],
+                ], $serviceSummary),
                 'sparepart_analysis' => $sparepartReport,
                 'report_snapshot' => $reportDataRaw,
                 'shift_logs' => $shiftLogs

@@ -367,7 +367,9 @@ class SalesApiController extends Controller
             $query = Sparepart::query()
                 ->with([
                 'variants.attributeValues',
-                'hargaKhusus'
+                'hargaKhusus',
+                'kategori',
+                'subKategori'
             ]);
 
             // Filter utama (Ini sudah benar)
@@ -431,8 +433,8 @@ class SalesApiController extends Controller
 
             $results->getCollection()->transform(function ($item) {
                 // 1. Tambahkan data lain yang Anda butuhkan
-                $item->kategori_nama = optional(KategoriSparepart::find($item->kode_kategori))->nama_kategori;
-                $item->sub_kategori_nama = optional(SubKategoriSparepart::find($item->kode_sub_kategori))->nama_sub_kategori;
+                $item->kategori_nama = optional($item->kategori)->nama_kategori;
+                $item->sub_kategori_nama = optional($item->subKategori)->nama_sub_kategori;
                 $item->stock_status = $item->stok_sparepart > 0 ? 'available' : 'out_of_stock';
                 $item->low_stock = $item->stok_sparepart > 0 && $item->stok_sparepart <= 5;
                 $item->deskripsi = $item->desc_sparepart;
@@ -635,10 +637,11 @@ class SalesApiController extends Controller
 
 
             // Buat query dasar
-            $query = DB::table('spareparts')
+            $query = Sparepart::query()
                 ->where('kode_owner', '=', $ownerCode)
                 ->where('is_active', 1)
-                ->where('is_visible_on_web', 1);
+                ->where('is_visible_on_web', 1)
+                ->with(['kategori', 'subKategori']);
 
             // Filter by category if provided
             if ($categoryId) {
@@ -669,11 +672,12 @@ class SalesApiController extends Controller
 
             // Enhance data with category and subcategory names
             $enhancedData = $data->map(function ($item) {
-                $category = KategoriSparepart::find($item->kode_kategori);
-                $subcategory = SubKategoriSparepart::find($item->kode_sub_kategori);
+                $item->kategori_nama = $item->kategori ? $item->kategori->nama_kategori : null;
+                $item->sub_kategori_nama = $item->subKategori ? $item->subKategori->nama_sub_kategori : null;
 
-                $item->kategori_nama = $category ? $category->nama_kategori : null;
-                $item->sub_kategori_nama = $subcategory ? $subcategory->nama_sub_kategori : null;
+                // Remove eager loaded relation objects from output to match DB::table structure exactly
+                unset($item->kategori);
+                unset($item->subKategori);
 
                 return $item;
             });

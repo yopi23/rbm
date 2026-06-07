@@ -268,6 +268,8 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
         Route::post('/sparepart/service/toko', [SparepartApiController::class , 'storeSparepartToko']); // Backward compatibility for Flutter app
         Route::delete('/sparepart-toko/{detailPartId}', [SparepartApiController::class , 'deletePartTokoFromService']); // Delete store part (generic, no commission recalculation here)
         Route::delete('/sparepart/service/toko/{detailPartId}', [SparepartApiController::class , 'deletePartTokoFromService']); // Backward compatibility for Flutter app
+        Route::put('/sparepart-toko/{detailPartId}', [SparepartApiController::class , 'updatePartTokoQuantityForCompletedService']); // Generic update qty
+        Route::put('/sparepart/service/toko/{detailPartId}', [SparepartApiController::class , 'updatePartTokoQuantityForCompletedService']); // Backward compatibility for Flutter app
     
         // **ROUTE SPAREPART LUAR GENERIC - DARI FILE LAMA**
         Route::post('/sparepart-luar', [SparepartApiController::class , 'storeSparepartLuar']); // GENERIC untuk service belum selesai

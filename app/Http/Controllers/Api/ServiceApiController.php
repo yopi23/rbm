@@ -55,7 +55,7 @@ class ServiceApiController extends Controller
                 'date' => $today
             ], 200);
         } catch (\Exception $e) {
-            Log::error("Get Completed Today Error: " . $e->getMessage());
+            \Log::error("Get Completed Today Error: " . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
@@ -244,7 +244,8 @@ class ServiceApiController extends Controller
                 ->whereYear('sevices.created_at', $year)
                 ->join('users', 'sevices.id_teknisi', '=', 'users.id')
                 ->leftJoin('customer_tables', 'sevices.customer_id', '=', 'customer_tables.id')
-                ->select('sevices.*', 'users.name as teknisi', 'customer_tables.alamat as alamat_pelanggan');
+                ->select('sevices.*', 'users.name as teknisi', 'customer_tables.alamat as alamat_pelanggan')
+                ->withCount(['garansi', 'catatan', 'partToko', 'partLuar']);
 
             if ($status) {
                 $query->where('sevices.status_services', $status);
@@ -258,15 +259,11 @@ class ServiceApiController extends Controller
 
             // Tambahan data
             $services = $services->map(function ($service) {
-                $service->has_warranty = Garansi::where('kode_garansi', $service->kode_service)
-                    ->where('type_garansi', 'service')
-                    ->exists();
-
-                $service->has_notes = DetailCatatanService::where('kode_services', $service->id)->exists();
-
+                $service->has_warranty = $service->garansi_count > 0;
+                $service->has_notes = $service->catatan_count > 0;
                 $service->part_count = [
-                    'toko' => DetailPartServices::where('kode_services', $service->id)->count(),
-                    'luar' => DetailPartLuarService::where('kode_services', $service->id)->count()
+                    'toko' => $service->part_toko_count,
+                    'luar' => $service->part_luar_count
                 ];
 
                 return $service;
@@ -1753,7 +1750,11 @@ class ServiceApiController extends Controller
                         WHEN sevices.created_at >= "' . date('Y-01-01') . '" THEN "current_year"
                         ELSE "previous_year_last_quarter"
                     END as period_category')
-                );
+                )
+                ->with(['garansi', 'claimedServices', 'catatan' => function ($q) {
+                    $q->orderBy('created_at', 'desc');
+                }])
+                ->withCount(['partToko', 'partLuar']);
 
             // Pencarian fleksibel
             $query->where(function ($q) use ($search) {
@@ -1794,10 +1795,8 @@ class ServiceApiController extends Controller
 
             // Tambahan data untuk tiap service
             $services = $services->map(function ($service) {
-                // Cek garansi
-                $warranty = Garansi::where('kode_garansi', $service->kode_service)
-                    ->where('type_garansi', 'service')
-                    ->first();
+                // Cek garansi dari relation yang di-eagerload
+                $warranty = $service->garansi->first();
 
                 $service->warranty_info = $warranty ? [
                     'exists' => true,
@@ -1806,18 +1805,17 @@ class ServiceApiController extends Controller
                     'days_remaining' => now()->diffInDays($warranty->tgl_exp_garansi, false)
                 ] : ['exists' => false];
 
-                $service->is_already_claimed = \App\Models\Sevices::where('claimed_from_service_id', $service->id)->exists();
+                // Cek klaim menggunakan relation
+                $service->is_already_claimed = $service->claimedServices->isNotEmpty();
 
-                // Hitung parts
+                // Hitung parts dari withCount
                 $service->parts_count = [
-                    'toko' => DetailPartServices::where('kode_services', $service->id)->count(),
-                    'luar' => DetailPartLuarService::where('kode_services', $service->id)->count()
+                    'toko' => $service->part_toko_count,
+                    'luar' => $service->part_luar_count
                 ];
 
-                // Catatan terakhir
-                $latestNote = DetailCatatanService::where('kode_services', $service->id)
-                    ->orderBy('created_at', 'desc')
-                    ->first();
+                // Catatan terakhir dari eager-loaded relation
+                $latestNote = $service->catatan->first();
 
                 $service->latest_note = $latestNote ? $latestNote->catatan_service : null;
                 $service->has_notes = $latestNote != null;
