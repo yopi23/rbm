@@ -166,6 +166,15 @@ class ProductSearchService
                 'name' => $av->attribute->name,
                 'value' => $av->value,
             ]),
+            'attribute_values' => $variant->attributeValues->map(fn ($av) => [
+                'id' => $av->id,
+                'value' => $av->value,
+                'attribute_id' => $av->attribute->id ?? null,
+                'attribute' => $av->attribute ? [
+                    'id' => $av->attribute->id,
+                    'name' => $av->attribute->name,
+                ] : null,
+            ]),
             'stock_status' => $stockStatus,
         ];
     }

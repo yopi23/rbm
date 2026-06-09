@@ -303,8 +303,8 @@ class StockOpnameController extends Controller
             $period = StockOpnamePeriod::where('kode_owner', $kode_owner)
                 ->findOrFail($id);
 
-            $query = $period->details()
-                ->with(['sparepart', 'sparepart.kategori', 'sparepart.supplier']) // Tambahkan relasi kategori dan supplier
+             $query = $period->details()
+                ->with(['sparepart.kategori', 'sparepart.supplier', 'sparepart.variants.attributeValues.attribute']) // Tambahkan relasi kategori, supplier dan varian
                 ->where('status', 'pending');
 
             // Filter pencarian jika ada
@@ -347,7 +347,8 @@ class StockOpnameController extends Controller
                         'harga_beli' => $item->sparepart->harga_beli,
                         'stock_tercatat' => $item->stock_tercatat,
                         'status' => $item->status,
-                        'status_text' => $item->status_text
+                        'status_text' => $item->status_text,
+                        'variants' => $item->sparepart->variants
                     ];
                 })
             ];
@@ -379,8 +380,8 @@ class StockOpnameController extends Controller
             $period = StockOpnamePeriod::where('kode_owner', $kode_owner)
                 ->findOrFail($id);
 
-            $query = $period->details()
-                ->with(['sparepart', 'sparepart.kategori', 'sparepart.supplier']) // Tambahkan relasi kategori dan supplier
+             $query = $period->details()
+                ->with(['sparepart.kategori', 'sparepart.supplier', 'sparepart.variants.attributeValues.attribute']) // Tambahkan relasi kategori, supplier dan varian
                 ->whereIn('status', ['checked', 'adjusted']);
 
             // Filter pencarian jika ada
@@ -427,7 +428,8 @@ class StockOpnameController extends Controller
                         'status_text' => $item->status_text,
                         'catatan' => $item->catatan,
                         'checked_at' => $item->checked_at ? $item->checked_at->format('Y-m-d H:i:s') : null,
-                        'user_check' => $item->userCheck ? $item->userCheck->name : null
+                        'user_check' => $item->userCheck ? $item->userCheck->name : null,
+                        'variants' => $item->sparepart->variants
                     ];
                 })
             ];
@@ -529,7 +531,8 @@ class StockOpnameController extends Controller
                 ->findOrFail($id);
 
             // Cari sparepart berdasarkan kode atau barcode
-            $sparepart = Sparepart::where('kode_owner', $kode_owner)
+             $sparepart = Sparepart::where('kode_owner', $kode_owner)
+                ->with(['variants.attributeValues.attribute'])
                 ->where(function($query) use ($search) {
                     $query->where('kode_sparepart', $search);
                         //   ->orWhere('barcode', $search);
@@ -573,6 +576,7 @@ class StockOpnameController extends Controller
                 'stock_tercatat' => $detail->stock_tercatat,
                 'status' => $detail->status,
                 'status_text' => $detail->status_text,
+                'variants' => $sparepart->variants,
             ];
 
             if ($detail->status !== 'pending') {
@@ -829,6 +833,9 @@ class StockOpnameController extends Controller
             // 5. Update Harga Khusus
             $this->updateHargaKhusus($sparepart, $calculatedPrices);
 
+            // Load variants relationship for output
+            $sparepart->load(['variants.attributeValues.attribute']);
+
             // 6. Tambahkan ke detail stock opname (seperti sebelumnya)
             $detail = StockOpnameDetail::create([
                 'period_id' => $periodId,
@@ -870,7 +877,8 @@ class StockOpnameController extends Controller
                     'status' => 'adjusted',
                     'already_checked' => true,
                     'current_stock' => $request->stock_aktual,
-                    'new_stock_after_adjustment' => $request->stock_aktual
+                    'new_stock_after_adjustment' => $request->stock_aktual,
+                    'variants' => $sparepart->variants
                 ]
             ], 200);
 
@@ -1062,7 +1070,7 @@ class StockOpnameController extends Controller
             $period = StockOpnamePeriod::where('kode_owner', $kode_owner)
                 ->findOrFail($periodId);
 
-            $detail = StockOpnameDetail::with(['sparepart', 'adjustments.user'])
+            $detail = StockOpnameDetail::with(['sparepart.variants.attributeValues.attribute', 'sparepart.kategori', 'sparepart.supplier', 'adjustments.user'])
                 ->where('period_id', $periodId)
                 ->where('id', $detailId)
                 ->first();
@@ -1087,8 +1095,8 @@ class StockOpnameController extends Controller
                 'sparepart_id' => $detail->sparepart_id,
                 'kode_sparepart' => $detail->sparepart->kode_sparepart,
                 'nama_sparepart' => $detail->sparepart->nama_sparepart,
-                'kategori' => $detail->sparepart->kode_kategori,
-                'supplier' => $detail->sparepart->kode_spl,
+                'kategori' => $detail->sparepart->kategori ? $detail->sparepart->kategori->nama_kategori : $detail->sparepart->kode_kategori,
+                'supplier' => $detail->sparepart->supplier ? $detail->sparepart->supplier->nama_supplier : $detail->sparepart->kode_spl,
                 'harga_beli' => $detail->sparepart->harga_beli,
                 'stock_tercatat' => $detail->stock_tercatat,
                 'stock_aktual' => $detail->stock_aktual,
@@ -1096,6 +1104,7 @@ class StockOpnameController extends Controller
                 'status' => $detail->status,
                 'status_text' => $detail->status_text,
                 'catatan' => $detail->catatan,
+                'variants' => $detail->sparepart->variants,
                 'current_stock' => $detail->sparepart->stok_sparepart,
                 'new_stock_after_adjustment' => $detail->sparepart->stok_sparepart + $detail->selisih,
                 'adjustment_history' => $detail->adjustments->map(function($adjustment) {
@@ -1401,9 +1410,20 @@ class StockOpnameController extends Controller
     public function getReport(Request $request, $id)
     {
         try {
-            $kode_owner = $this->getThisUser()->id_upline;
+            $user = $this->getThisUser();
+            
+            // VALIDASI: Hanya admin/owner (jabatan 1) yang bisa melihat laporan
+            if ($user->jabatan != '1') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hanya admin/owner yang dapat mengakses laporan stock opname'
+                ], 403);
+            }
 
-            $period = StockOpnamePeriod::where('kode_owner', $kode_owner)
+            $kode_owner = $user->id_upline;
+
+            $period = StockOpnamePeriod::with(['details.sparepart'])
+                ->where('kode_owner', $kode_owner)
                 ->findOrFail($id);
 
             // Verifikasi status
@@ -1420,6 +1440,26 @@ class StockOpnameController extends Controller
             $positiveSelisih = $period->details->where('selisih', '>', 0)->sum('selisih');
             $negativeSelisih = $period->details->where('selisih', '<', 0)->sum('selisih');
             $totalAdjusted = $period->details->where('status', 'adjusted')->count();
+
+            // Hitung dampak finansial (rugi & untung) berdasarkan harga beli
+            $totalLoss = 0;
+            $totalGain = 0;
+            $lossItemsCount = 0;
+            $gainItemsCount = 0;
+
+            foreach ($period->details as $detail) {
+                $hargaBeli = floatval($detail->sparepart->harga_beli ?? 0);
+                $selisih = intval($detail->selisih ?? 0);
+                if ($selisih < 0) {
+                    $totalLoss += abs($selisih) * $hargaBeli;
+                    $lossItemsCount++;
+                } elseif ($selisih > 0) {
+                    $totalGain += $selisih * $hargaBeli;
+                    $gainItemsCount++;
+                }
+            }
+
+            $netFinancial = $totalGain - $totalLoss;
 
             // Item dengan selisih terbesar (positif dan negatif)
             $largestPositive = $period->details->where('selisih', '>', 0)->sortByDesc('selisih')->take(5)->values();
@@ -1444,7 +1484,12 @@ class StockOpnameController extends Controller
                     'positive_selisih' => $positiveSelisih,
                     'negative_selisih' => $negativeSelisih,
                     'total_adjusted' => $totalAdjusted,
-                    'percentage_with_selisih' => $totalItems > 0 ? round(($itemsWithSelisih / $totalItems) * 100) : 0
+                    'percentage_with_selisih' => $totalItems > 0 ? round(($itemsWithSelisih / $totalItems) * 100) : 0,
+                    'total_loss' => $totalLoss,
+                    'total_gain' => $totalGain,
+                    'net_financial' => $netFinancial,
+                    'loss_items_count' => $lossItemsCount,
+                    'gain_items_count' => $gainItemsCount
                 ],
                 'largest_positive' => $largestPositive->map(function($item) {
                     return [
@@ -1455,7 +1500,9 @@ class StockOpnameController extends Controller
                         'stock_aktual' => $item->stock_aktual,
                         'selisih' => $item->selisih,
                         'status' => $item->status,
-                        'status_text' => $item->status_text
+                        'status_text' => $item->status_text,
+                        'harga_beli' => floatval($item->sparepart->harga_beli ?? 0),
+                        'nilai_selisih' => intval($item->selisih ?? 0) * floatval($item->sparepart->harga_beli ?? 0)
                     ];
                 }),
                 'largest_negative' => $largestNegative->map(function($item) {
@@ -1467,7 +1514,9 @@ class StockOpnameController extends Controller
                         'stock_aktual' => $item->stock_aktual,
                         'selisih' => $item->selisih,
                         'status' => $item->status,
-                        'status_text' => $item->status_text
+                        'status_text' => $item->status_text,
+                        'harga_beli' => floatval($item->sparepart->harga_beli ?? 0),
+                        'nilai_selisih' => intval($item->selisih ?? 0) * floatval($item->sparepart->harga_beli ?? 0)
                     ];
                 })
             ];
@@ -1490,7 +1539,17 @@ class StockOpnameController extends Controller
     public function getItemsWithSelisih(Request $request, $id)
     {
         try {
-            $kode_owner = $this->getThisUser()->id_upline;
+            $user = $this->getThisUser();
+            
+            // VALIDASI: Hanya admin/owner (jabatan 1) yang bisa melihat data selisih
+            if ($user->jabatan != '1') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hanya admin/owner yang dapat mengakses data selisih stock opname'
+                ], 403);
+            }
+
+            $kode_owner = $user->id_upline;
             $perPage = $request->input('per_page', 10);
 
             $period = StockOpnamePeriod::where('kode_owner', $kode_owner)
@@ -1518,7 +1577,9 @@ class StockOpnameController extends Controller
                         'stock_aktual' => $item->stock_aktual,
                         'selisih' => $item->selisih,
                         'status' => $item->status,
-                        'status_text' => $item->status_text
+                        'status_text' => $item->status_text,
+                        'harga_beli' => floatval($item->sparepart->harga_beli ?? 0),
+                        'nilai_selisih' => intval($item->selisih ?? 0) * floatval($item->sparepart->harga_beli ?? 0)
                     ];
                 })
             ];

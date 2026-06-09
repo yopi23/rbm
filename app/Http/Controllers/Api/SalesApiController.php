@@ -97,7 +97,7 @@ class SalesApiController extends Controller
                 ->with([
                 'kategori',
                 'subKategori',
-                'variants.attributeValues',
+                'variants.attributeValues.attribute',
                 'hargaKhusus'
             ])
                 ->where('kode_owner', $userId)
@@ -293,7 +293,12 @@ class SalesApiController extends Controller
                     'attribute_values' => $variant->attributeValues->map(function ($attrValue) {
                             return [
                             'id' => $attrValue->id,
-                            'value' => $attrValue->value
+                            'value' => $attrValue->value,
+                            'attribute_id' => $attrValue->attribute->id ?? null,
+                            'attribute' => $attrValue->attribute ? [
+                                'id' => $attrValue->attribute->id,
+                                'name' => $attrValue->attribute->name,
+                            ] : null,
                             ];
                         }
                         )
@@ -366,7 +371,7 @@ class SalesApiController extends Controller
             // Query Utama (Ini sudah benar)
             $query = Sparepart::query()
                 ->with([
-                'variants.attributeValues',
+                'variants.attributeValues.attribute',
                 'hargaKhusus',
                 'kategori',
                 'subKategori'
@@ -641,7 +646,7 @@ class SalesApiController extends Controller
                 ->where('kode_owner', '=', $ownerCode)
                 ->where('is_active', 1)
                 ->where('is_visible_on_web', 1)
-                ->with(['kategori', 'subKategori']);
+                ->with(['kategori', 'subKategori', 'variants.attributeValues.attribute']);
 
             // Filter by category if provided
             if ($categoryId) {
