@@ -1261,6 +1261,12 @@ class SparepartApiController extends Controller
 
                 DB::transaction(function () use ($service, $serviceId, $id_teknisi, $total_part_for_profit, $penalties_per_teknisi, $total_garansi, &$fix_profit_teknisi, &$profit_untuk_toko) {
                     
+                    // Check if the old profit record for this technician was already liquidated (is_cair == 1)
+                    $wasCair = ProfitPresentase::where('kode_service', $serviceId)
+                        ->where('kode_user', $id_teknisi)
+                        ->where('is_cair', 1)
+                        ->exists();
+
                     // 1. Revert ALL old profits/penalties for this service
                     $oldProfitRecords = ProfitPresentase::where('kode_service', $serviceId)->get();
                     foreach ($oldProfitRecords as $old) {
@@ -1360,7 +1366,7 @@ class SparepartApiController extends Controller
 
                         Log::info("Internal Calculation: Base Commission: {$base_commission}, Final untuk teknisi {$id_teknisi}: {$fix_profit_teknisi}");
 
-                        $isCair = (strtolower($service->status_services) === 'diambil') ? 1 : 0;
+                        $isCair = (strtolower($service->status_services) === 'diambil' || $wasCair) ? 1 : 0;
 
                         $komisi = ProfitPresentase::create([
                             'kode_service'    => $serviceId,
