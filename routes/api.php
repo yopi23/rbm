@@ -135,7 +135,7 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::get('/product/search', [ProductSearchApiController::class , 'search']);
 
     // Cabang Management Routes
-    Route::apiResource('cabang', CabangApiController::class);
+    Route::apiResource('cabang', CabangApiController::class)->names('api.cabang');
     Route::post('/cabang/transfer-stok', [CabangApiController::class, 'transferStok']);
 
     // Employee/Karyawan Management Routes
