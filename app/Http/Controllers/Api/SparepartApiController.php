@@ -2494,17 +2494,23 @@ class SparepartApiController extends Controller
             $oldTechnicianId = $service->id_teknisi;
             $newTechnicianId = $request->has('id_teknisi') ? $request->id_teknisi : $service->id_teknisi;
 
+            $isNewStatusCompleted = in_array(strtolower($newStatus), ['selesai', 'diambil']);
+            $isOldStatusCompleted = in_array(strtolower($oldStatus), ['selesai', 'diambil']);
+
+            $newTglService = $service->tgl_service;
+            if ($isNewStatusCompleted) {
+                if (!$isOldStatusCompleted || empty($service->tgl_service)) {
+                    $newTglService = \Carbon\Carbon::now()->format('Y-m-d H:i:s');
+                }
+            }
+
             DB::beginTransaction();
 
             $service->update([
                 'status_services' => $newStatus,
                 'id_teknisi' => $newTechnicianId,
-                'tgl_service' => in_array($newStatus, ['Selesai', 'Diambil']) ? ($service->tgl_service ?: \Carbon\Carbon::now()->format('Y-m-d H:i:s')) : $service->tgl_service,
+                'tgl_service' => $newTglService,
             ]);
-
-            // Recompute or revert commissions
-            $isNewStatusCompleted = in_array(strtolower($newStatus), ['selesai', 'diambil']);
-            $isOldStatusCompleted = in_array(strtolower($oldStatus), ['selesai', 'diambil']);
 
             if ($isNewStatusCompleted && !$isOldStatusCompleted) {
                 // Transition to completed/picked up
