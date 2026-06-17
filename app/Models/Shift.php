@@ -22,6 +22,11 @@ class Shift extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function cabang()
+    {
+        return $this->belongsTo(Cabang::class, 'cabang_id');
+    }
+
     public function penjualans()
     {
         return $this->hasMany(Penjualan::class, 'shift_id');

@@ -100,7 +100,8 @@ class UsersController extends Controller
     {
         //
         $page = "Tambah Pengguna";
-        return view('admin.forms.users',compact(['page']));
+        $cabangs = \App\Models\Cabang::where('is_active', true)->get();
+        return view('admin.forms.users',compact(['page', 'cabangs']));
     }
 
     /**
@@ -122,6 +123,7 @@ class UsersController extends Controller
                 'name'=> $request->name,
                 'email'=> $request->email,
                 'password'=> Hash::make($request->password),
+                'cabang_id' => $request->cabang_id,
             ]);
             if($create){
                 $data_user = User::where([['name','=',$request->name],['email','=',$request->email]])->get()->first();
@@ -174,7 +176,8 @@ class UsersController extends Controller
         //
         $page = "Edit Pengguna";
         $data = User::join('user_details','user_details.kode_user','=','users.id')->where('users.id','=',$id)->get(['users.*','user_details.*','users.id as id_user'])->first();
-        return view('admin.forms.users',compact(['page','data']));
+        $cabangs = \App\Models\Cabang::where('is_active', true)->get();
+        return view('admin.forms.users',compact(['page','data','cabangs']));
     }
 
     /**
@@ -198,6 +201,7 @@ class UsersController extends Controller
                 'name'=> $request->name,
                 'email'=> $request->email,
                 'password'=>$pass,
+                'cabang_id' => $request->cabang_id,
             ]);
             if($data){
                 $data_user = UserDetail::where([['kode_user','=',$id]])->get()->first();

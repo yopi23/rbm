@@ -581,10 +581,19 @@ class EmployeeManagementController extends Controller
 
     public function salarySettingsStore(Request $request)
 {
+    // Secure endpoint: Only allow Admin/Owner (jabatan 0 or 1)
+    $authUserDetail = auth()->user()->userDetail;
+    if (!$authUserDetail || ($authUserDetail->jabatan != 0 && $authUserDetail->jabatan != 1)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Hanya admin yang dapat mengatur gaji.'
+        ], 403);
+    }
+
     // Bagian validasi sudah benar dan tidak perlu diubah
     $baseRules = [
         'user_id' => 'required|exists:users,id',
-        'compensation_type' => 'required|in:fixed,percentage',
+        'compensation_type' => 'required|in:fixed,percentage,tiered',
         'target_bonus' => 'required|numeric|min:0',
     ];
     $user = \App\Models\User::with('userDetail')->find($request->user_id);
@@ -636,12 +645,17 @@ class EmployeeManagementController extends Controller
             $data['basic_salary'] = (float) $request->basic_salary;
             $data['max_salary'] = (float) $request->basic_salary;
             $data['percentage_value'] = 0;
-            $data['max_percentage'] = 0; // PENAMBAHAN
-        } else { // percentage
+            $data['max_percentage'] = 0;
+        } elseif ($request->compensation_type == 'percentage') {
             $data['basic_salary'] = 0;
             $data['max_salary'] = 0;
             $data['percentage_value'] = (float) $request->percentage_value;
-            $data['max_percentage'] = (float) $request->percentage_value; // PENAMBAHAN
+            $data['max_percentage'] = (float) $request->percentage_value;
+        } else { // tiered
+            $data['basic_salary'] = 0;
+            $data['max_salary'] = 0;
+            $data['percentage_value'] = 0;
+            $data['max_percentage'] = 0;
         }
 
         $salarySetting = SalarySetting::updateOrCreate(
@@ -827,22 +841,14 @@ class EmployeeManagementController extends Controller
             } else { // 'percentage'
                 // Untuk tipe Persentase
                 if ($violation->penalty_percentage > 0) {
-                    // Jika denda berupa PERSENTASE, kita ubah salary_settings secara permanen.
-                    $originalPercentage = $salarySetting->percentage_value;
-                    $newPercentageValue = max(0, $originalPercentage - $violation->penalty_percentage);
-
-                    $salarySetting->update(['percentage_value' => $newPercentageValue]);
-
                     // Hitung estimasi penalty nominal berdasarkan profit bulan lalu untuk disimpan
                     // Ini hanya untuk catatan, bukan pemotongan langsung.
                     $lastMonthProfit = $this->calculateLastMonthProfit($violation->user_id);
                     $penaltyAmount = ($lastMonthProfit * $violation->penalty_percentage) / 100;
 
-                    Log::info('Percentage salary penalty applied', [
+                    Log::info('Percentage salary penalty applied dynamically', [
                         'violation_id' => $violation->id,
                         'penalty_percentage' => $violation->penalty_percentage,
-                        'original_percentage' => $originalPercentage,
-                        'new_percentage' => $newPercentageValue
                     ]);
                 } elseif ($violation->penalty_amount > 0) {
                     // Jika denda berupa NOMINAL, kita TIDAK mengubah percentage_value.
@@ -943,63 +949,25 @@ public function reversePenalty(Request $request)
 
         // Kembalikan nilai ke salary settings berdasarkan tipe kompensasi
         if ($salarySetting->compensation_type === 'fixed') {
-            if ($violation->penalty_amount) {
-                // Penalty nominal
-                $salarySetting->update([
-                    'basic_salary' => $salarySetting->basic_salary + $violation->penalty_amount
-                ]);
-            } elseif ($violation->penalty_percentage) {
-                // Penalty persentase - hitung ulang berdasarkan applied_penalty_amount
-                $salarySetting->update([
-                    'basic_salary' => $salarySetting->basic_salary + $violation->applied_penalty_amount
-                ]);
+            // Hapus record denda/penalty negatif dari profit_presentases
+            $pp = \App\Models\ProfitPresentase::where('kode_user', $violation->user_id)
+                ->whereDate('tgl_profit', $violation->violation_date->toDateString())
+                ->where('kode_service', 0)
+                ->where('profit', '<', 0)
+                ->first();
+            if ($pp) {
+                if ($pp->is_cair) {
+                    $userDetail = \App\Models\UserDetail::where('kode_user', $violation->user_id)->first();
+                    if ($userDetail) {
+                        $userDetail->increment('saldo', abs($pp->profit));
+                    }
+                }
+                $pp->delete();
             }
         } else {
-            // Sistem persentase
-            if ($violation->penalty_percentage) {
-                $salarySetting->update([
-                    'percentage_value' => min(100, $salarySetting->percentage_value + $violation->penalty_percentage)
-                ]);
-            } else {
-                // Untuk penalty nominal yang dikonversi ke persentase
-                // Kita perlu menghitung berapa persentase yang harus dikembalikan
-                $currentMonth = now()->month;
-                $currentYear = now()->year;
-
-                $avgProfit = 0;
-                for ($i = 0; $i < 3; $i++) {
-                    $checkMonth = now()->subMonths($i);
-
-                    $totalServiceAmount = \App\Models\Sevices::where('id_teknisi', $violation->user_id)
-                        ->where('status_services', 'Selesai')
-                        ->whereYear('updated_at', $checkMonth->year)
-                        ->whereMonth('updated_at', $checkMonth->month)
-                        ->sum('total_biaya');
-
-                    $totalPartCost = \App\Models\Sevices::where('id_teknisi', $violation->user_id)
-                        ->where('status_services', 'Selesai')
-                        ->whereYear('updated_at', $checkMonth->year)
-                        ->whereMonth('updated_at', $checkMonth->month)
-                        ->sum('harga_sp');
-
-                    $monthlyProfit = $totalServiceAmount - $totalPartCost;
-                    $avgProfit += $monthlyProfit;
-                }
-
-                $avgProfit = $avgProfit / 3;
-
-                if ($avgProfit > 0) {
-                    $percentageToRestore = ($violation->penalty_amount / $avgProfit) * 100;
-                    $salarySetting->update([
-                        'percentage_value' => min(100, $salarySetting->percentage_value + $percentageToRestore)
-                    ]);
-                } else {
-                    // Fallback: kembalikan 1%
-                    $salarySetting->update([
-                        'percentage_value' => min(100, $salarySetting->percentage_value + 1)
-                    ]);
-                }
-            }
+            // Sistem persentase / tiered
+            // Karena denda persentase dihitung secara dinamis tiap bulannya,
+            // kita tidak perlu memodifikasi salary settings pada pemulihan.
         }
 
         // Update violation dengan data reversal
@@ -1175,8 +1143,7 @@ public function reversePenalty(Request $request)
          $basicSalary = 0; // Inisialisasi Gaji Pokok
         // Hitung gaji pokok atau sesuaikan komisi berdasarkan kehadiran
         if ($salarySetting->compensation_type == 'fixed') {
-            $attendanceRate = $totalWorkingDays > 0 ? ($totalPresentDays / $totalWorkingDays) : 1;
-            $basicSalary = $salarySetting->basic_salary * $attendanceRate;
+            $basicSalary = $salarySetting->basic_salary * $totalPresentDays;
         } else { // percentage
             // $attendanceRate = $totalWorkingDays > 0 ? ($totalPresentDays / $totalWorkingDays) : 1;
             // $totalCommission = $totalCommission * $attendanceRate;
@@ -1248,7 +1215,7 @@ public function reversePenalty(Request $request)
                 } elseif ($violation->penalty_percentage > 0) {
                     $totalPenalties += ($salarySetting->basic_salary * $violation->penalty_percentage) / 100;
                 }
-            } elseif ($salarySetting->compensation_type == 'percentage') {
+            } elseif ($salarySetting->compensation_type == 'percentage' || $salarySetting->compensation_type == 'tiered') {
                 if ($violation->penalty_amount > 0) {
                     $totalPenalties += $violation->penalty_amount;
                 }
@@ -1325,9 +1292,9 @@ public function reversePenalty(Request $request)
                 'outside_office_summary' => json_encode($outsideOfficeSummary),
                 'status' => 'draft',
                 'processed_by' => auth()->id(),
-                'percentage_used' => $salarySetting->compensation_type == 'percentage'
+                'percentage_used' => ($salarySetting->compensation_type == 'percentage')
                                         ? $salarySetting->percentage_value
-                                        : ($salarySetting->service_percentage ?? 0),
+                                        : (($salarySetting->compensation_type == 'tiered') ? 0 : ($salarySetting->service_percentage ?? 0)),
                 'metadata' => json_encode([
                     'penalty_rules_version' => 'database_driven',
                     'calculated_at' => now()->toISOString(),
@@ -2794,12 +2761,92 @@ public function getThisUser()
      */
     public function getUserScheduleAPI($userId)
     {
-        $schedules = WorkSchedule::where('user_id', $userId)->get();
+        $schedules = WorkSchedule::where('user_id', $userId)
+            ->orderByRaw("FIELD(day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')")
+            ->get();
+
+        $formattedSchedules = $schedules->map(function($schedule) {
+            return [
+                'id' => $schedule->id,
+                'user_id' => $schedule->user_id,
+                'day_of_week' => $schedule->day_of_week,
+                'start_time' => $schedule->start_time ? Carbon::parse($schedule->start_time)->format('H:i') : '08:00',
+                'end_time' => $schedule->end_time ? Carbon::parse($schedule->end_time)->format('H:i') : '17:00',
+                'is_working_day' => (bool)$schedule->is_working_day,
+                'is_pic' => (bool)$schedule->is_pic,
+            ];
+        });
 
         return response()->json([
             'success' => true,
-            'data' => $schedules
+            'data' => $formattedSchedules
         ]);
+    }
+
+    /**
+     * Store user schedule for mobile app
+     */
+    public function storeUserScheduleAPI(Request $request)
+    {
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'user_id' => 'required|exists:users,id',
+            'schedules' => 'required|array',
+            'schedules.*.day_of_week' => 'required|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
+            'schedules.*.start_time' => 'required',
+            'schedules.*.end_time' => 'required',
+            'schedules.*.is_working_day' => 'required',
+            'schedules.*.is_pic' => 'nullable',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Delete existing schedules
+            WorkSchedule::where('user_id', $request->user_id)->delete();
+
+            // Create new schedules
+            foreach ($request->schedules as $schedule) {
+                $startTime = $schedule['start_time'];
+                $endTime = $schedule['end_time'];
+
+                try {
+                    $startTime = Carbon::parse($startTime)->format('H:i');
+                    $endTime = Carbon::parse($endTime)->format('H:i');
+                } catch (\Exception $e) {
+                    // Fallback
+                }
+
+                WorkSchedule::create([
+                    'user_id' => $request->user_id,
+                    'day_of_week' => $schedule['day_of_week'],
+                    'start_time' => $startTime,
+                    'end_time' => $endTime,
+                    'is_working_day' => filter_var($schedule['is_working_day'], FILTER_VALIDATE_BOOLEAN),
+                    'is_pic' => isset($schedule['is_pic']) ? filter_var($schedule['is_pic'], FILTER_VALIDATE_BOOLEAN) : false,
+                    'created_by' => auth()->id(),
+                ]);
+            }
+
+            DB::commit();
+
+            return $this->getUserScheduleAPI($request->user_id);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error saving schedule API: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menyimpan jadwal: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function getEmployeeList()
@@ -2821,8 +2868,8 @@ public function getThisUser()
                     'id' => $employee->id_user,
                     'name' => $employee->name,
                     'jabatan' => $employee->jabatan == 2 ? 'Kasir' : 'Teknisi',
-                    'jabatan_code' => $employee->jabatan,
-                    'is_active' => true // Could add status check if needed
+                    'jabatan_code' => (int) $employee->jabatan,
+                    'is_active' => (bool) ($employee->is_active_technician ?? true)
                 ];
             });
 
@@ -3282,5 +3329,42 @@ public function getThisUser()
             return redirect()->back()
                 ->with('error', 'Gagal mengupdate record: ' . $e->getMessage());
         }
+    }
+
+    public function toggleActiveStatus($userId)
+    {
+        // Secure endpoint: Only allow Admin/Owner (jabatan 0 or 1)
+        $authUserDetail = auth()->user()->userDetail;
+        if (!$authUserDetail || ($authUserDetail->jabatan != 0 && $authUserDetail->jabatan != 1)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hanya admin yang dapat mengubah status aktif teknisi.'
+            ], 403);
+        }
+
+        $targetUserDetail = UserDetail::where('kode_user', $userId)->first();
+        if (!$targetUserDetail) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Karyawan tidak ditemukan.'
+            ], 404);
+        }
+
+        // Validate owner access
+        if ($authUserDetail->id_upline !== $targetUserDetail->id_upline) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak memiliki akses ke karyawan ini.'
+            ], 403);
+        }
+
+        $targetUserDetail->is_active_technician = !($targetUserDetail->is_active_technician ?? true);
+        $targetUserDetail->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Status aktif teknisi berhasil diubah.',
+            'is_active_technician' => (bool) $targetUserDetail->is_active_technician
+        ]);
     }
 }

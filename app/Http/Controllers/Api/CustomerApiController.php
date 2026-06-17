@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\customer_table;
+use App\Models\Sevices;
+use App\Models\Penjualan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -136,10 +138,22 @@ class CustomerApiController extends Controller
             ], 404);
         }
 
+        $services = Sevices::where('customer_id', $id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $sales = Penjualan::where('customer_id', $id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
         return response()->json([
             'success' => true,
             'message' => 'Detail customer berhasil diambil',
-            'data' => $customer
+            'data' => [
+                'customer' => $customer,
+                'services' => $services,
+                'sales' => $sales
+            ]
         ]);
     }
 

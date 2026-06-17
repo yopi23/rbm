@@ -27,6 +27,7 @@ class User extends Authenticatable
         'email',
         'password',
         'fcm_token',
+        'cabang_id',
     ];
 
     /**
@@ -127,4 +128,8 @@ class User extends Authenticatable
         return false;
     }
 
+    public function cabang()
+    {
+        return $this->belongsTo(Cabang::class, 'cabang_id');
+    }
 }

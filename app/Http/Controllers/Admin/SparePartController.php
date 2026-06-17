@@ -382,6 +382,7 @@ class SparePartController extends Controller
             'harga_jual' => $request->harga_jual,
             'harga_pasang' => $request->harga_pasang,
             'kode_owner' => $this->getThisUser()->id_upline,
+            'cabang_id' => auth()->user()->cabang_id,
             'is_active' => $request->is_active ?? 1
         ]);
 

@@ -23,7 +23,10 @@ class AsetController extends Controller
     public function index()
     {
         $page = "Manajemen Aset Tetap";
-        $asets = Aset::where('kode_owner', $this->getOwnerId())->orderBy('tanggal_perolehan', 'desc')->get();
+        $asets = Aset::where('kode_owner', $this->getOwnerId())
+            ->with('cabang')
+            ->orderBy('tanggal_perolehan', 'desc')
+            ->get();
         $content = view('admin.page.aset.index', compact('page', 'asets'));
         return view('admin.layout.blank_page', compact('page', 'content'));
     }
@@ -31,7 +34,8 @@ class AsetController extends Controller
     public function create()
     {
         $page = "Tambah Aset Baru";
-        $content = view('admin.page.aset.create', compact('page'));
+        $cabangs = \App\Models\Cabang::where('kode_owner', $this->getOwnerId())->where('is_active', true)->get();
+        $content = view('admin.page.aset.create', compact('page', 'cabangs'));
         return view('admin.layout.blank_page', compact('page', 'content'));
     }
 
@@ -43,6 +47,7 @@ class AsetController extends Controller
             'tanggal_perolehan' => 'required|date',
             'nilai_perolehan' => 'required|numeric|min:0',
             'keterangan' => 'nullable|string',
+            'cabang_id' => 'nullable|exists:cabangs,id',
         ]);
 
         DB::beginTransaction();
@@ -57,6 +62,7 @@ class AsetController extends Controller
             // 1. Simpan data aset baru
             $aset = Aset::create([
                 'kode_owner' => $this->getOwnerId(),
+                'cabang_id' => $request->cabang_id,
                 'nama_aset' => $request->nama_aset,
                 'kategori_aset' => $request->kategori_aset,
                 'tanggal_perolehan' => $request->tanggal_perolehan,
@@ -96,7 +102,8 @@ class AsetController extends Controller
         }
 
         $page = "Edit Aset";
-        $content = view('admin.page.aset.edit', compact('page', 'aset'));
+        $cabangs = \App\Models\Cabang::where('kode_owner', $this->getOwnerId())->where('is_active', true)->get();
+        $content = view('admin.page.aset.edit', compact('page', 'aset', 'cabangs'));
         return view('admin.layout.blank_page', compact('page', 'content'));
     }
 
@@ -116,6 +123,7 @@ class AsetController extends Controller
             'kategori_aset' => 'nullable|string|max:255',
             'tanggal_perolehan' => 'required|date',
             'keterangan' => 'nullable|string',
+            'cabang_id' => 'nullable|exists:cabangs,id',
         ]);
 
         // Catatan: Nilai perolehan tidak diizinkan untuk diubah untuk menjaga integritas data kas.

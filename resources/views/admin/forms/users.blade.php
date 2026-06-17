@@ -69,6 +69,18 @@
                             </select>
                           </div>
                           <div class="form-group">
+                            <label>Penugasan Cabang</label>
+                            <select name="cabang_id" id="cabang_id" class="form-control">
+                              <option value="">Semua Cabang (Pusat)</option>
+                              @foreach($cabangs as $cabang)
+                                <option value="{{ $cabang->id }}" {{isset($data) && $data->cabang_id == $cabang->id ? 'selected' : ''}}>
+                                  {{ $cabang->nama_cabang }}
+                                </option>
+                              @endforeach
+                            </select>
+                            <small class="text-muted">Kosongkan jika karyawan bertugas di Pusat / Semua Cabang.</small>
+                          </div>
+                          <div class="form-group">
                             <label>Status</label>
                             <select name="status_user" id="status_user" class="form-control">
                               <option value="0" {{isset($data) && $data->status_user == '0' ? 'selected' : ''}}>Tidak Aktif</option>

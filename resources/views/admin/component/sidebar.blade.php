@@ -626,12 +626,45 @@
                              </ul>
                          </li>
                          <li class="nav-item">
-                             <a href="{{ route('users.index') }}" class="nav-link">
+                             <a href="{{ route('users.index') }}" class="nav-link {{ request()->routeIs('users.*') ? 'active' : '' }}">
                                  <i class="nav-icon fas fa-users"></i>
                                  <p>
                                      Pengguna
                                  </p>
                              </a>
+                         </li>
+                         @php
+                             $isCabangMenuActive = request()->routeIs([
+                                 'cabang.index',
+                                 'cabang.create',
+                                 'cabang.edit',
+                                 'cabang.transfer',
+                             ]);
+                         @endphp
+                         <li class="nav-item {{ $isCabangMenuActive ? 'menu-open' : '' }}">
+                             <a href="#" class="nav-link {{ $isCabangMenuActive ? 'active' : '' }}">
+                                 <i class="nav-icon fas fa-store"></i>
+                                 <p>
+                                     Manajemen Cabang
+                                     <i class="right fas fa-angle-left"></i>
+                                 </p>
+                             </a>
+                             <ul class="nav nav-treeview">
+                                 <li class="nav-item">
+                                     <a href="{{ route('cabang.index') }}"
+                                         class="nav-link {{ request()->routeIs(['cabang.index', 'cabang.create', 'cabang.edit']) ? 'active' : '' }}">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Daftar Cabang</p>
+                                     </a>
+                                 </li>
+                                 <li class="nav-item">
+                                     <a href="{{ route('cabang.transfer') }}"
+                                         class="nav-link {{ request()->routeIs('cabang.transfer') ? 'active' : '' }}">
+                                         <i class="far fa-circle nav-icon"></i>
+                                         <p>Transfer Stok</p>
+                                     </a>
+                                 </li>
+                             </ul>
                          </li>
                      @endif
                  @endif

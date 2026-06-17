@@ -33,6 +33,13 @@ class ProductApiController extends Controller
             $query = Sparepart::with(['kategori', 'supplier', 'variants.attributeValues.attribute'])
                 ->where('kode_owner', $ownerId);
 
+            $detail = $this->getThisUser();
+            if ($detail && $detail->jabatan != '1') {
+                $query->where('cabang_id', auth()->user()->cabang_id);
+            } elseif ($request->filled('cabang_id')) {
+                $query->where('cabang_id', $request->input('cabang_id'));
+            }
+
             // Filter search query
             if ($request->filled('q')) {
                 $search = $request->input('q');
@@ -40,8 +47,10 @@ class ProductApiController extends Controller
                 
                 $query->where(function ($q) use ($keywords) {
                     foreach ($keywords as $keyword) {
-                        $q->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', '%' . $keyword . '%')
-                          ->orWhere('kode_sparepart', 'LIKE', '%' . $keyword . '%');
+                        $q->where(function ($subQ) use ($keyword) {
+                            $subQ->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', '%' . $keyword . '%')
+                                 ->orWhere('kode_sparepart', 'LIKE', '%' . $keyword . '%');
+                        });
                     }
                 });
             }
@@ -184,6 +193,7 @@ class ProductApiController extends Controller
                     'harga_ecer' => $request->harga_ecer ?? $request->harga_jual,
                     'harga_pasang' => $request->harga_pasang,
                     'kode_owner' => $ownerId,
+                    'cabang_id' => auth()->user()->cabang_id,
                     'kode_spl' => $request->kode_spl,
                     'is_active' => $request->input('is_active', 1),
                     'is_visible_on_web' => $request->input('is_visible_on_web', 1),

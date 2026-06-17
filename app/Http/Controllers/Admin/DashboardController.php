@@ -24,6 +24,8 @@ use App\Models\UserDetail;
 use App\Models\Penarikan;
 use App\Models\Laci;
 use App\Models\Shift; // Import Shift
+use App\Models\ServiceCategory;
+use App\Models\ServiceJob;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth; // Import Auth
 use Illuminate\Support\Facades\Http;
@@ -360,6 +362,7 @@ class DashboardController extends Controller
                 'dp_transfer' => $dpTransfer,
                 'status_services' => 'Antri',
                 'kode_owner' => $this->getThisUser()->id_upline,
+                'cabang_id' => auth()->user()->cabang_id,
                 'shift_id' => $shiftId,
             ]);
 
@@ -723,6 +726,12 @@ class DashboardController extends Controller
             'items.*.qty' => ['required', 'integer', 'min:1'],
             'items.*.jasa' => ['required', 'numeric', 'min:0'],
             'items.*.harga_garansi' => ['required', 'numeric', 'min:0'],
+            'items.*.service_category_id' => ['nullable', 'integer', 'exists:service_categories,id'],
+            'items.*.nama_pekerjaan' => ['nullable', 'string', 'max:255'],
+            'jobs' => ['nullable', 'array'],
+            'jobs.*.nama_pekerjaan' => ['required', 'string', 'max:255'],
+            'jobs.*.service_category_id' => ['nullable', 'integer', 'exists:service_categories,id'],
+            'jobs.*.biaya_jasa' => ['required', 'numeric', 'min:0'],
             'tipe_sandi' => ['nullable', 'string', Rule::in(['pola', 'pin', 'teks'])],
             'isi_sandi' => ['nullable', 'string', 'required_with:tipe_sandi'],
             'data_unit' => ['nullable', 'json'],
@@ -750,6 +759,56 @@ class DashboardController extends Controller
                     'kode_toko' => $this->generateKodeToko($userUpline)
                 ]);
                 $customerId = $newCustomer->id;
+            }
+
+            // Find or seed default category
+            $defaultCategory = ServiceCategory::where('kode_owner', $userUpline)
+                ->where('is_active', true)
+                ->where('is_default', true)
+                ->first();
+
+            if (!$defaultCategory) {
+                $defaultCategory = ServiceCategory::where('kode_owner', $userUpline)
+                    ->where('is_active', true)
+                    ->first();
+            }
+
+            if (!$defaultCategory) {
+                $defaultCategories = [
+                    ['nama' => 'Ringan', 'persentase' => 30, 'kode_warna' => '#4CAF50', 'keywords' => 'lcd, screen, baterai, battery, casing, backdoor, backcover, lens, kamera, camera, speaker, buzzer, flexibel, con, konektor, connector, tombol, button, onoff, volume', 'is_default' => true, 'is_active' => true, 'kode_owner' => $userUpline],
+                    ['nama' => 'Sedang', 'persentase' => 40, 'kode_warna' => '#FF9800', 'keywords' => 'touchscreen, glass, software, flash, bypass, unlock, frp, root, charging port, lampu, backlight, ic', 'is_default' => false, 'is_active' => true, 'kode_owner' => $userUpline],
+                    ['nama' => 'Berat', 'persentase' => 50, 'kode_warna' => '#F44336', 'keywords' => 'mati total, matot, short, cpu, ram, emmc, ufs, reball, mesin, motherboard, jumper, signal, rf, audio, wifi, baseband, power', 'is_default' => false, 'is_active' => true, 'kode_owner' => $userUpline],
+                ];
+                foreach ($defaultCategories as $catData) {
+                    $createdCat = ServiceCategory::create($catData);
+                    if ($catData['is_default']) {
+                        $defaultCategory = $createdCat;
+                    }
+                }
+            }
+            $defaultCategoryId = $defaultCategory ? $defaultCategory->id : null;
+
+            // Perform dynamic keyword auto-matching for default category based on "keterangan"
+            $matchedCategoryId = $defaultCategoryId;
+            $keteranganLower = strtolower($request->keterangan);
+            
+            // Get all active categories sorted by percentage descending
+            $activeCategoriesForMatching = ServiceCategory::where('kode_owner', $userUpline)
+                ->where('is_active', true)
+                ->orderBy('persentase', 'desc')
+                ->get();
+                
+            foreach ($activeCategoriesForMatching as $cat) {
+                if (!empty($cat->keywords)) {
+                    $keywordsArray = explode(',', $cat->keywords);
+                    foreach ($keywordsArray as $kw) {
+                        $trimmedKw = trim(strtolower($kw));
+                        if (!empty($trimmedKw) && str_contains($keteranganLower, $trimmedKw)) {
+                            $matchedCategoryId = $cat->id;
+                            break 2;
+                        }
+                    }
+                }
             }
 
             // --- PERBAIKAN LOGIKA BIAYA ---
@@ -794,6 +853,7 @@ class DashboardController extends Controller
                 'dp_transfer' => $dpTransfer,
                 'status_services' => 'Antri',
                 'kode_owner' => $userUpline,
+                'cabang_id' => auth()->user()->cabang_id,
                 'tipe_sandi' => $request->tipe_sandi,
                 'isi_sandi' => $request->isi_sandi,
                 'data_unit' => $request->data_unit,
@@ -808,6 +868,31 @@ class DashboardController extends Controller
                 \App\Models\Sevices::class
             );
 
+            $hasJobs = false;
+            $userRole = auth()->user()->userDetail->jabatan ?? '2';
+
+            // --- 4b. Buat Standalone Jobs (Jika ada) ---
+            if ($request->has('jobs') && is_array($request->jobs)) {
+                foreach ($request->jobs as $jobData) {
+                    if ($userRole !== '1') {
+                        $jobCatId = ServiceCategory::determineCategoryFromJobName($jobData['nama_pekerjaan'], $userUpline);
+                    } else {
+                        $jobCatId = $jobData['service_category_id'] ?? $defaultCategoryId;
+                        if (!$jobCatId) {
+                            $jobCatId = ServiceCategory::determineCategoryFromJobName($jobData['nama_pekerjaan'], $userUpline);
+                        }
+                    }
+
+                    ServiceJob::create([
+                        'service_id' => $service->id,
+                        'service_category_id' => $jobCatId,
+                        'nama_pekerjaan' => $jobData['nama_pekerjaan'],
+                        'biaya_jasa' => $jobData['biaya_jasa'],
+                    ]);
+                    $hasJobs = true;
+                }
+            }
+
             // --- 5. Proses Spare Part (jika ada) ---
             if ($request->has('items') && is_array($request->items)) {
                 foreach ($request->items as $item) {
@@ -817,10 +902,30 @@ class DashboardController extends Controller
                         throw new \Exception("Stok tidak cukup untuk: " . $variant->display_name);
                     }
 
+                    $partJobName = $item['nama_pekerjaan'] ?? ("Pasang " . $variant->display_name);
+
+                    if ($userRole !== '1') {
+                        $partCategoryId = ServiceCategory::determineCategoryFromJobName($partJobName, $userUpline);
+                    } else {
+                        $partCategoryId = $item['service_category_id'] ?? $defaultCategoryId;
+                        if (!$partCategoryId) {
+                            $partCategoryId = ServiceCategory::determineCategoryFromJobName($partJobName, $userUpline);
+                        }
+                    }
+
+                    // Create a ServiceJob for this sparepart's installation
+                    $job = ServiceJob::create([
+                        'service_id' => $service->id,
+                        'service_category_id' => $partCategoryId,
+                        'nama_pekerjaan' => $partJobName,
+                        'biaya_jasa' => $item['jasa'],
+                    ]);
+
                     $service->variants()->attach($variant->sparepart_id, [
                         'qty_part' => $item['qty'],
                         'jasa' => $item['jasa'],
                         'harga_garansi' => $item['harga_garansi'],
+                        'service_job_id' => $job->id,
                         'detail_modal_part_service' => $variant->purchase_price,
                         'detail_harga_part_service' => $variant->internal_price,
                         'user_input' => $this->getThisUser()->id_user,
@@ -830,7 +935,18 @@ class DashboardController extends Controller
                     if ($variant->sparepart) {
                         $variant->sparepart->decrement('stok_sparepart', $item['qty']);
                     }
+                    $hasJobs = true;
                 }
+            }
+
+            // --- 5b. Fallback Legacy ---
+            if (!$hasJobs && $manualServiceCost > 0) {
+                ServiceJob::create([
+                    'service_id' => $service->id,
+                    'service_category_id' => $matchedCategoryId,
+                    'nama_pekerjaan' => 'Jasa Servis',
+                    'biaya_jasa' => $manualServiceCost,
+                ]);
             }
 
             // --- 6. Catat DP ke Laci (jika ada) ---

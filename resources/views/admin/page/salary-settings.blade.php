@@ -48,8 +48,10 @@
                                         @if ($setting)
                                             @if ($setting->compensation_type == 'fixed')
                                                 <span class="badge badge-primary">Gaji Tetap</span>
-                                            @else
+                                            @elseif ($setting->compensation_type == 'percentage')
                                                 <span class="badge badge-success">Persentase</span>
+                                            @elseif ($setting->compensation_type == 'tiered')
+                                                <span class="badge badge-warning">Bagi Hasil Kategori</span>
                                             @endif
                                         @else
                                             <span class="badge badge-secondary">Belum diatur</span>
@@ -65,6 +67,8 @@
                                     <td>
                                         @if ($setting && $setting->compensation_type == 'percentage')
                                             {{ $setting->percentage_value }}% (Profit)
+                                        @elseif ($setting && $setting->compensation_type == 'tiered')
+                                            Bagi Hasil Kategori
                                         @else
                                             -
                                         @endif
@@ -116,13 +120,13 @@
                                                 'name' => $employee->name,
                                                 'jabatan' => $employee->jabatan,
                                                 'compensation_type' => $setting->compensation_type ?? 'fixed',
-                                                'basic_salary' => $setting->basic_salary ?? 0,
-                                                'percentage_value' => $setting->percentage_value ?? 0,
-                                                'monthly_target' => $setting->monthly_target ?? 0,
-                                                'target_shop_profit' => $setting->target_shop_profit ?? 0,
-                                                'target_transaction_count' => $setting->target_transaction_count ?? 0,
-                                                'target_sales_revenue' => $setting->target_sales_revenue ?? 0,
-                                                'target_bonus' => $setting->target_bonus ?? 0,
+                                                'basic_salary' => (float) ($setting->basic_salary ?? 0),
+                                                'percentage_value' => (float) ($setting->percentage_value ?? 0),
+                                                'monthly_target' => (int) ($setting->monthly_target ?? 0),
+                                                'target_shop_profit' => (float) ($setting->target_shop_profit ?? 0),
+                                                'target_transaction_count' => (int) ($setting->target_transaction_count ?? 0),
+                                                'target_sales_revenue' => (float) ($setting->target_sales_revenue ?? 0),
+                                                'target_bonus' => (float) ($setting->target_bonus ?? 0),
                                             ]) }})">
                                             <i class="fas fa-edit"></i>
                                             {{ $setting ? 'Edit' : 'Atur' }}
@@ -178,8 +182,16 @@
                             <input class="form-check-input" type="radio" name="compensation_type" id="type_percentage"
                                 value="percentage">
                             <label class="form-check-label" for="type_percentage">
-                                <strong>Persentase Profit</strong>
-                                <small class="text-muted d-block">Hanya menerima komisi dari profit service.</small>
+                                <strong>Persentase Profit (Flat)</strong>
+                                <small class="text-muted d-block">Menerima komisi flat dari profit service (e.g. 40%).</small>
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="compensation_type" id="type_tiered"
+                                value="tiered">
+                            <label class="form-check-label" for="type_tiered">
+                                <strong>Bagi Hasil Kategori (Bertingkat)</strong>
+                                <small class="text-muted d-block">Menerima komisi berdasarkan tingkat kesulitan / kategori pekerjaan (Ringan/Sedang/Berat).</small>
                             </label>
                         </div>
                     </div>
@@ -197,6 +209,12 @@
                             <label>Persentase dari Profit (%) *</label>
                             <input type="number" name="percentage_value" id="percentage_value" class="form-control"
                                 min="0" max="100" step="0.1">
+                        </div>
+                    </div>
+
+                    <div id="tieredInfoFields">
+                        <div class="alert alert-warning mt-2">
+                            <i class="fas fa-info-circle"></i> Komisi akan dihitung otomatis sesuai persentase kategori kerja (Ringan, Sedang, Berat) yang diatur pada halaman Kategori Kerja.
                         </div>
                     </div>
 
@@ -307,10 +325,12 @@
 
         if (data.compensation_type === 'fixed') {
             $('#type_fixed').prop('checked', true);
-            $('#basic_salary').val(data.basic_salary);
-        } else {
+            $('#basic_salary').val(parseFloat(data.basic_salary) || 0);
+        } else if (data.compensation_type === 'percentage') {
             $('#type_percentage').prop('checked', true);
-            $('#percentage_value').val(data.percentage_value);
+            $('#percentage_value').val(parseFloat(data.percentage_value) || 0);
+        } else if (data.compensation_type === 'tiered') {
+            $('#type_tiered').prop('checked', true);
         }
         toggleCompensationType();
 
@@ -318,19 +338,22 @@
         if (data.jabatan == 3) { // Teknisi
             $('#technicianTargetFields').show();
             $('#cashierTargetFields').hide();
-            $('#monthly_target').val(data.monthly_target);
-            $('#target_shop_profit').val(data.target_shop_profit);
+            $('#monthly_target').val(parseInt(data.monthly_target) || 0);
+            $('#target_shop_profit').val(parseFloat(data.target_shop_profit) || 0);
         } else if (data.jabatan == 2) { // Kasir
             $('#technicianTargetFields').hide();
             $('#cashierTargetFields').show();
-            $('#target_transaction_count').val(data.target_transaction_count);
-            $('#target_sales_revenue').val(data.target_sales_revenue);
+            $('#target_transaction_count').val(parseInt(data.target_transaction_count) || 0);
+            $('#target_sales_revenue').val(parseFloat(data.target_sales_revenue) || 0);
         } else { // Jabatan lain (jika ada) disembunyikan semua
             $('#technicianTargetFields').hide();
             $('#cashierTargetFields').hide();
         }
 
-        $('#target_bonus').val(data.target_bonus);
+        $('#target_bonus').val(parseFloat(data.target_bonus) || 0);
+
+        // Hide/show info warning if tiered is active
+        toggleCompensationType();
 
         $('#modalSalarySettings').modal('show');
     }
@@ -342,11 +365,20 @@
             return;
         }
 
+        let compTypeLabel = '';
+        if (setting.compensation_type === 'fixed') {
+            compTypeLabel = '<span class="badge badge-primary">Gaji Tetap</span>';
+        } else if (setting.compensation_type === 'percentage') {
+            compTypeLabel = '<span class="badge badge-success">Persentase</span>';
+        } else if (setting.compensation_type === 'tiered') {
+            compTypeLabel = '<span class="badge badge-warning">Bagi Hasil Kategori</span>';
+        }
+
         let content = `
             <table class="table table-borderless table-sm">
                 <tr>
                     <td width="40%"><strong>Tipe Kompensasi</strong></td>
-                    <td>: ${setting.compensation_type === 'fixed' ? '<span class="badge badge-primary">Gaji Tetap</span>' : '<span class="badge badge-success">Persentase</span>'}</td>
+                    <td>: ${compTypeLabel}</td>
                 </tr>`;
 
         if (setting.compensation_type === 'fixed') {
@@ -355,7 +387,7 @@
                     <td><strong>Gaji Pokok</strong></td>
                     <td>: Rp ${new Intl.NumberFormat('id-ID').format(setting.basic_salary)}</td>
                 </tr>`;
-        } else {
+        } else if (setting.compensation_type === 'percentage') {
             content += `
                 <tr>
                     <td><strong>Persentase Profit</strong></td>
@@ -407,13 +439,21 @@
         if ($('#type_fixed').is(':checked')) {
             $('#fixedFields').show();
             $('#percentageFields').hide();
+            $('#tieredInfoFields').hide();
             $('#basic_salary').prop('required', true);
             $('#percentage_value').prop('required', false);
-        } else {
+        } else if ($('#type_percentage').is(':checked')) {
             $('#fixedFields').hide();
             $('#percentageFields').show();
+            $('#tieredInfoFields').hide();
             $('#basic_salary').prop('required', false);
             $('#percentage_value').prop('required', true);
+        } else if ($('#type_tiered').is(':checked')) {
+            $('#fixedFields').hide();
+            $('#percentageFields').hide();
+            $('#tieredInfoFields').show();
+            $('#basic_salary').prop('required', false);
+            $('#percentage_value').prop('required', false);
         }
     }
 

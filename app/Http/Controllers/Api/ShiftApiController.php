@@ -91,6 +91,7 @@ class ShiftApiController extends Controller
 
         $shift = Shift::create([
             'kode_owner' => $this->getOwnerId(),
+            'cabang_id' => $user->cabang_id,
             'user_id' => $user->id,
             'start_time' => now(),
             'modal_awal' => $request->modal_awal,
@@ -211,6 +212,83 @@ class ShiftApiController extends Controller
             'report_data' => json_encode($reportData),
         ]);
 
+        // Create consolidated journal entry for branch
+        try {
+            $cabangId = $shift->cabang_id;
+            if (!$cabangId) {
+                $defaultCabang = \App\Models\Cabang::firstOrCreate(
+                    ['kode_owner' => $shift->kode_owner, 'nama_cabang' => 'Cabang Utama'],
+                    ['alamat_cabang' => 'Kantor Pusat / Cabang Utama', 'is_active' => true]
+                );
+                $cabangId = $defaultCabang->id;
+                $shift->update(['cabang_id' => $cabangId]);
+            }
+
+            // 1. Calculate HPP for shift (include services picked up in this shift)
+            $pengambilanIds = \App\Models\Pengambilan::where('shift_id', $shift->id)->pluck('id');
+            $services = \App\Models\Sevices::where(function ($q) use ($shift) {
+                $q->where('shift_id', $shift->id)
+                  ->where('status_services', 'Diambil');
+            })
+            ->orWhereIn('kode_pengambilan', $pengambilanIds)
+            ->distinct()
+            ->pluck('id');
+            
+            $partTokoHPP = 0;
+            $partLuarHPP = 0;
+            if ($services->isNotEmpty()) {
+                $partTokoHPP = \App\Models\DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+                    ->whereIn('detail_part_services.kode_services', $services)
+                    ->sum(DB::raw('CASE 
+                        WHEN detail_part_services.detail_modal_part_service > 0 THEN detail_part_services.detail_modal_part_service 
+                        ELSE spareparts.harga_beli 
+                    END * detail_part_services.qty_part'));
+
+                $partLuarHPP = \App\Models\DetailPartLuarService::whereIn('kode_services', $services)
+                    ->sum(DB::raw('CASE WHEN harga_beli > 0 THEN harga_beli ELSE harga_part END * qty_part'));
+            }
+
+            $penjualans = \App\Models\Penjualan::where('shift_id', $shift->id)
+                ->where('status_penjualan', '1')
+                ->pluck('id');
+            
+            $barangHPP = 0;
+            $sparepartHPP = 0;
+            if ($penjualans->isNotEmpty()) {
+                $barangHPP = \App\Models\DetailBarangPenjualan::whereIn('kode_penjualan', $penjualans)
+                    ->sum(DB::raw('detail_harga_modal * qty_barang'));
+
+                $sparepartHPP = \App\Models\DetailSparepartPenjualan::whereIn('kode_penjualan', $penjualans)
+                    ->sum(DB::raw('detail_harga_modal * qty_sparepart'));
+            }
+            $hppTerjual = $partTokoHPP + $partLuarHPP + $barangHPP + $sparepartHPP;
+
+            // 2. Calculate local operational expenses
+            $biayaLokal = \App\Models\PengeluaranToko::where('shift_id', $shift->id)->sum('jumlah_pengeluaran') +
+                           \App\Models\PengeluaranOperasional::where('shift_id', $shift->id)->whereNull('beban_operasional_id')->sum('jml_pengeluaran');
+
+            // 3. Calculate technician commissions (include commissions created during this shift's timeframe)
+            $komisiTeknisi = \App\Models\ProfitPresentase::whereNotNull('kode_service')
+                ->whereBetween('created_at', [$shift->start_time, now()])
+                ->sum('profit');
+
+            // 4. Create JurnalHarianCabang
+            \App\Models\JurnalHarianCabang::create([
+                'cabang_id' => $cabangId,
+                'shift_id' => $shift->id,
+                'tanggal' => \Carbon\Carbon::parse($shift->start_time)->toDateString(),
+                'omset_tunai' => $cashIn,
+                'omset_non_tunai' => $transferIn,
+                'hpp_terjual' => $hppTerjual,
+                'biaya_operasional_lokal' => $biayaLokal,
+                'komisi_teknisi' => $komisiTeknisi,
+                'kas_seharusnya_disetor' => $cashIn - $biayaLokal,
+                'kas_aktual_disetor' => $saldoAkhirAktual - $shift->modal_awal,
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to record JurnalHarianCabang: " . $e->getMessage());
+        }
+
         try {
             if ($shift->kode_owner) {
                 $owner = User::find($shift->kode_owner);
@@ -261,6 +339,7 @@ class ShiftApiController extends Controller
             $sourceable = $kas->sourceable;
             $namaPelanggan = null;
             $keteranganTambahan = null;
+            $difficultyFlag = null;
 
             if ($sourceable) {
                 $type = class_basename($kas->sourceable_type);
@@ -282,9 +361,20 @@ class ShiftApiController extends Controller
                         return ($svc->type_unit ? $svc->type_unit . ' (' . ($svc->keterangan ?? '-') . ')' : ($svc->keterangan ?? '-'));
                     })->toArray();
                     $keteranganTambahan = implode(', ', $services);
+
+                    $difficultyFlags = $servicesRecords->map(function($svc) {
+                        return $svc->difficulty_flag;
+                    })->filter(function($f) {
+                        return $f !== null && $f !== '-';
+                    })->unique()->values()->all();
+                    
+                    if (!empty($difficultyFlags)) {
+                        $difficultyFlag = implode(', ', $difficultyFlags);
+                    }
                 } elseif ($type === 'Sevices' || $type === 'Service') {
                     $namaPelanggan = $sourceable->nama_pelanggan;
                     $keteranganTambahan = ($sourceable->type_unit ? $sourceable->type_unit . ' (' . ($sourceable->keterangan ?? '-') . ')' : ($sourceable->keterangan ?? '-'));
+                    $difficultyFlag = $sourceable->difficulty_flag;
                 } elseif ($type === 'Penjualan') {
                     $namaPelanggan = $sourceable->nama_customer ?? 'Walk-in';
                     $keteranganTambahan = $sourceable->catatan_customer;
@@ -307,7 +397,8 @@ class ShiftApiController extends Controller
             'is_cash' => $kas->is_cash,
             'type' => class_basename($kas->sourceable_type),
             'nama_pelanggan' => $namaPelanggan,
-            'keterangan_tambahan' => $keteranganTambahan
+            'keterangan_tambahan' => $keteranganTambahan,
+            'difficulty_flag' => $difficultyFlag
             ];
         });
 
@@ -484,6 +575,7 @@ class ShiftApiController extends Controller
         $shift->kasPerusahaan->each(function($kas) {
             $kas->setAttribute('nama_pelanggan', null);
             $kas->setAttribute('keterangan_tambahan', null);
+            $kas->setAttribute('difficulty_flag', null);
             $kas->setAttribute('type', class_basename($kas->sourceable_type));
 
             if ($kas->sourceable) {
@@ -506,9 +598,20 @@ class ShiftApiController extends Controller
                         return ($svc->type_unit ? $svc->type_unit . ' (' . ($svc->keterangan ?? '-') . ')' : ($svc->keterangan ?? '-'));
                     })->toArray();
                     $kas->setAttribute('keterangan_tambahan', implode(', ', $services));
+
+                    $difficultyFlags = $servicesRecords->map(function($svc) {
+                        return $svc->difficulty_flag;
+                    })->filter(function($f) {
+                        return $f !== null && $f !== '-';
+                    })->unique()->values()->all();
+                    
+                    if (!empty($difficultyFlags)) {
+                        $kas->setAttribute('difficulty_flag', implode(', ', $difficultyFlags));
+                    }
                 } elseif ($type === 'Sevices' || $type === 'Service') {
                     $kas->setAttribute('nama_pelanggan', $kas->sourceable->nama_pelanggan);
                     $kas->setAttribute('keterangan_tambahan', ($kas->sourceable->type_unit ? $kas->sourceable->type_unit . ' (' . ($kas->sourceable->keterangan ?? '-') . ')' : ($kas->sourceable->keterangan ?? '-')));
+                    $kas->setAttribute('difficulty_flag', $kas->sourceable->difficulty_flag);
                 } elseif ($type === 'Penjualan') {
                     $kas->setAttribute('nama_pelanggan', $kas->sourceable->nama_customer ?? 'Walk-in');
                     $kas->setAttribute('keterangan_tambahan', $kas->sourceable->catatan_customer);

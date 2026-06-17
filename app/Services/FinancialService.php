@@ -18,6 +18,8 @@ use App\Models\Penjualan;
 use App\Models\ProfitPresentase;
 use App\Models\Sevices;
 use App\Models\TransaksiModal;
+use App\Models\Cabang;
+use App\Models\JurnalHarianCabang;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -47,7 +49,7 @@ class FinancialService
      * @param Carbon|string $endDate
      * @return array
      */
-    public function calculateNetProfit($ownerId, $startDate, $endDate)
+    public function calculateNetProfit($ownerId, $startDate, $endDate, $cabangId = null)
     {
         $startRange = $startDate instanceof Carbon ? $startDate : Carbon::parse($startDate);
         $endRange = $endDate instanceof Carbon ? $endDate : Carbon::parse($endDate);
@@ -58,90 +60,63 @@ class FinancialService
         // Variabel kunci untuk prorata
         $calculatedJumlahHariPeriode = $startRange->diffInDays($endRange) + 1;
         $calculatedDaysInMonth = $startRange->daysInMonth;
-        $calculatedDaysInYear = $startRange->daysInYear;
 
-        // ==============================
-        // 1. REVENUE (Pendapatan)
-        // ==============================
-        $totalPendapatanPenjualan = Penjualan::where('kode_owner', $ownerId)
-            ->where('status_penjualan', '1')
-            ->whereBetween('updated_at', [$startRange, $endRange])
-            ->sum('total_penjualan');
+        // Query Jurnal Harian Cabang
+        $query = JurnalHarianCabang::whereBetween('tanggal', [$startRange->toDateString(), $endRange->toDateString()]);
 
-        $totalPendapatanService = Sevices::where('kode_owner', $ownerId)
-            ->where('status_services', 'Diambil')
-            ->whereBetween('updated_at', [$startRange, $endRange])
-            ->sum('total_biaya');
-
-        $totalPemasukkanLain = PemasukkanLain::where('kode_owner', $ownerId)
-            ->whereBetween('created_at', [$startRange, $endRange])
-            ->sum('jumlah_pemasukkan');
-
-        $revenue = $totalPendapatanPenjualan + $totalPendapatanService;
-
-        // ==============================
-        // 2. COGS / HPP (Harga Pokok Penjualan)
-        // ==============================
-        // Menggunakan method calculateCOGS yang sudah dioptimalkan
-        $hppResult = $this->calculateCOGS($ownerId, $startRange, $endRange);
-        
-        // Handle backward compatibility jika calculateCOGS mengembalikan float (old version)
-        if (is_array($hppResult)) {
-            $hpp = $hppResult['total'];
-            $hppDetails = $hppResult['breakdown'];
+        if ($cabangId) {
+            $query->where('cabang_id', $cabangId);
         } else {
-            $hpp = $hppResult;
-            $hppDetails = [];
+            $query->whereHas('cabang', function ($q) use ($ownerId) {
+                $q->where('kode_owner', $ownerId);
+            });
         }
 
-        // ==============================
-        // 3. LABA KOTOR
-        // ==============================
+        $jurnalSummary = $query->selectRaw('
+            SUM(omset_tunai) as total_omset_tunai,
+            SUM(omset_non_tunai) as total_omset_non_tunai,
+            SUM(hpp_terjual) as total_hpp,
+            SUM(biaya_operasional_lokal) as total_biaya_operasional_lokal,
+            SUM(komisi_teknisi) as total_komisi_teknisi
+        ')->first();
+
+        $revenue = ($jurnalSummary->total_omset_tunai ?? 0) + ($jurnalSummary->total_omset_non_tunai ?? 0);
+        $hpp = $jurnalSummary->total_hpp ?? 0;
+        
+        // LABA KOTOR
         $grossProfit = $revenue - $hpp;
 
-        // ==============================
-        // 4. EXPENSES (Beban-beban)
-        // ==============================
-        
-        // A. Biaya Operasional Insidental (Pengeluaran Toko - Legacy)
-        $biayaOperasionalInsidental = PengeluaranToko::where('kode_owner', $ownerId)
-            ->whereBetween('tanggal_pengeluaran', [$startRange, $endRange])
-            ->sum('jumlah_pengeluaran');
+        // EXPENSES (Beban-beban)
+        $biayaOperasionalLokal = $jurnalSummary->total_biaya_operasional_lokal ?? 0;
+        $biayaKomisi = $jurnalSummary->total_komisi_teknisi ?? 0;
 
-        // A.2 Biaya Operasional (PengeluaranOperasional - New)
-        // EXCLUDE Sinking Fund Payments (beban_operasional_id IS NOT NULL)
-        // Karena beban sinking fund sudah dihitung harian di bagian "D. Beban Tetap Operasional"
-        $biayaOperasionalBaru = PengeluaranOperasional::where('kode_owner', $ownerId)
-            ->whereBetween('tgl_pengeluaran', [$startRange, $endRange])
-            ->whereNull('beban_operasional_id') // Hanya ambil yang insidental / non-sinking fund
-            ->sum('jml_pengeluaran');
-
-        // B. Biaya Komisi (Dari Service)
-        $serviceIdsSelesai = Sevices::where('kode_owner', $ownerId)
-            ->whereIn('status_services', ['Selesai', 'Diambil'])
-            ->whereBetween('tgl_service', [$startRange, $endRange])->pluck('id');
-        $biayaKomisi = ProfitPresentase::whereIn('kode_service', $serviceIdsSelesai)->sum('profit');
-
-        // C. Beban Penyusutan Aset (Depreciation)
-        $totalPenyusutanBulananAktif = Aset::where('kode_owner', $ownerId)
-            ->where('tanggal_perolehan', '<=', $endRange->toDateString())
-            ->sum(DB::raw('(nilai_perolehan - nilai_residu) / masa_manfaat_bulan'));
+        // C. Beban Penyusutan Aset (Depreciation) - Dihitung berdasarkan alokasi Cabang jika cabangId dispesifikasikan
+        $queryAset = Aset::where('kode_owner', $ownerId)
+            ->where('tanggal_perolehan', '<=', $endRange->toDateString());
+        if ($cabangId) {
+            $queryAset->where('cabang_id', $cabangId);
+        }
+        $totalPenyusutanBulananAktif = $queryAset->sum(DB::raw('(nilai_perolehan - nilai_residu) / masa_manfaat_bulan'));
 
         $bebanPenyusutanHarian = ($calculatedDaysInMonth > 0) ? $totalPenyusutanBulananAktif / $calculatedDaysInMonth : 0;
         $bebanPenyusutanPeriodik = $bebanPenyusutanHarian * $calculatedJumlahHariPeriode;
 
         // D. Beban Tetap Operasional (Fixed Cost Prorated / Sinking Fund Allocation)
-        $totalBebanBulananAktif = BebanOperasional::where('kode_owner', $ownerId)
+        $queryBebanBulan = BebanOperasional::where('kode_owner', $ownerId)
             ->where('periode', 'bulanan')
-            ->where('created_at', '<=', $endRange)
-            ->sum('nominal');
-
-        $totalBebanTahunanAktif = BebanOperasional::where('kode_owner', $ownerId)
+            ->where('created_at', '<=', $endRange);
+        $queryBebanTahun = BebanOperasional::where('kode_owner', $ownerId)
             ->where('periode', 'tahunan')
-            ->where('created_at', '<=', $endRange)
-            ->sum('nominal');
+            ->where('created_at', '<=', $endRange);
+            
+        if ($cabangId) {
+            $queryBebanBulan->where('cabang_id', $cabangId);
+            $queryBebanTahun->where('cabang_id', $cabangId);
+        }
 
-        // Hitung per hari (looping untuk akurasi lintas bulan/tahun)
+        $totalBebanBulananAktif = $queryBebanBulan->sum('nominal');
+        $totalBebanTahunanAktif = $queryBebanTahun->sum('nominal');
+
         $bebanTetapPeriodik = 0;
         if ($totalBebanBulananAktif > 0 || $totalBebanTahunanAktif > 0) {
             $current = $startRange->copy();
@@ -153,35 +128,31 @@ class FinancialService
             }
         }
 
-        $totalExpenses = $biayaOperasionalInsidental + $biayaOperasionalBaru + $biayaKomisi + $bebanPenyusutanPeriodik + $bebanTetapPeriodik;
+        $totalExpenses = $biayaOperasionalLokal + $biayaKomisi + $bebanPenyusutanPeriodik + $bebanTetapPeriodik;
 
-        // ==============================
-        // 5. NET PROFIT
-        // ==============================
-        $netProfitFromOps = $grossProfit - $totalExpenses;
-        // REVISI: Pemasukkan Lain TIDAK dimasukkan ke dalam perhitungan Laba Bersih Operasional/Final
-        // karena user menyatakan itu bukan komponen laba (misal: titipan, modal, dll).
-        $netProfit = $netProfitFromOps; 
-
+        // NET PROFIT
+        $netProfit = $grossProfit - $totalExpenses;
 
         $detailBeban = [
             'HPP (Modal Pokok Penjualan)' => $hpp,
-            'Biaya Operasional (Legacy)' => $biayaOperasionalInsidental,
-            'Biaya Operasional (New)' => $biayaOperasionalBaru,
+            'Biaya Operasional Lokal' => $biayaOperasionalLokal,
             'Biaya Komisi Teknisi' => $biayaKomisi,
-            'Beban Penyusutan Aset' => $bebanPenyusutanPeriodik,
-            'Beban Tetap Periodik' => $bebanTetapPeriodik,
         ];
 
+        if (!$cabangId) {
+            $detailBeban['Beban Penyusutan Aset'] = $bebanPenyusutanPeriodik;
+            $detailBeban['Beban Tetap Periodik'] = $bebanTetapPeriodik;
+        }
+
         return [
-            'revenue' => $revenue, // Added for consistency with previous version
+            'revenue' => $revenue,
             'laba_kotor' => round($grossProfit, 0),
-            'gross_profit' => round($grossProfit, 0), // Added alias
+            'gross_profit' => round($grossProfit, 0),
             'total_beban' => round(array_sum($detailBeban), 0),
             'laba_bersih' => round($netProfit, 0),
-            'net_profit' => round($netProfit, 0), // Added alias
+            'net_profit' => round($netProfit, 0),
             'detail_beban' => array_map(function($value) { return round($value, 0); }, $detailBeban),
-            'detail_hpp' => $hppDetails, // NEW: Return detail HPP
+            'detail_hpp' => [], // raw HPP details are no longer queried for performance, return empty array to keep contract
             'jumlah_hari_periode' => $calculatedJumlahHariPeriode,
         ];
     }

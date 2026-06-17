@@ -30,7 +30,7 @@ class BebanOperasionalController extends Controller
         // Ambil semua beban, eager load semua pengeluaran dari awal tahun ini untuk efisiensi
         $awalTahunIni = Carbon::now()->startOfYear();
         $beban = BebanOperasional::where('kode_owner', $ownerId)
-            ->with(['pengeluaranOperasional' => function ($query) use ($awalTahunIni) {
+            ->with(['cabang', 'pengeluaranOperasional' => function ($query) use ($awalTahunIni) {
                 $query->where('tgl_pengeluaran', '>=', $awalTahunIni);
             }])
             ->orderBy('periode', 'desc') // Tampilkan tahunan dulu
@@ -64,9 +64,10 @@ class BebanOperasionalController extends Controller
 
         // Kalkulasi total berdasarkan beban ekuivalen bulanan
         $totalJatahBulanan = $beban->sum('beban_ekuivalen_bulanan');
+        $cabangs = \App\Models\Cabang::where('kode_owner', $ownerId)->where('is_active', true)->get();
 
         $content = view('admin.page.beban.index', compact(
-            'page', 'beban', 'namaBulan', 'totalJatahBulanan'
+            'page', 'beban', 'namaBulan', 'totalJatahBulanan', 'cabangs'
         ));
         return view('admin.layout.blank_page', compact('page', 'content'));
     }
@@ -82,6 +83,7 @@ class BebanOperasionalController extends Controller
             'periode' => 'required|in:bulanan,tahunan', // Validasi periode
             'nominal' => 'required|numeric|min:0', // Ganti dari jumlah_bulanan
             'keterangan' => 'nullable|string',
+            'cabang_id' => 'nullable|exists:cabangs,id',
         ]);
 
         BebanOperasional::create($request->all() + ['kode_owner' => $this->getOwnerId()]);
@@ -100,6 +102,7 @@ class BebanOperasionalController extends Controller
             'nama_beban' => 'required|string|max:255',
             'periode' => 'required|in:bulanan,tahunan', // Validasi periode
             'nominal' => 'required|numeric|min:0', // Ganti dari jumlah_bulanan
+            'cabang_id' => 'nullable|exists:cabangs,id',
         ]);
 
         $beban = BebanOperasional::where('kode_owner', $this->getOwnerId())->findOrFail($id);

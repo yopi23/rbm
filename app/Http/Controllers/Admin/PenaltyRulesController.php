@@ -470,6 +470,7 @@ class PenaltyRulesController extends Controller
      */
     public static function getApplicablePenalty($ruleType, $compensationType, $minutes, $ownerCode)
     {
+        $compensationType = ($compensationType === 'tiered') ? 'percentage' : $compensationType;
         try {
             // $ownerCode=$this->getThisUser()->id_upline;
             // If no owner code provided, try to get from current context
@@ -588,6 +589,7 @@ class PenaltyRulesController extends Controller
 
     public static function getApplicablePenaltyForAbsence($compensationType, $ownerCode)
     {
+        $compensationType = ($compensationType === 'tiered') ? 'percentage' : $compensationType;
         try {
             Log::info('=== GET APPLICABLE PENALTY FOR ABSENCE START ===', [
                 'compensation_type' => $compensationType,

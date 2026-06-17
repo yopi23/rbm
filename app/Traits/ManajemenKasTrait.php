@@ -62,10 +62,30 @@ trait ManajemenKasTrait
                 }
             }
 
+            // Pastikan tanggal memiliki jam/menit/detik jika inputnya hanya tanggal (date-only)
+            $tanggalKas = $tanggal ?? now();
+            if (is_string($tanggalKas)) {
+                try {
+                    $parsed = \Carbon\Carbon::parse($tanggalKas);
+                    if ($parsed->format('H:i:s') === '00:00:00') {
+                        $parsed->setTimeFrom(now());
+                    }
+                    $tanggalKas = $parsed;
+                } catch (\Exception $e) {
+                    $tanggalKas = now();
+                }
+            } elseif ($tanggalKas instanceof \DateTimeInterface) {
+                $parsed = \Carbon\Carbon::instance($tanggalKas);
+                if ($parsed->format('H:i:s') === '00:00:00') {
+                    $parsed->setTimeFrom(now());
+                }
+                $tanggalKas = $parsed;
+            }
+
             // Siapkan data untuk entri kas baru
             $dataKas = [
                 'kode_owner' => $ownerId,
-                'tanggal' => $tanggal ?? now(),
+                'tanggal' => $tanggalKas,
                 'deskripsi' => $deskripsi,
                 'debit' => $debit,
                 'kredit' => $kredit,

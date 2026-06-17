@@ -35,13 +35,27 @@ class Sevices extends Model
         'claimed_from_service_id',
         'status_services',
         'kode_owner',
+        'cabang_id',
         'shift_id',
-        'keterangan_teknisi',
     ];
+
+    protected $appends = [
+        'difficulty_flag',
+    ];
+
+    protected static function booted()
+    {
+        static::addGlobalScope(new \App\Scopes\CabangScope);
+    }
 
     public function teknisi()
     {
         return $this->belongsTo(User::class , 'id_teknisi');
+    }
+
+    public function cabang()
+    {
+        return $this->belongsTo(Cabang::class, 'cabang_id');
     }
 
     public function garansi()
@@ -63,6 +77,10 @@ class Sevices extends Model
     public function partLuar()
     {
         return $this->hasMany(DetailPartLuarService::class , 'kode_services', 'id');
+    }
+    public function jobs()
+    {
+        return $this->hasMany(ServiceJob::class, 'service_id');
     }
     public function kas()
     {
@@ -92,6 +110,28 @@ class Sevices extends Model
     public function customer()
     {
         return $this->belongsTo(customer_table::class , 'customer_id');
+    }
+
+    public function getDifficultyFlagAttribute()
+    {
+        $jobs = $this->jobs()->with('category')->get();
+        if ($jobs->isEmpty()) {
+            return '-';
+        }
+
+        $highestCategory = null;
+        $highestPercentage = -1;
+
+        foreach ($jobs as $job) {
+            if ($job->category) {
+                if ($job->category->persentase > $highestPercentage) {
+                    $highestPercentage = $job->category->persentase;
+                    $highestCategory = $job->category;
+                }
+            }
+        }
+
+        return $highestCategory ? $highestCategory->nama : '-';
     }
 
 }

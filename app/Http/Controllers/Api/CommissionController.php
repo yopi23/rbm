@@ -217,6 +217,7 @@ class CommissionController extends Controller
                 ->join('sevices', 'profit_presentases.kode_service', '=', 'sevices.id')
                 ->leftJoin('user_details', 'profit_presentases.kode_user', '=', 'user_details.kode_user') // Gunakan Left Join agar data tidak hilang jika user terhapus
                 ->select(
+                    'sevices.id as id',
                     'profit_presentases.id as commission_id',
                     DB::raw('CASE WHEN profit_presentases.is_cair = 1 THEN profit_presentases.updated_at ELSE profit_presentases.created_at END as tgl_profit'),
                     'sevices.kode_service',
@@ -369,7 +370,7 @@ class CommissionController extends Controller
 
         try {
             $query = DB::table('profit_presentases')
-                ->join('sevices', 'profit_presentases.kode_service', '=', 'sevices.id')
+                ->leftJoin('sevices', 'profit_presentases.kode_service', '=', 'sevices.id')
                 ->join('user_details', 'profit_presentases.kode_user', '=', 'user_details.kode_user')
                 ->select(
                     'profit_presentases.id as id_profit',
@@ -378,10 +379,10 @@ class CommissionController extends Controller
                     'user_details.fullname as nama_karyawan',
                     'profit_presentases.profit as nominal',
                     'profit_presentases.created_at as tanggal',
-                    'sevices.kode_service',
-                    'sevices.nama_pelanggan',
-                    'sevices.type_unit',
-                    'sevices.keterangan'
+                    DB::raw("COALESCE(sevices.kode_service, CASE WHEN profit_presentases.profit < 0 THEN 'DENDA_ABSEN' ELSE 'GAJI_HARIAN' END) as kode_service"),
+                    DB::raw("COALESCE(sevices.nama_pelanggan, 'Sistem Kehadiran') as nama_pelanggan"),
+                    DB::raw("COALESCE(sevices.type_unit, CASE WHEN profit_presentases.profit < 0 THEN 'Denda Lateness / Alpha' ELSE 'Gaji Harian' END) as type_unit"),
+                    DB::raw("COALESCE(sevices.keterangan, '-') as keterangan")
                 )
                 ->where('profit_presentases.is_cair', 0);
 

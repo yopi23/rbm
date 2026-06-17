@@ -23,6 +23,7 @@ class Sparepart extends Model
         'harga_ecer',
         'harga_pasang',
         'kode_owner',
+        'cabang_id',
         'kode_spl',
         'is_active',
         'is_visible_on_web',
@@ -36,6 +37,7 @@ class Sparepart extends Model
     protected static function booted()
     {
         static::addGlobalScope(new ActiveScope);
+        static::addGlobalScope(new \App\Scopes\CabangScope);
     }
     // public function detailSparepart()
     // {
@@ -61,6 +63,11 @@ class Sparepart extends Model
     public function hargaKhusus()
     {
         return $this->hasMany(HargaKhusus::class, 'id_sp');
+    }
+
+    public function cabang()
+    {
+        return $this->belongsTo(Cabang::class, 'cabang_id');
     }
 
     /**

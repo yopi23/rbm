@@ -19,6 +19,17 @@
                             value="{{ old('kategori_aset', $aset->kategori_aset) }}">
                     </div>
                     <div class="form-group">
+                        <label for="cabang_id">Alokasi Cabang</label>
+                        <select name="cabang_id" class="form-control">
+                            <option value="">Kantor Pusat / Holding (Semua Cabang)</option>
+                            @foreach ($cabangs as $cabang)
+                                <option value="{{ $cabang->id }}" {{ old('cabang_id', $aset->cabang_id) == $cabang->id ? 'selected' : '' }}>
+                                    {{ $cabang->nama_cabang }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="form-group">
                         <label for="tanggal_perolehan">Tanggal Perolehan <span class="text-danger">*</span></label>
                         <input type="date" name="tanggal_perolehan" class="form-control"
                             value="{{ old('tanggal_perolehan', $aset->tanggal_perolehan) }}" required>

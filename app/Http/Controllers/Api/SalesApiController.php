@@ -749,12 +749,22 @@ class SalesApiController extends Controller
         }
         $shiftId = $activeShift->id;
 
+        $customerName = $request->nama_customer;
+        if ($request->filled('customer_id')) {
+            $customer = \App\Models\customer_table::find($request->customer_id);
+            if ($customer) {
+                $customerName = $customer->nama_kontak;
+            }
+        }
+
         // Buat data penjualan terlebih dahulu
         $sale = Penjualan::create([
+            'customer_id' => $request->customer_id,
             'kode_penjualan' => 'TRX' . date('Ymd') . auth()->user()->id . (Penjualan::count() + 1),
             'tgl_penjualan' => date('Y-m-d'),
             'kode_owner' => $this->getThisUser()->id_upline,
-            'nama_customer' => $request->nama_customer ?? '-',
+            'cabang_id' => auth()->user()->cabang_id,
+            'nama_customer' => $customerName ?? '-',
             'catatan_customer' => $request->catatan_customer ?? '',
             'total_penjualan' => 0,
             'total_bayar' => 0,
@@ -861,7 +871,7 @@ class SalesApiController extends Controller
                     $bayarCash,
                     0,
                     'Penjualan API (Cash) #' . $sale->kode_penjualan,
-                    $sale->tgl_penjualan,
+                    $sale->created_at,
                     true // isCash = true
                 );
 
@@ -881,7 +891,7 @@ class SalesApiController extends Controller
                     $bayarTransfer,
                     0,
                     'Penjualan API (Transfer) #' . $sale->kode_penjualan,
-                    $sale->tgl_penjualan,
+                    $sale->created_at,
                     false // isCash = false
                 );
             }

@@ -1280,7 +1280,15 @@ class ServiceApiController extends Controller
                     switch ($action) {
                         case 'update_status':
                             if (isset($data['status'])) {
-                                $service->update(['status_services' => $data['status']]);
+                                $status = $data['status'];
+                                if (in_array($status, ['Selesai', 'Diambil']) && empty($service->id_teknisi)) {
+                                    $results[$serviceId] = [
+                                        'success' => false,
+                                        'message' => 'Gagal: Unit harus memiliki teknisi sebelum diubah statusnya menjadi selesai atau diambil.'
+                                    ];
+                                    continue 2;
+                                }
+                                $service->update(['status_services' => $status]);
                                 $results[$serviceId] = [
                                     'success' => true,
                                     'message' => 'Status updated'
@@ -2272,6 +2280,7 @@ class ServiceApiController extends Controller
                 'dp' => 0,
                 'status_services' => 'Antri',
                 'kode_owner' => $this->getThisUser()->id_upline,
+                'cabang_id' => auth()->user()->cabang_id,
                 'claimed_from_service_id' => $originalService->id,
                 'shift_id' => $shiftId,
                 'created_at' => now(),

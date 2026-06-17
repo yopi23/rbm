@@ -34,6 +34,8 @@ use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\ShiftApiController;
 use App\Http\Controllers\Api\AccumulatedFundsApiController;
 use App\Http\Controllers\Api\ProductApiController;
+use App\Http\Controllers\Api\ServiceCategoryApiController;
+use App\Http\Controllers\Api\CabangApiController;
 use Illuminate\Support\Facades\Broadcast;
 
 /* |-------------------------------------------------------------------------- | API Routes |-------------------------------------------------------------------------- | | Here is where you can register API routes for your application. These | routes are loaded by the RouteServiceProvider within a group which | is assigned the "api" middleware group. Enjoy building your API! | */
@@ -132,6 +134,16 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::get('/customers/check-phone', [CustomerController::class , 'checkPhone']);
     Route::get('/product/search', [ProductSearchApiController::class , 'search']);
 
+    // Cabang Management Routes
+    Route::apiResource('cabang', CabangApiController::class);
+    Route::post('/cabang/transfer-stok', [CabangApiController::class, 'transferStok']);
+
+    // Employee/Karyawan Management Routes
+    Route::get('/karyawan-manage', [\App\Http\Controllers\Api\EmployeeApiController::class, 'index']);
+    Route::post('/karyawan-manage', [\App\Http\Controllers\Api\EmployeeApiController::class, 'store']);
+    Route::put('/karyawan-manage/{id}', [\App\Http\Controllers\Api\EmployeeApiController::class, 'update']);
+    Route::delete('/karyawan-manage/{id}', [\App\Http\Controllers\Api\EmployeeApiController::class, 'destroy']);
+
     //pembeliaan
     // Helper routes
     Route::get('/pembelian/search-variants', [PembelianApiController::class , 'searchVariants']);
@@ -188,6 +200,8 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     // ═══════════════════════════════════════════════════════════════
     Route::get('/accumulated-funds', [AccumulatedFundsApiController::class , 'index']);
     Route::get('/financial-report', [FinancialReportApiController::class , 'getFinancialReport']);
+    Route::get('/financial-report/stock-debt-monitor', [FinancialReportApiController::class , 'getStockDebtMonitor']);
+    Route::get('/financial-report/dead-stock-audit', [FinancialReportApiController::class , 'getDeadStockAudit']);
 
     // ═══════════════════════════════════════════════════════════════
     // KEUANGAN PERUSAHAAN: Distribusi & Alokasi Laba
@@ -223,7 +237,10 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
         );
         Route::prefix('employee')->group(function () {
             Route::get('/schedule/{userId}', [EmployeeManagementController::class , 'getUserScheduleAPI']);
+            Route::post('/schedule/store', [EmployeeManagementController::class , 'storeUserScheduleAPI']);
             Route::get('/salary/{userId}', [EmployeeManagementController::class , 'getSalaryInfo']);
+            Route::post('/salary/store', [EmployeeManagementController::class , 'salarySettingsStore']);
+            Route::post('/toggle-status/{userId}', [EmployeeManagementController::class , 'toggleActiveStatus']);
         }
         );
         Route::get('/commissions/today', [CommissionController::class , 'getTodayCommissions']);
@@ -236,6 +253,17 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
         // Service Management (General & Completed Specific)
         Route::post('/create-service', [DashboardController::class , 'create_service_api']); // Assuming this creates new services
         Route::post('/pending-services', [DashboardController::class , 'get_pending_services']); // Assuming this gets uncompleted services
+    
+        // Service Categories (CRUD)
+        Route::get('/service-categories', [ServiceCategoryApiController::class, 'index']);
+        Route::post('/service-categories', [ServiceCategoryApiController::class, 'store']);
+        Route::put('/service-categories/{id}', [ServiceCategoryApiController::class, 'update']);
+        Route::delete('/service-categories/{id}', [ServiceCategoryApiController::class, 'destroy']);
+    
+        // Service Jobs Management (CRUD via detail screen)
+        Route::post('/services/{serviceId}/jobs', [SparepartApiController::class, 'addJobToService']);
+        Route::put('/services/jobs/{jobId}', [SparepartApiController::class, 'updateJobInService']);
+        Route::delete('/services/jobs/{jobId}', [SparepartApiController::class, 'deleteJobFromService']);
     
         // Services General (can be used by both Flutter & Admin Panel)
         Route::get('/services/getServiceDetails/{id}', [SparepartApiController::class , 'getServiceDetails']); // Retrieve full service details

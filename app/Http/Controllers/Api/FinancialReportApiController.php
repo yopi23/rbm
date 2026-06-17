@@ -63,172 +63,213 @@ class FinancialReportApiController extends Controller
             $request->validate([
                 'tgl_awal' => 'required|date',
                 'tgl_akhir' => 'required|date|after_or_equal:tgl_awal',
+                'cabang_id' => 'nullable|integer',
             ]);
 
             $tgl_awal = $request->tgl_awal;
             $tgl_akhir = $request->tgl_akhir;
+            $cabangId = $request->input('cabang_id');
             $kode_owner = $this->getThisUser()->id_upline;
+
+            $shiftIds = null;
+            if ($cabangId) {
+                $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
+            }
 
             // ==============================================
             // 1. PROFIT ANALYSIS (ACCRUAL BASIS) - Using FinancialService
             // ==============================================
-            // This ensures logic matches the Admin Dashboard & POSY reference
-            $profitData = $this->financialService->calculateNetProfit($kode_owner, $tgl_awal, $tgl_akhir);
+            $profitData = $this->financialService->calculateNetProfit($kode_owner, $tgl_awal, $tgl_akhir, $cabangId);
 
             // ==============================================
             // 2. CASH FLOW CALCULATION (CASH BASIS)
             // ==============================================
-            // Still calculated manually because FinancialService is for Profit (Accrual), not Cash Flow.
             
             // Cash In
-            $totalCashInService = Sevices::where('kode_owner', $kode_owner)
+            $totalCashInServiceQuery = Sevices::where('kode_owner', $kode_owner)
                 ->where('status_services', 'Diambil')
-                ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum(DB::raw('total_biaya - dp'));
+                ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $totalCashInServiceQuery->whereIn('shift_id', $shiftIds);
+            }
+            $totalCashInService = $totalCashInServiceQuery->sum(DB::raw('total_biaya - dp'));
                 
-            $totalCashInDP = Sevices::where('kode_owner', $kode_owner)
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('dp');
+            $totalCashInDPQuery = Sevices::where('kode_owner', $kode_owner)
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $totalCashInDPQuery->whereIn('shift_id', $shiftIds);
+            }
+            $totalCashInDP = $totalCashInDPQuery->sum('dp');
 
-            $totalCashInSales = Penjualan::where('kode_owner', $kode_owner)
+            $totalCashInSalesQuery = Penjualan::where('kode_owner', $kode_owner)
                 ->where('status_penjualan', '1')
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('total_penjualan');
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $totalCashInSalesQuery->whereIn('shift_id', $shiftIds);
+            }
+            $totalCashInSales = $totalCashInSalesQuery->sum('total_penjualan');
 
-            $totalCashInOther = PemasukkanLain::where('kode_owner', $kode_owner)
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('jumlah_pemasukkan');
+            $totalCashInOtherQuery = PemasukkanLain::where('kode_owner', $kode_owner)
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $totalCashInOtherQuery->whereIn('shift_id', $shiftIds);
+            }
+            $totalCashInOther = $totalCashInOtherQuery->sum('jumlah_pemasukkan');
 
             // Breakdown pemasukan lainnya cash dan transfer
-            $totalCashInOtherCash = PemasukkanLain::where('kode_owner', $kode_owner)
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('jumlah_cash');
+            $totalCashInOtherCashQuery = PemasukkanLain::where('kode_owner', $kode_owner)
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $totalCashInOtherCashQuery->whereIn('shift_id', $shiftIds);
+            }
+            $totalCashInOtherCash = $totalCashInOtherCashQuery->sum('jumlah_cash');
 
-            $totalCashInOtherTransfer = PemasukkanLain::where('kode_owner', $kode_owner)
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('jumlah_transfer');
+            $totalCashInOtherTransferQuery = PemasukkanLain::where('kode_owner', $kode_owner)
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $totalCashInOtherTransferQuery->whereIn('shift_id', $shiftIds);
+            }
+            $totalCashInOtherTransfer = $totalCashInOtherTransferQuery->sum('jumlah_transfer');
 
             // Uang real di laci dan bank dari penjualan, pengambilan, dan DP service
-            $uangRealDiLaciPenjualan = Penjualan::where('kode_owner', $kode_owner)
+            $uangRealDiLaciPenjualanQuery = Penjualan::where('kode_owner', $kode_owner)
                 ->where('status_penjualan', '1')
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('jumlah_cash');
-            $uangRealDiBankPenjualan = Penjualan::where('kode_owner', $kode_owner)
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $uangRealDiLaciPenjualanQuery->whereIn('shift_id', $shiftIds);
+            }
+            $uangRealDiLaciPenjualan = $uangRealDiLaciPenjualanQuery->sum('jumlah_cash');
+
+            $uangRealDiBankPenjualanQuery = Penjualan::where('kode_owner', $kode_owner)
                 ->where('status_penjualan', '1')
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('jumlah_transfer');
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $uangRealDiBankPenjualanQuery->whereIn('shift_id', $shiftIds);
+            }
+            $uangRealDiBankPenjualan = $uangRealDiBankPenjualanQuery->sum('jumlah_transfer');
 
-            $uangRealDiLaciPengambilan = \App\Models\Pengambilan::where('kode_owner', $kode_owner)
+            $uangRealDiLaciPengambilanQuery = \App\Models\Pengambilan::where('kode_owner', $kode_owner)
                 ->where('status_pengambilan', '1')
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('jumlah_cash');
-            $uangRealDiBankPengambilan = \App\Models\Pengambilan::where('kode_owner', $kode_owner)
-                ->where('status_pengambilan', '1')
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('jumlah_transfer');
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $uangRealDiLaciPengambilanQuery->whereIn('user_input', \App\Models\User::where('cabang_id', $cabangId)->pluck('id'));
+            }
+            $uangRealDiLaciPengambilan = $uangRealDiLaciPengambilanQuery->sum('jumlah_cash');
 
-            $uangRealDiLaciDP = Sevices::where('kode_owner', $kode_owner)
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('dp_cash');
-            $uangRealDiBankDP = Sevices::where('kode_owner', $kode_owner)
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('dp_transfer');
+            $uangRealDiBankPengambilanQuery = \App\Models\Pengambilan::where('kode_owner', $kode_owner)
+                ->where('status_pengambilan', '1')
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $uangRealDiBankPengambilanQuery->whereIn('user_input', \App\Models\User::where('cabang_id', $cabangId)->pluck('id'));
+            }
+            $uangRealDiBankPengambilan = $uangRealDiBankPengambilanQuery->sum('jumlah_transfer');
+
+            $uangRealDiLaciDPQuery = Sevices::where('kode_owner', $kode_owner)
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $uangRealDiLaciDPQuery->whereIn('shift_id', $shiftIds);
+            }
+            $uangRealDiLaciDP = $uangRealDiLaciDPQuery->sum('dp_cash');
+
+            $uangRealDiBankDPQuery = Sevices::where('kode_owner', $kode_owner)
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $uangRealDiBankDPQuery->whereIn('shift_id', $shiftIds);
+            }
+            $uangRealDiBankDP = $uangRealDiBankDPQuery->sum('dp_transfer');
 
             $totalCashIn = $totalCashInService + $totalCashInDP + $totalCashInSales + $totalCashInOther;
 
             // Cash Out
-            $totalCashOutStore = PengeluaranToko::where('kode_owner', $kode_owner)
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('jumlah_pengeluaran');
+            $totalCashOutStoreQuery = PengeluaranToko::where('kode_owner', $kode_owner)
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $totalCashOutStoreQuery->whereIn('shift_id', $shiftIds);
+            }
+            $totalCashOutStore = $totalCashOutStoreQuery->sum('jumlah_pengeluaran');
 
-            $totalCashOutOperational = PengeluaranOperasional::where('kode_owner', $kode_owner)
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('jml_pengeluaran');
+            $totalCashOutOperationalQuery = PengeluaranOperasional::where('kode_owner', $kode_owner)
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $totalCashOutOperationalQuery->whereIn('shift_id', $shiftIds);
+            }
+            $totalCashOutOperational = $totalCashOutOperationalQuery->sum('jml_pengeluaran');
 
-            $totalCashOutWithdrawal = Penarikan::where('kode_owner', $kode_owner)
+            $totalCashOutWithdrawalQuery = Penarikan::where('kode_owner', $kode_owner)
                 ->where('status_penarikan', '1')
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('jumlah_penarikan');
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $totalCashOutWithdrawalQuery->whereIn('shift_id', $shiftIds);
+            }
+            $totalCashOutWithdrawal = $totalCashOutWithdrawalQuery->sum('jumlah_penarikan');
 
             // Breakdown penarikan cash dan transfer
-            $totalCashOutWithdrawalCash = Penarikan::where('kode_owner', $kode_owner)
+            $totalCashOutWithdrawalCashQuery = Penarikan::where('kode_owner', $kode_owner)
                 ->where('status_penarikan', '1')
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('jumlah_cash');
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $totalCashOutWithdrawalCashQuery->whereIn('shift_id', $shiftIds);
+            }
+            $totalCashOutWithdrawalCash = $totalCashOutWithdrawalCashQuery->sum('jumlah_cash');
 
-            $totalCashOutWithdrawalTransfer = Penarikan::where('kode_owner', $kode_owner)
+            $totalCashOutWithdrawalTransferQuery = Penarikan::where('kode_owner', $kode_owner)
                 ->where('status_penarikan', '1')
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('jumlah_transfer');
+                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $totalCashOutWithdrawalTransferQuery->whereIn('shift_id', $shiftIds);
+            }
+            $totalCashOutWithdrawalTransfer = $totalCashOutWithdrawalTransferQuery->sum('jumlah_transfer');
 
             // Hitung uang real di laci dan bank setelah dikurangi penarikan
                 $uangRealDiLaci = $uangRealDiLaciPenjualan + $uangRealDiLaciPengambilan + $uangRealDiLaciDP - $totalCashOutWithdrawalCash + $totalCashInOtherCash;
                 $uangRealDiBank = $uangRealDiBankPenjualan + $uangRealDiBankPengambilan + $uangRealDiBankDP - $totalCashOutWithdrawalTransfer + $totalCashInOtherTransfer;
             
             // NEW: Pembelian Stok (Tunai)
-            // Status pembayaran 'Lunas' berarti bayar tunai/transfer saat pembelian
-            // updated_at digunakan karena mencerminkan waktu finalize
-            $totalPembelianTunai = Pembelian::where('kode_owner', $kode_owner)
+            $totalPembelianTunaiQuery = Pembelian::where('kode_owner', $kode_owner)
                 ->where('status', 'selesai')
                 ->where('metode_pembayaran', '!=', 'Hutang')
-                ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('total_harga');
+                ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $totalPembelianTunaiQuery->whereIn('shift_id', $shiftIds);
+            }
+            $totalPembelianTunai = $totalPembelianTunaiQuery->sum('total_harga');
 
             // NEW: Pembayaran Hutang
-            // Hutang yang statusnya 'Lunas' dan dibayar dalam periode ini
-            $totalBayarHutang = Hutang::where('kode_owner', $kode_owner)
+            $totalBayarHutangQuery = Hutang::where('kode_owner', $kode_owner)
                 ->where('status', 'Lunas')
-                ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum('total_hutang');
+                ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $totalBayarHutangQuery->whereHas('pembelian', function($q) use ($shiftIds) {
+                    $q->whereIn('shift_id', $shiftIds);
+                });
+            }
+            $totalBayarHutang = $totalBayarHutangQuery->sum('total_hutang');
             
-            // Parts cash out approximation (This logic might overlap with Pembelian if not careful, 
-            // but usually this tracks "COGS Cash Flow" if stock wasn't tracked. 
-            // Since we now track Stock Purchase as Cash Out, do we remove this?
-            // NO. The user previously had this. 
-            // WAIT. If we count "Pembelian Stok" as cash out, and "Part Cost" as cash out, we are double counting?
-            // "Pembelian Stok" is when we BUY from supplier.
-            // "Part Cost" in Service is when we SELL/USE the part. This is NOT a cash outflow at that moment (it was outflow when bought).
-            // SO, for CASH FLOW report, "Part Cost" should NOT be here if we are tracking "Pembelian".
-            // HOWEVER, previous logic used "Part Cost" as a proxy for expense because "Pembelian" wasn't tracked.
-            // DECISION: To be accurate for CASH FLOW, we should use 'Pembelian' (money out) and remove 'Part Cost' (inventory usage).
-            // BUT, to avoid confusing the user with a sudden drop in expenses if they don't do 'Pembelian' correctly yet,
-            // I will KEEP 'Part Cost' BUT label it clearly or maybe better:
-            // "Arus Kas" should be real money out. Real money out is Pembelian. Usage of part is Inventory -> COGS (Profit/Loss).
-            // Let's replace "Part Cost" with "Pembelian" & "Bayar Hutang" for the CASH OUT section.
-            // But wait, "Part Luar" (bought specifically for service) IS a cash out at that moment usually.
-            
-            // Let's refine:
-            // Part Toko: Bought via Pembelian (Stock). Cash out happens at Pembelian. Usage is not cash out.
-            // Part Luar: Bought ad-hoc. Usually cash out immediately.
-            
-            // So:
-            // Cash Out = Pengeluaran Toko + Ops + Penarikan + Pembelian Stok + Bayar Hutang + Part Luar (Direct Purchase).
-            // Part Toko usage should NOT be in Cash Flow (it's in Profit/Loss as COGS).
-            
-            $totalCashOutPartsLuar = DetailPartLuarService::join('sevices', 'detail_part_luar_services.kode_services', '=', 'sevices.id')
+            $totalCashOutPartsLuarQuery = DetailPartLuarService::join('sevices', 'detail_part_luar_services.kode_services', '=', 'sevices.id')
                 ->where('sevices.kode_owner', $kode_owner)
                 ->where('sevices.status_services', 'Diambil')
-                ->whereBetween('sevices.updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->sum(DB::raw('detail_part_luar_services.harga_part * detail_part_luar_services.qty_part'));
+                ->whereBetween('sevices.updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $totalCashOutPartsLuarQuery->whereIn('sevices.shift_id', $shiftIds);
+            }
+            $totalCashOutPartsLuar = $totalCashOutPartsLuarQuery->sum(DB::raw('detail_part_luar_services.harga_part * detail_part_luar_services.qty_part'));
             
             // Total Cash Out Updated
-            // EXCLUDE Pembelian Stok (Tunai) & Bayar Hutang from "Total Uang Keluar" (Operational Flow)
-            // User feedback: Stock purchases & Debt payments use "Kas Toko" (Safe), not "Kas Laci" (Daily Flow).
-            // Including them causes "Saldo Kas" to be negative, which confuses the daily evaluation.
             $totalCashOut = $totalCashOutStore + 
                            $totalCashOutOperational + 
                            $totalCashOutWithdrawal + 
-                           // $totalPembelianTunai + // Excluded from Operational Cash Out
-                           // $totalBayarHutang + // Excluded from Operational Cash Out
                            $totalCashOutPartsLuar;
 
             $netCashFlow = $totalCashIn - $totalCashOut;
 
              // 3. Service Stats
-            $serviceStats = Sevices::where('kode_owner', $kode_owner)
+            $serviceStatsQuery = Sevices::where('kode_owner', $kode_owner)
                 ->where('status_services', 'Diambil')
-                ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->selectRaw('COUNT(*) as total, SUM(CASE WHEN total_biaya < 0 THEN 1 ELSE 0 END) as rugi_count')
+                ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $serviceStatsQuery->whereIn('shift_id', $shiftIds);
+            }
+            $serviceStats = $serviceStatsQuery->selectRaw('COUNT(*) as total, SUM(CASE WHEN total_biaya < 0 THEN 1 ELSE 0 END) as rugi_count')
                 ->first();
 
             
@@ -274,7 +315,7 @@ class FinancialReportApiController extends Controller
                 // ANALISIS TAMBAHAN
                 'service_rugi_count' => $serviceStats->rugi_count ?? 0,
                 'service_profit_count' => ($serviceStats->total ?? 0) - ($serviceStats->rugi_count ?? 0),
-                'analisis_part_toko' => $this->getPartServiceDetails($kode_owner, $tgl_awal, $tgl_akhir), // Restored
+                'analisis_part_toko' => $this->getPartServiceDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId), // Restored
                 
                 // BACKWARD COMPATIBILITY
                 'laba_bersih' => $profitData['laba_bersih'], 
@@ -315,20 +356,29 @@ class FinancialReportApiController extends Controller
         try {
             $kode_owner = $this->getThisUser()->id_upline;
             $today = Carbon::today()->format('Y-m-d');
+            $cabangId = $request->input('cabang_id');
             
-            $stats = $this->_getDashboardStats($kode_owner, $today);
+            $stats = $this->_getDashboardStats($kode_owner, $today, $cabangId);
 
             // Add extra info for mobile dashboard
-            $stats['recent_completed_services'] = Sevices::where('kode_owner', $kode_owner)
-                ->where('status_services', 'Diambil')
-                ->orderBy('updated_at', 'desc')
+            $recentQuery = Sevices::where('kode_owner', $kode_owner)
+                ->where('status_services', 'Diambil');
+            
+            $pendingQuery = Sevices::where('kode_owner', $kode_owner)
+                ->whereIn('status_services', ['Antri', 'Proses']);
+
+            if ($cabangId) {
+                $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
+                $recentQuery->whereIn('shift_id', $shiftIds);
+                $pendingQuery->whereIn('shift_id', $shiftIds);
+            }
+
+            $stats['recent_completed_services'] = $recentQuery->orderBy('updated_at', 'desc')
                 ->take(5)
                 ->select('kode_service', 'nama_pelanggan', 'total_biaya', 'updated_at')
                 ->get();
 
-            $stats['pending_services_count'] = Sevices::where('kode_owner', $kode_owner)
-                ->whereIn('status_services', ['Antri', 'Proses'])
-                ->count();
+            $stats['pending_services_count'] = $pendingQuery->count();
 
             return response()->json([
                 'success' => true,
@@ -348,55 +398,71 @@ class FinancialReportApiController extends Controller
      * Private helper to calculate dashboard stats (Revenue, Assets, Capital, Profit)
      * Matches Admin\FinancialController logic exactly.
      */
-    private function _getDashboardStats(int $ownerId, string $date): array
+    private function _getDashboardStats(int $ownerId, string $date, int $cabangId = null): array
     {
         // 1. Profit Summary (Operational)
-        $labaResult = $this->calculateNetProfit($ownerId, $date, $date);
+        $labaResult = $this->financialService->calculateNetProfit($ownerId, $date, $date, $cabangId);
         
         $totalRevenue = $labaResult['laba_kotor'] + ($labaResult['detail_beban']['HPP (Modal Pokok Penjualan)'] ?? 0);
         
-        $operatingExpenses = ($labaResult['detail_beban']['Biaya Operasional Insidental'] ?? 0) 
-                             + ($labaResult['detail_beban']['Biaya Komisi Teknisi'] ?? 0)
-                             + ($labaResult['detail_beban']['Beban Tetap Periodik'] ?? 0);
+        $operatingExpenses = ($labaResult['detail_beban']['Biaya Operasional Lokal'] ?? 0) 
+                             + ($labaResult['detail_beban']['Biaya Komisi Teknisi'] ?? 0);
                              
         $depreciation = $labaResult['detail_beban']['Beban Penyusutan Aset'] ?? 0;
+        $bebanTetap = $labaResult['detail_beban']['Beban Tetap Periodik'] ?? 0;
         $netProfit = $labaResult['laba_bersih'];
 
-        // 2. Inventory Value (ASSET)
-        $nilaiSparepart = Sparepart::withoutGlobalScope(ActiveScope::class)->where('kode_owner', $ownerId)->sum(DB::raw('stok_sparepart * harga_beli'));
-        $nilaiHandphone = Handphone::withoutGlobalScope(ActiveScope::class)->where('kode_owner', $ownerId)->sum(DB::raw('stok_barang * harga_beli_barang'));
-        $inventoryValue = $nilaiSparepart + $nilaiHandphone;
+        // 2. Inventory Value (ASSET) - Hanya dihitung di level Owner/Holding (jika cabangId null)
+        $inventoryValue = 0;
+        if (!$cabangId) {
+            $nilaiSparepart = Sparepart::withoutGlobalScope(ActiveScope::class)->where('kode_owner', $ownerId)->sum(DB::raw('stok_sparepart * harga_beli'));
+            $nilaiHandphone = Handphone::withoutGlobalScope(ActiveScope::class)->where('kode_owner', $ownerId)->sum(DB::raw('stok_barang * harga_beli_barang'));
+            $inventoryValue = $nilaiSparepart + $nilaiHandphone;
+        }
 
         // 3. Saldo Kas (ASSET) - Source of Truth: KasPerusahaan Ledger
         $endDate = Carbon::parse($date)->endOfDay();
-        $saldoKas = KasPerusahaan::where('kode_owner', $ownerId)
-            ->where('tanggal', '<=', $endDate)
-            ->orderBy('tanggal', 'desc')->orderBy('id', 'desc')
-            ->first()->saldo ?? 0;
+        if ($cabangId) {
+            $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
+            $saldoKas = KasPerusahaan::whereIn('shift_id', $shiftIds)
+                ->where('tanggal', '<=', $endDate)
+                ->sum(DB::raw('debit - kredit'));
+        } else {
+            $saldoKas = KasPerusahaan::where('kode_owner', $ownerId)
+                ->where('tanggal', '<=', $endDate)
+                ->orderBy('tanggal', 'desc')->orderBy('id', 'desc')
+                ->first()->saldo ?? 0;
+        }
 
-        // 4. Modal Disetor (Paid In Capital)
-        $capitalIn = \App\Models\TransaksiModal::where('kode_owner', $ownerId)
-            ->whereIn('jenis_transaksi', ['setoran_awal', 'tambahan_modal'])
-            ->where('tanggal', '<=', $endDate)
-            ->sum('jumlah');
+        // 4. Modal Disetor (Paid In Capital) - Hanya dihitung di level Owner/Holding
+        $paidInCapital = 0;
+        if (!$cabangId) {
+            $capitalIn = \App\Models\TransaksiModal::where('kode_owner', $ownerId)
+                ->whereIn('jenis_transaksi', ['setoran_awal', 'tambahan_modal'])
+                ->where('tanggal', '<=', $endDate)
+                ->sum('jumlah');
 
-        $capitalOut = TransaksiModal::where('kode_owner', $ownerId)
-            ->where('jenis_transaksi', 'penarikan_modal')
-            ->where('tanggal', '<=', $endDate)
-            ->sum('jumlah');
-            
-        $paidInCapital = $capitalIn - $capitalOut;
+            $capitalOut = TransaksiModal::where('kode_owner', $ownerId)
+                ->where('jenis_transaksi', 'penarikan_modal')
+                ->where('tanggal', '<=', $endDate)
+                ->sum('jumlah');
+                
+            $paidInCapital = $capitalIn - $capitalOut;
+        }
 
         // 5. Total Asset
-        $asetTetap = Aset::where('kode_owner', $ownerId)
-             ->where('tanggal_perolehan', '<=', $endDate)
-             ->sum('nilai_perolehan');
+        $queryAsetTotal = Aset::where('kode_owner', $ownerId)
+             ->where('tanggal_perolehan', '<=', $endDate);
+        if ($cabangId) {
+            $queryAsetTotal->where('cabang_id', $cabangId);
+        }
+        $asetTetap = $queryAsetTotal->sum('nilai_perolehan');
              
         $totalAsset = $saldoKas + $inventoryValue + $asetTetap;
 
         return [
             'revenue' => $totalRevenue,
-            'expense' => $operatingExpenses + $depreciation,
+            'expense' => $operatingExpenses + $depreciation + $bebanTetap,
             'net_profit' => $netProfit,
             'total_asset' => $totalAsset,
             'paid_in_capital' => $paidInCapital,
@@ -416,22 +482,29 @@ class FinancialReportApiController extends Controller
             $request->validate([
                 'tgl_awal' => 'required|date',
                 'tgl_akhir' => 'required|date|after_or_equal:tgl_awal',
+                'cabang_id' => 'nullable|integer'
             ]);
 
             $tgl_awal = $request->tgl_awal;
             $tgl_akhir = $request->tgl_akhir;
+            $cabangId = $request->input('cabang_id');
             $kode_owner = $this->getThisUser()->id_upline;
 
             Log::info('Service Loss Details Request', [
                 'user_id' => auth()->user()->id,
-                'period' => $tgl_awal . ' to ' . $tgl_akhir
+                'period' => $tgl_awal . ' to ' . $tgl_akhir,
+                'cabang_id' => $cabangId
             ]);
 
             // Ambil semua service dalam periode
-            $services = Sevices::where('kode_owner', $kode_owner)
+            $servicesQuery = Sevices::where('kode_owner', $kode_owner)
                 ->where('status_services', 'Diambil')
-                ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->get();
+                ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+            if ($cabangId) {
+                $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
+                $servicesQuery->whereIn('shift_id', $shiftIds);
+            }
+            $services = $servicesQuery->get();
 
             $lossServices = [];
             $totalLoss = 0;
@@ -563,45 +636,54 @@ class FinancialReportApiController extends Controller
             $request->validate([
                 'tgl_awal' => 'required|date',
                 'tgl_akhir' => 'required|date|after_or_equal:tgl_awal',
-                'type' => 'required|in:service,penjualan,pemasukkan_lain,pengeluaran,penarikan,part_service,pengeluaran_toko,pengeluaran_operasional,pembelian_tunai,pembayaran_hutang'
+                'type' => 'required|in:service,penjualan,pemasukkan_lain,pengeluaran,penarikan,part_service,pengeluaran_toko,pengeluaran_operasional,pembelian_tunai,pembayaran_hutang',
+                'cabang_id' => 'nullable|integer'
             ]);
 
             $tgl_awal = $request->tgl_awal;
             $tgl_akhir = $request->tgl_akhir;
             $type = $request->type;
+            $cabangId = $request->input('cabang_id');
             $kode_owner = $this->getThisUser()->id_upline;
+
+            $shiftIds = null;
+            if ($cabangId) {
+                $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
+            }
 
             Log::info('Detailed Report Request', [
                 'user_id' => auth()->user()->id,
                 'type' => $type,
-                'period' => $tgl_awal . ' to ' . $tgl_akhir
+                'period' => $tgl_awal . ' to ' . $tgl_akhir,
+                'cabang_id' => $cabangId
             ]);
 
             $data = [];
 
             switch ($type) {
                 case 'service':
-                    $data = $this->getServiceDetails($kode_owner, $tgl_awal, $tgl_akhir);
+                    $data = $this->getServiceDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId);
                     break;
 
                 case 'penjualan':
-                    $data = $this->getSalesDetails($kode_owner, $tgl_awal, $tgl_akhir);
+                    $data = $this->getSalesDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId);
                     break;
 
                 case 'pemasukkan_lain':
-                    $data = $this->getOtherIncomeDetails($kode_owner, $tgl_awal, $tgl_akhir);
+                    $data = $this->getOtherIncomeDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId);
                     break;
 
-                // BARU: Detail Part Service
                 case 'part_service':
-                    $data = $this->getPartServiceDetails($kode_owner, $tgl_awal, $tgl_akhir);
+                    $data = $this->getPartServiceDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId);
                     break;
 
-                // PERBAIKAN: Pisahkan pengeluaran toko dan operasional
                 case 'pengeluaran_toko':
-                    $data = PengeluaranToko::where('kode_owner', $kode_owner)
-                        ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                        ->select('nama_pengeluaran as judul', 'catatan_pengeluaran as catatan', 'jumlah_pengeluaran as jumlah', 'created_at')
+                    $query = PengeluaranToko::where('kode_owner', $kode_owner)
+                        ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+                    if ($cabangId) {
+                        $query->whereIn('shift_id', $shiftIds);
+                    }
+                    $data = $query->select('nama_pengeluaran as judul', 'catatan_pengeluaran as catatan', 'jumlah_pengeluaran as jumlah', 'created_at')
                         ->orderBy('created_at', 'desc')
                         ->get()
                         ->map(function ($item) {
@@ -611,24 +693,29 @@ class FinancialReportApiController extends Controller
                     break;
 
                 case 'pengeluaran_operasional':
-                    $data = PengeluaranOperasional::where('kode_owner', $kode_owner)
-                        ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                        ->select('nama_pengeluaran as judul', 'desc_pengeluaran as catatan', 'jml_pengeluaran as jumlah', 'created_at')
+                    $query = PengeluaranOperasional::where('kode_owner', $kode_owner)
+                        ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+                    if ($cabangId) {
+                        $query->whereIn('shift_id', $shiftIds);
+                    }
+                    $data = $query->select('nama_pengeluaran as judul', 'desc_pengeluaran as catatan', 'jml_pengeluaran as jumlah', 'created_at')
                         ->orderBy('created_at', 'desc')
                         ->get()
                         ->map(function ($item) {
                             $item->type = 'Pengeluaran Operasional';
                             return $item;
                         });
-                        break;
                     break;
 
                 case 'pembelian_tunai':
-                     $data = Pembelian::where('kode_owner', $kode_owner)
+                     $query = Pembelian::where('kode_owner', $kode_owner)
                         ->where('status', 'selesai')
                         ->where('metode_pembayaran', '!=', 'Hutang')
-                        ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                        ->select('kode_pembelian as judul', 'supplier as catatan', 'total_harga as jumlah', 'updated_at as created_at')
+                        ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+                     if ($cabangId) {
+                         $query->whereIn('shift_id', $shiftIds);
+                     }
+                     $data = $query->select('kode_pembelian as judul', 'supplier as catatan', 'total_harga as jumlah', 'updated_at as created_at')
                         ->orderBy('updated_at', 'desc')
                         ->get()
                         ->map(function ($item) {
@@ -638,10 +725,15 @@ class FinancialReportApiController extends Controller
                     break;
                 
                 case 'pembayaran_hutang':
-                     $data = Hutang::where('kode_owner', $kode_owner)
+                     $query = Hutang::where('kode_owner', $kode_owner)
                         ->where('status', 'Lunas')
-                        ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                        ->with('supplier')
+                        ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+                     if ($cabangId) {
+                         $query->whereHas('pembelian', function($q) use ($shiftIds) {
+                             $q->whereIn('shift_id', $shiftIds);
+                         });
+                     }
+                     $data = $query->with('supplier')
                         ->orderBy('updated_at', 'desc')
                         ->get()
                         ->map(function ($item) {
@@ -655,20 +747,25 @@ class FinancialReportApiController extends Controller
                         });
                     break;
 
-                // BACKWARD COMPATIBILITY: Gabungan pengeluaran
                 case 'pengeluaran':
-                    $pengeluaranToko = PengeluaranToko::where('kode_owner', $kode_owner)
-                        ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                        ->select('nama_pengeluaran as judul', 'catatan_pengeluaran as catatan', 'jumlah_pengeluaran as jumlah', 'created_at')
+                    $queryToko = PengeluaranToko::where('kode_owner', $kode_owner)
+                        ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+                    if ($cabangId) {
+                        $queryToko->whereIn('shift_id', $shiftIds);
+                    }
+                    $pengeluaranToko = $queryToko->select('nama_pengeluaran as judul', 'catatan_pengeluaran as catatan', 'jumlah_pengeluaran as jumlah', 'created_at')
                         ->get()
                         ->map(function ($item) {
                             $item->type = 'Pengeluaran Toko';
                             return $item;
                         });
 
-                    $pengeluaranOps = PengeluaranOperasional::where('kode_owner', $kode_owner)
-                        ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                        ->select('nama_pengeluaran as judul', 'desc_pengeluaran as catatan', 'jml_pengeluaran as jumlah', 'created_at')
+                    $queryOps = PengeluaranOperasional::where('kode_owner', $kode_owner)
+                        ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+                    if ($cabangId) {
+                        $queryOps->whereIn('shift_id', $shiftIds);
+                    }
+                    $pengeluaranOps = $queryOps->select('nama_pengeluaran as judul', 'desc_pengeluaran as catatan', 'jml_pengeluaran as jumlah', 'created_at')
                         ->get()
                         ->map(function ($item) {
                             $item->type = 'Pengeluaran Operasional';
@@ -679,7 +776,7 @@ class FinancialReportApiController extends Controller
                     break;
 
                 case 'penarikan':
-                    $data = $this->getWithdrawalDetails($kode_owner, $tgl_awal, $tgl_akhir);
+                    $data = $this->getWithdrawalDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId);
                     break;
 
                 default:
@@ -721,12 +818,16 @@ class FinancialReportApiController extends Controller
     }
 
     // Helper Methods untuk Detail Reports
-    private function getServiceDetails($kode_owner, $tgl_awal, $tgl_akhir)
+    private function getServiceDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId = null)
     {
-        return Sevices::where('kode_owner', $kode_owner)
+        $query = Sevices::where('kode_owner', $kode_owner)
             ->where('status_services', 'Diambil')
-            ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-            ->select('kode_service', 'nama_pelanggan', 'type_unit', 'total_biaya', 'dp', 'updated_at')
+            ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+        if ($cabangId) {
+            $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
+            $query->whereIn('shift_id', $shiftIds);
+        }
+        return $query->select('id', 'kode_service', 'nama_pelanggan', 'type_unit', 'total_biaya', 'dp', 'updated_at')
             ->orderBy('updated_at', 'desc')
             ->get()
             ->map(function($item) {
@@ -754,20 +855,27 @@ class FinancialReportApiController extends Controller
     }
 
     // BARU: Detail Part Service
-    private function getPartServiceDetails($kode_owner, $tgl_awal, $tgl_akhir)
+    private function getPartServiceDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId = null)
     {
-        $partTokoDetails = DB::table('detail_part_services')
+        $shiftIds = null;
+        if ($cabangId) {
+            $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
+        }
+
+        $partTokoQuery = DB::table('detail_part_services')
             ->join('sevices', 'detail_part_services.kode_services', '=', 'sevices.id')
             ->join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
             ->where('sevices.kode_owner', $kode_owner)
             ->where('sevices.status_services', 'Diambil')
-            ->whereBetween('sevices.updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-            ->select(
+            ->whereBetween('sevices.updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+        if ($cabangId) {
+            $partTokoQuery->whereIn('sevices.shift_id', $shiftIds);
+        }
+        $partTokoDetails = $partTokoQuery->select(
                 'sevices.kode_service',
                 'sevices.nama_pelanggan',
                 'spareparts.nama_sparepart',
                 'detail_part_services.detail_harga_part_service as harga_jual',
-                // PENTING: Ambil harga modal historis jika ada, fallback ke master
                 DB::raw('CASE WHEN detail_part_services.detail_modal_part_service > 0 THEN detail_part_services.detail_modal_part_service ELSE spareparts.harga_beli END as harga_modal'),
                 'detail_part_services.qty_part as qty',
                 'sevices.updated_at',
@@ -787,17 +895,20 @@ class FinancialReportApiController extends Controller
                 return $item;
             });
 
-        $partLuarDetails = DB::table('detail_part_luar_services')
+        $partLuarQuery = DB::table('detail_part_luar_services')
             ->join('sevices', 'detail_part_luar_services.kode_services', '=', 'sevices.id')
             ->where('sevices.kode_owner', $kode_owner)
             ->where('sevices.status_services', 'Diambil')
-            ->whereBetween('sevices.updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-            ->select(
+            ->whereBetween('sevices.updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+        if ($cabangId) {
+            $partLuarQuery->whereIn('sevices.shift_id', $shiftIds);
+        }
+        $partLuarDetails = $partLuarQuery->select(
                 'sevices.kode_service',
                 'sevices.nama_pelanggan',
                 'detail_part_luar_services.nama_part as nama_sparepart',
                 'detail_part_luar_services.harga_part as harga_jual',
-                'detail_part_luar_services.harga_part as harga_modal', // Part luar = harga = modal
+                'detail_part_luar_services.harga_part as harga_modal',
                 'detail_part_luar_services.qty_part as qty',
                 'sevices.updated_at',
                 DB::raw("'Part Luar' as source_type")
@@ -806,7 +917,7 @@ class FinancialReportApiController extends Controller
             ->map(function($item) {
                 $totalJual = $item->harga_jual * $item->qty;
                 $totalModal = $item->harga_modal * $item->qty;
-                $margin = 0; // Part luar tidak ada margin
+                $margin = 0;
 
                 $item->total_harga_jual = $totalJual;
                 $item->total_harga_modal = $totalModal;
@@ -816,38 +927,49 @@ class FinancialReportApiController extends Controller
                 return $item;
             });
 
-        // Gabungkan dan urutkan
         return $partTokoDetails->concat($partLuarDetails)
             ->sortByDesc('updated_at')
             ->values();
     }
 
-    private function getSalesDetails($kode_owner, $tgl_awal, $tgl_akhir)
+    private function getSalesDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId = null)
     {
-        return Penjualan::where('kode_owner', $kode_owner)
+        $query = Penjualan::where('kode_owner', $kode_owner)
             ->where('status_penjualan', '1')
-            ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-            ->select('kode_penjualan', 'nama_customer', 'total_penjualan', 'total_bayar', 'created_at')
+            ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+        if ($cabangId) {
+            $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
+            $query->whereIn('shift_id', $shiftIds);
+        }
+        return $query->select('kode_penjualan', 'nama_customer', 'total_penjualan', 'total_bayar', 'created_at')
             ->orderBy('created_at', 'desc')
             ->get();
     }
 
-    private function getOtherIncomeDetails($kode_owner, $tgl_awal, $tgl_akhir)
+    private function getOtherIncomeDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId = null)
     {
-        return PemasukkanLain::where('kode_owner', $kode_owner)
-            ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-            ->select('judul_pemasukan', 'catatan_pemasukkan', 'jumlah_pemasukkan', 'created_at')
+        $query = PemasukkanLain::where('kode_owner', $kode_owner)
+            ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+        if ($cabangId) {
+            $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
+            $query->whereIn('shift_id', $shiftIds);
+        }
+        return $query->select('judul_pemasukan', 'catatan_pemasukkan', 'jumlah_pemasukkan', 'created_at')
             ->orderBy('created_at', 'desc')
             ->get();
     }
 
-    private function getWithdrawalDetails($kode_owner, $tgl_awal, $tgl_akhir)
+    private function getWithdrawalDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId = null)
     {
-        return Penarikan::join('user_details', 'penarikans.kode_user', '=', 'user_details.kode_user')
+        $query = Penarikan::join('user_details', 'penarikans.kode_user', '=', 'user_details.kode_user')
             ->where('penarikans.kode_owner', $kode_owner)
             ->where('penarikans.status_penarikan', '1')
-            ->whereBetween('penarikans.created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-            ->select(
+            ->whereBetween('penarikans.created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+        if ($cabangId) {
+            $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
+            $query->whereIn('penarikans.shift_id', $shiftIds);
+        }
+        return $query->select(
                 'penarikans.kode_penarikan',
                 'user_details.fullname',
                 'penarikans.jumlah_penarikan',
@@ -867,10 +989,12 @@ class FinancialReportApiController extends Controller
             $request->validate([
                 'tgl_awal' => 'required|date',
                 'tgl_akhir' => 'required|date|after_or_equal:tgl_awal',
+                'cabang_id' => 'nullable|integer'
             ]);
 
             $tgl_awal = $request->tgl_awal;
             $tgl_akhir = $request->tgl_akhir;
+            $cabangId = $request->input('cabang_id');
             $kode_owner = $this->getThisUser()->id_upline;
 
             // Validasi rentang tanggal tidak lebih dari 90 hari
@@ -882,10 +1006,16 @@ class FinancialReportApiController extends Controller
                 ], 422);
             }
 
+            $shiftIds = null;
+            if ($cabangId) {
+                $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
+            }
+
             Log::info('Daily Report Request', [
                 'user_id' => auth()->user()->id,
                 'period' => $tgl_awal . ' to ' . $tgl_akhir,
-                'days_count' => $daysDiff + 1
+                'days_count' => $daysDiff + 1,
+                'cabang_id' => $cabangId
             ]);
 
             $dailyData = [];
@@ -896,76 +1026,108 @@ class FinancialReportApiController extends Controller
                 $dateStr = $currentDate->format('Y-m-d');
 
                 // Pendapatan harian
-                $serviceIncome = Sevices::where('kode_owner', $kode_owner)
+                $serviceIncomeQuery = Sevices::where('kode_owner', $kode_owner)
                     ->where('status_services', 'Diambil')
-                    ->whereDate('updated_at', $dateStr)
-                    ->sum(DB::raw('total_biaya - dp'));
+                    ->whereDate('updated_at', $dateStr);
+                if ($cabangId) {
+                    $serviceIncomeQuery->whereIn('shift_id', $shiftIds);
+                }
+                $serviceIncome = $serviceIncomeQuery->sum(DB::raw('total_biaya - dp'));
 
-                $dpIncome = Sevices::where('kode_owner', $kode_owner)
-                    ->whereDate('created_at', $dateStr)
-                    ->sum('dp');
+                $dpIncomeQuery = Sevices::where('kode_owner', $kode_owner)
+                    ->whereDate('created_at', $dateStr);
+                if ($cabangId) {
+                    $dpIncomeQuery->whereIn('shift_id', $shiftIds);
+                }
+                $dpIncome = $dpIncomeQuery->sum('dp');
 
-                $salesIncome = Penjualan::where('kode_owner', $kode_owner)
+                $salesIncomeQuery = Penjualan::where('kode_owner', $kode_owner)
                     ->where('status_penjualan', '1')
-                    ->whereDate('created_at', $dateStr)
-                    ->sum('total_penjualan');
+                    ->whereDate('created_at', $dateStr);
+                if ($cabangId) {
+                    $salesIncomeQuery->whereIn('shift_id', $shiftIds);
+                }
+                $salesIncome = $salesIncomeQuery->sum('total_penjualan');
 
-                $otherIncome = PemasukkanLain::where('kode_owner', $kode_owner)
-                    ->whereDate('created_at', $dateStr)
-                    ->sum('jumlah_pemasukkan');
+                $otherIncomeQuery = PemasukkanLain::where('kode_owner', $kode_owner)
+                    ->whereDate('created_at', $dateStr);
+                if ($cabangId) {
+                    $otherIncomeQuery->whereIn('shift_id', $shiftIds);
+                }
+                $otherIncome = $otherIncomeQuery->sum('jumlah_pemasukkan');
 
                 // Pengeluaran harian
-                // Part Luar Only for Cash Flow
-                $partLuarExpense = DetailPartLuarService::join('sevices', 'detail_part_luar_services.kode_services', '=', 'sevices.id')
+                $partLuarExpenseQuery = DetailPartLuarService::join('sevices', 'detail_part_luar_services.kode_services', '=', 'sevices.id')
                     ->where('sevices.kode_owner', $kode_owner)
                     ->where('sevices.status_services', 'Diambil')
-                    ->whereDate('sevices.updated_at', $dateStr)
-                    ->sum(DB::raw('detail_part_luar_services.harga_part * detail_part_luar_services.qty_part'));
-
-                // Part Toko removed from cash flow daily, but if we want to keep backward compat, maybe not?
-                // No, let's align with getFinancialReport.
+                    ->whereDate('sevices.updated_at', $dateStr);
+                if ($cabangId) {
+                    $partLuarExpenseQuery->whereIn('sevices.shift_id', $shiftIds);
+                }
+                $partLuarExpense = $partLuarExpenseQuery->sum(DB::raw('detail_part_luar_services.harga_part * detail_part_luar_services.qty_part'));
                 
-                $storeExpense = PengeluaranToko::where('kode_owner', $kode_owner)
-                    ->whereDate('created_at', $dateStr)
-                    ->sum('jumlah_pengeluaran');
+                $storeExpenseQuery = PengeluaranToko::where('kode_owner', $kode_owner)
+                    ->whereDate('created_at', $dateStr);
+                if ($cabangId) {
+                    $storeExpenseQuery->whereIn('shift_id', $shiftIds);
+                }
+                $storeExpense = $storeExpenseQuery->sum('jumlah_pengeluaran');
 
-                $operationalExpense = PengeluaranOperasional::where('kode_owner', $kode_owner)
+                $operationalExpenseQuery = PengeluaranOperasional::where('kode_owner', $kode_owner)
                     ->whereDate('created_at', $dateStr)
-                    ->whereNull('beban_operasional_id') // EXCLUDE Sinking Fund Payments (Allocated Daily)
-                    ->sum('jml_pengeluaran');
+                    ->whereNull('beban_operasional_id');
+                if ($cabangId) {
+                    $operationalExpenseQuery->whereIn('shift_id', $shiftIds);
+                }
+                $operationalExpense = $operationalExpenseQuery->sum('jml_pengeluaran');
 
-                $withdrawalExpense = Penarikan::where('kode_owner', $kode_owner)
+                $withdrawalExpenseQuery = Penarikan::where('kode_owner', $kode_owner)
                     ->where('status_penarikan', '1')
-                    ->whereDate('created_at', $dateStr)
-                    ->sum('jumlah_penarikan');
+                    ->whereDate('created_at', $dateStr);
+                if ($cabangId) {
+                    $withdrawalExpenseQuery->whereIn('shift_id', $shiftIds);
+                }
+                $withdrawalExpense = $withdrawalExpenseQuery->sum('jumlah_penarikan');
                 
-                // NEW: Pembelian Tunai
-                $purchaseExpense = Pembelian::where('kode_owner', $kode_owner)
+                $purchaseExpenseQuery = Pembelian::where('kode_owner', $kode_owner)
                     ->where('status', 'selesai')
                     ->where('metode_pembayaran', '!=', 'Hutang')
-                    ->whereDate('updated_at', $dateStr)
-                    ->sum('total_harga');
+                    ->whereDate('updated_at', $dateStr);
+                if ($cabangId) {
+                    $purchaseExpenseQuery->whereIn('shift_id', $shiftIds);
+                }
+                $purchaseExpense = $purchaseExpenseQuery->sum('total_harga');
 
-                // NEW: Bayar Hutang
-                $debtPaymentExpense = Hutang::where('kode_owner', $kode_owner)
+                $debtPaymentExpenseQuery = Hutang::where('kode_owner', $kode_owner)
                     ->where('status', 'Lunas')
-                    ->whereDate('updated_at', $dateStr)
-                    ->sum('total_hutang');
+                    ->whereDate('updated_at', $dateStr);
+                if ($cabangId) {
+                    $debtPaymentExpenseQuery->whereHas('pembelian', function($q) use ($shiftIds) {
+                        $q->whereIn('shift_id', $shiftIds);
+                    });
+                }
+                $debtPaymentExpense = $debtPaymentExpenseQuery->sum('total_hutang');
 
                 $totalIncome = $serviceIncome + $dpIncome + $salesIncome + $otherIncome;
                 $totalExpense = $partLuarExpense + $storeExpense + $operationalExpense + $withdrawalExpense + $purchaseExpense + $debtPaymentExpense;
-                $netProfit = $totalIncome - $totalExpense; // This is actually Net Cash Flow
+                $netProfit = $totalIncome - $totalExpense;
 
                 // Hitung jumlah transaksi
-                $serviceCount = Sevices::where('kode_owner', $kode_owner)
+                $serviceCountQuery = Sevices::where('kode_owner', $kode_owner)
                     ->where('status_services', 'Diambil')
-                    ->whereDate('updated_at', $dateStr)
-                    ->count();
+                    ->whereDate('updated_at', $dateStr);
+                if ($cabangId) {
+                    $serviceCountQuery->whereIn('shift_id', $shiftIds);
+                }
+                $serviceCount = $serviceCountQuery->count();
 
-                $salesCount = Penjualan::where('kode_owner', $kode_owner)
+                $salesCountQuery = Penjualan::where('kode_owner', $kode_owner)
                     ->where('status_penjualan', '1')
-                    ->whereDate('created_at', $dateStr)
-                    ->count();
+                    ->whereDate('created_at', $dateStr);
+                if ($cabangId) {
+                    $salesCountQuery->whereIn('shift_id', $shiftIds);
+                }
+                $salesCount = $salesCountQuery->count();
 
                 $dailyData[] = [
                     'date' => $dateStr,
@@ -979,15 +1141,15 @@ class FinancialReportApiController extends Controller
                         'total' => (float) $totalIncome
                     ],
                     'expense' => [
-                        'parts_luar' => (float) $partLuarExpense, // Renamed from parts
+                        'parts_luar' => (float) $partLuarExpense,
                         'store' => (float) $storeExpense,
                         'operational' => (float) $operationalExpense,
                         'withdrawal' => (float) $withdrawalExpense,
-                        'purchase' => (float) $purchaseExpense, // New
-                        'debt_payment' => (float) $debtPaymentExpense, // New
+                        'purchase' => (float) $purchaseExpense,
+                        'debt_payment' => (float) $debtPaymentExpense,
                         'total' => (float) $totalExpense
                     ],
-                    'net_profit' => (float) $netProfit, // Net Cash Flow
+                    'net_profit' => (float) $netProfit,
                     'transaction_count' => [
                         'service' => $serviceCount,
                         'sales' => $salesCount
@@ -1051,19 +1213,26 @@ class FinancialReportApiController extends Controller
             $request->validate([
                 'tgl_awal' => 'required|date',
                 'tgl_akhir' => 'required|date|after_or_equal:tgl_awal',
+                'cabang_id' => 'nullable|integer'
             ]);
 
             $kode_owner = $this->getThisUser()->id_upline;
             $tgl_awal = $request->tgl_awal;
             $tgl_akhir = $request->tgl_akhir;
+            $cabangId = $request->input('cabang_id');
 
-            // Ambil data profit per teknisi dari tabel profit_presentases
-            $technicianProfits = DB::table('profit_presentases')
+            $query = DB::table('profit_presentases')
                 ->join('sevices', 'profit_presentases.kode_service', '=', 'sevices.id')
                 ->join('user_details', 'profit_presentases.kode_user', '=', 'user_details.kode_user')
                 ->where('sevices.kode_owner', $kode_owner)
-                ->whereBetween('profit_presentases.created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59'])
-                ->select(
+                ->whereBetween('profit_presentases.created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+
+            if ($cabangId) {
+                $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
+                $query->whereIn('sevices.shift_id', $shiftIds);
+            }
+
+            $technicianProfits = $query->select(
                     'user_details.fullname',
                     'user_details.kode_user',
                     DB::raw('COUNT(profit_presentases.id) as total_services'),
@@ -1117,6 +1286,8 @@ class FinancialReportApiController extends Controller
 
     /**
      * Export financial report to Excel/CSV
+    /**
+     * Export financial report to Excel/CSV
      */
     public function exportFinancialReport(Request $request)
     {
@@ -1151,4 +1322,207 @@ class FinancialReportApiController extends Controller
         }
     }
 
+    /**
+     * Monitor Nilai Stok vs Nilai Hutang
+     * Membandingkan Total Nilai Stok Tersedia (Aset) dengan Total Hutang Supplier.
+     */
+    public function getStockDebtMonitor(Request $request)
+    {
+        try {
+            $kode_owner = $this->getThisUser()->id_upline;
+
+            // 1. Nilai Stok Sparepart (Aset)
+            $nilaiSparepart = Sparepart::withoutGlobalScope(ActiveScope::class)
+                ->where('kode_owner', $kode_owner)
+                ->sum(DB::raw('stok_sparepart * harga_beli'));
+
+            // 2. Nilai Stok Handphone (Aset)
+            $nilaiHandphone = Handphone::withoutGlobalScope(ActiveScope::class)
+                ->where('kode_owner', $kode_owner)
+                ->sum(DB::raw('stok_barang * harga_beli_barang'));
+
+            $totalNilaiStok = $nilaiSparepart + $nilaiHandphone;
+
+            // 3. Saldo Kas Perusahaan (Buku Besar)
+            $saldoKas = KasPerusahaan::where('kode_owner', $kode_owner)
+                ->orderBy('tanggal', 'desc')->orderBy('id', 'desc')
+                ->first()->saldo ?? 0;
+
+            // 4. Total Hutang Supplier (Belum Lunas)
+            $totalHutang = Hutang::where('kode_owner', $kode_owner)
+                ->where('status', 'Belum Lunas')
+                ->sum('total_hutang');
+
+            // 5. Hitung Likuiditas dan Selisih
+            $selisihLikuiditas = $saldoKas - $totalHutang; // Net Cash Position after paying all debt
+            $totalAsetLikuid = $saldoKas + $totalNilaiStok;
+            $selisihAsetVsHutang = $totalAsetLikuid - $totalHutang;
+
+            // Analisis Rincian & Status
+            $statusKeamanan = 'Aman';
+            $tingkatResiko = 'Rendah';
+            $pesanAnalisis = '';
+
+            if ($totalHutang == 0) {
+                $statusKeamanan = 'Sangat Aman';
+                $tingkatResiko = 'Rendah';
+                $pesanAnalisis = 'Luar biasa! Bisnis Anda saat ini tidak memiliki hutang supplier yang belum lunas. Pertahankan disiplin keuangan ini.';
+            } elseif ($totalAsetLikuid < $totalHutang) {
+                $statusKeamanan = 'Bahaya (Defisit Total)';
+                $tingkatResiko = 'Sangat Tinggi / Kritis';
+                $pesanAnalisis = '⚠️ PERINGATAN KRITIS: Total hutang supplier Anda (Rp ' . number_format($totalHutang, 0, ',', '.') . ') sudah melebihi gabungan seluruh nilai stok barang dan saldo kas Anda (Rp ' . number_format($totalAsetLikuid, 0, ',', '.') . '). Ini mengindikasikan adanya KEBOCORAN UANG CASH yang sangat besar. Penyebab utama bisa berupa pengeluaran operasional insidental yang terlalu boros atau penarikan (pembagian dividen) owner yang melebihi keuntungan riil bisnis.';
+            } elseif ($saldoKas < $totalHutang) {
+                $statusKeamanan = 'Risiko Likuiditas (Kurang Kas)';
+                $tingkatResiko = 'Sedang-Tinggi';
+                $pesanAnalisis = '⚠️ PERINGATAN: Saldo kas Anda saat ini tidak cukup untuk melunasi hutang supplier secara langsung, meskipun total aset (kas + nilai stok barang) masih mencukupi. Bisnis Anda mengalami kemacetan arus kas karena uang tunai Anda terikat di dalam stok barang (stok mengendap) atau telah keluar untuk keperluan lain sebelum hutang supplier dibayar.';
+            } else {
+                $statusKeamanan = 'Aman';
+                $tingkatResiko = 'Rendah';
+                $pesanAnalisis = 'Arus kas bisnis Anda sehat. Saldo kas Anda saat ini cukup untuk menutupi seluruh kewajiban hutang supplier yang berjalan.';
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Monitor Nilai Stok vs Nilai Hutang berhasil diambil',
+                'data' => [
+                    'nilai_stok_sparepart' => (float)$nilaiSparepart,
+                    'nilai_stok_handphone' => (float)$nilaiHandphone,
+                    'total_nilai_stok' => (float)$totalNilaiStok,
+                    'saldo_kas' => (float)$saldoKas,
+                    'total_hutang' => (float)$totalHutang,
+                    'selisih_likuiditas' => (float)$selisihLikuiditas,
+                    'total_aset_likuid' => (float)$totalAsetLikuid,
+                    'selisih_aset_vs_hutang' => (float)$selisihAsetVsHutang,
+                    'status_keamanan' => $statusKeamanan,
+                    'tingkat_resiko' => $tingkatResiko,
+                    'pesan_analisis' => $pesanAnalisis
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Get Stock Debt Monitor Error', [
+                'user_id' => auth()->user()->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Audit Stok Lambat (Dead Stock)
+     * Mengidentifikasi barang yang tidak laku terjual dalam kurun waktu tertentu.
+     */
+    public function getDeadStockAudit(Request $request)
+    {
+        try {
+            $kode_owner = $this->getThisUser()->id_upline;
+            $days = (int)$request->input('days', 30);
+            $cutoffDate = Carbon::now()->subDays($days)->format('Y-m-d H:i:s');
+
+            // 1. Ambil agregat penjualan retail sparepart
+            $salesQty = DB::table('detail_sparepart_penjualans')
+                ->join('penjualans', 'detail_sparepart_penjualans.kode_penjualan', '=', 'penjualans.id')
+                ->where('penjualans.kode_owner', $kode_owner)
+                ->where('penjualans.status_penjualan', '1')
+                ->where('penjualans.created_at', '>=', $cutoffDate)
+                ->select('detail_sparepart_penjualans.kode_sparepart', DB::raw('SUM(detail_sparepart_penjualans.qty_sparepart) as total_qty'))
+                ->groupBy('detail_sparepart_penjualans.kode_sparepart')
+                ->pluck('total_qty', 'detail_sparepart_penjualans.kode_sparepart')
+                ->toArray();
+
+            // 2. Ambil agregat part yang digunakan dalam service
+            $serviceQty = DB::table('detail_part_services')
+                ->join('sevices', 'detail_part_services.kode_services', '=', 'sevices.id')
+                ->where('sevices.kode_owner', $kode_owner)
+                ->where('sevices.status_services', 'Diambil')
+                ->where('sevices.updated_at', '>=', $cutoffDate)
+                ->select('detail_part_services.kode_sparepart', DB::raw('SUM(detail_part_services.qty_part) as total_qty'))
+                ->groupBy('detail_part_services.kode_sparepart')
+                ->pluck('total_qty', 'detail_part_services.kode_sparepart')
+                ->toArray();
+
+            // 3. Ambil semua sparepart dengan stok > 0
+            $spareparts = Sparepart::withoutGlobalScope(ActiveScope::class)
+                ->where('kode_owner', $kode_owner)
+                ->where('stok_sparepart', '>', 0)
+                ->with('kategori')
+                ->get();
+
+            $deadStock = [];
+            $slowMoving = [];
+            $totalValueDeadStock = 0;
+
+            foreach ($spareparts as $sp) {
+                $qtySold = ($salesQty[$sp->id] ?? 0) + ($serviceQty[$sp->id] ?? 0);
+                $value = $sp->stok_sparepart * $sp->harga_beli;
+
+                $item = [
+                    'id' => $sp->id,
+                    'kode_sparepart' => $sp->kode_sparepart,
+                    'nama_sparepart' => $sp->nama_sparepart,
+                    'kategori' => $sp->kategori->nama_kategori ?? 'N/A',
+                    'stok' => (int)$sp->stok_sparepart,
+                    'harga_beli' => (float)$sp->harga_beli,
+                    'harga_jual' => (float)$sp->harga_jual,
+                    'nilai_stok' => (float)$value,
+                    'total_terjual_periode' => (int)$qtySold,
+                ];
+
+                if ($qtySold == 0) {
+                    $deadStock[] = $item;
+                    $totalValueDeadStock += $value;
+                } else {
+                    // Masukkan ke slow moving jika terjual sedikit dibanding stoknya
+                    if ($qtySold <= 2 || ($qtySold / ($sp->stok_sparepart + $qtySold) < 0.15)) {
+                        $slowMoving[] = $item;
+                    }
+                }
+            }
+
+            // Urutkan Dead Stock berdasarkan Nilai Stok terbesar
+            usort($deadStock, function($a, $b) {
+                return $b['nilai_stok'] <=> $a['nilai_stok'];
+            });
+
+            // Urutkan Slow Moving berdasarkan penjualan terendah lalu nilai stok terbesar
+            usort($slowMoving, function($a, $b) {
+                if ($a['total_terjual_periode'] === $b['total_terjual_periode']) {
+                    return $b['nilai_stok'] <=> $a['nilai_stok'];
+                }
+                return $a['total_terjual_periode'] <=> $b['total_terjual_periode'];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Audit stok lambat berhasil diambil',
+                'data' => [
+                    'dead_stock' => $deadStock,
+                    'slow_moving' => $slowMoving,
+                    'summary' => [
+                        'total_items_dead_stock' => count($deadStock),
+                        'total_value_dead_stock' => $totalValueDeadStock,
+                        'total_items_slow_moving' => count($slowMoving),
+                        'audit_period_days' => $days
+                    ]
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Get Dead Stock Audit Error', [
+                'user_id' => auth()->user()->id ?? null,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
 }
+

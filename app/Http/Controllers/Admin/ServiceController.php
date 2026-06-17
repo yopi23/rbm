@@ -722,8 +722,19 @@ class ServiceController extends Controller
                     // Ringkasnya: Profit = Total Biaya - Total Part Modal Normal (yang tidak ganti rugi)
                     $profit_servis = $update->total_biaya - $total_part_harga_jual; // Ini adalah Jasa
 
+                    // Fetch sum of processed violation percentages for this technician in the month of the service
+                    $serviceDate = \Carbon\Carbon::parse($update->tgl_service ?: $update->updated_at);
+                    $violationPercentage = \DB::table('violations')
+                        ->where('user_id', $id_teknisi)
+                        ->where('status', 'processed')
+                        ->whereYear('violation_date', $serviceDate->year)
+                        ->whereMonth('violation_date', $serviceDate->month)
+                        ->sum('penalty_percentage') ?? 0;
+
+                    $adjustedPercentage = max(0, $presentase->percentage_value - $violationPercentage);
+
                     // Hitung komisi teknisi (biasanya dari Jasa)
-                    $base_commission = $profit_servis * $presentase->percentage_value / 100;
+                    $base_commission = $profit_servis * $adjustedPercentage / 100;
 
                     // Komisi Akhir = Komisi Dasar - Penalti Kerusakan
                     $fix_profit = $base_commission - $total_penalty_cost;

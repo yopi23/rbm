@@ -37,6 +37,11 @@ class UserDetail extends Model
         'default_lat',
         'default_lon',
         'allowed_radius_m',
+        'is_active_technician',
+    ];
+
+    protected $casts = [
+        'is_active_technician' => 'boolean',
     ];
 
     public function withdrawals()

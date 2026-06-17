@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\SupplierController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\UsersController;
 use App\Http\Controllers\Admin\FinancialController;
+use App\Http\Controllers\Admin\CabangController;
 use App\Http\Controllers\Administrator\LaporanOwnerController;
 use App\Http\Controllers\Administrator\OwnerController;
 use App\Http\Controllers\Ajax\AjaxRequestController;
@@ -451,6 +452,11 @@ Route::group(['middleware' => ['auth']], function () {
         Route::post('/presentase/store_or_update', [PresentaseController::class, 'store_or_update'])->name('edit_persentase');
         //Users
         Route::resource('users', UsersController::class);
+        //Cabang
+        Route::resource('cabang', CabangController::class);
+        Route::get('/cabang-transfer', [CabangController::class, 'transferForm'])->name('cabang.transfer');
+        Route::post('/cabang-transfer', [CabangController::class, 'processTransfer'])->name('cabang.transfer.process');
+        Route::get('/cabang-get-items/{cabang_id}', [CabangController::class, 'getItemsByCabang'])->name('cabang.get-items');
     });
 
     //Supplier

@@ -13,6 +13,7 @@ class BebanOperasional extends Model
 
     protected $fillable = [
         'kode_owner',
+        'cabang_id',
         'nama_beban',
         'periode', // 'bulanan' or 'tahunan'
         'nominal',
@@ -20,6 +21,14 @@ class BebanOperasional extends Model
         'is_active',
         'keterangan',
     ];
+
+    /**
+     * Relasi ke Cabang
+     */
+    public function cabang()
+    {
+        return $this->belongsTo(Cabang::class, 'cabang_id');
+    }
 
     /**
      * Relasi ke pengeluaran realisasi.

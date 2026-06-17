@@ -33,9 +33,19 @@
                             </div>
 
                             <div class="form-group">
-                                <label>Keterangan</label>
-                                <textarea name="keterangan" class="form-control" rows="2"></textarea>
-                            </div>
+                                 <label>Alokasi Cabang</label>
+                                 <select name="cabang_id" class="form-control">
+                                     <option value="">Kantor Pusat / Holding (Semua Cabang)</option>
+                                     @foreach ($cabangs as $cabang)
+                                         <option value="{{ $cabang->id }}">{{ $cabang->nama_cabang }}</option>
+                                     @endforeach
+                                 </select>
+                             </div>
+
+                             <div class="form-group">
+                                 <label>Keterangan</label>
+                                 <textarea name="keterangan" class="form-control" rows="2"></textarea>
+                             </div>
                         </div>
                         <div class="card-footer">
                             <button type="submit" class="btn btn-primary">Simpan Beban</button>
@@ -55,6 +65,7 @@
                             <thead>
                                 <tr>
                                     <th>Nama Beban</th>
+                                    <th>Cabang</th>
                                     <th class="text-center">Nominal Jatah</th>
                                     <th class="text-center">Terpakai Periode Ini</th>
                                     <th class="text-center">Sisa Jatah</th>
@@ -86,11 +97,12 @@
                                                             ? 'bg-warning'
                                                             : 'bg-success');
                                             @endphp
-                                            <div class="progress progress-xs mt-1">
-                                                <div class="progress-bar {{ $progressColor }}"
-                                                    style="width: {{ $persentase }}%"></div>
-                                            </div>
-                                        </td>
+                                             <div class="progress progress-xs mt-1">
+                                                 <div class="progress-bar {{ $progressColor }}"
+                                                     style="width: {{ $persentase }}%"></div>
+                                             </div>
+                                         </td>
+                                         <td>{{ $item->cabang ? $item->cabang->nama_cabang : 'Kantor Pusat / Holding' }}</td>
                                         <td class="text-right">{{ number_format($item->nominal) }}</td>
                                         <td class="text-right">{{ number_format($item->terpakai_periode_ini) }}</td>
                                         <td class="text-right font-weight-bold">{{ number_format($item->sisa_jatah) }}
@@ -118,17 +130,17 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="5" class="text-center">Belum ada beban tetap yang didaftarkan.
+                                        <td colspan="6" class="text-center">Belum ada beban tetap yang didaftarkan.
                                         </td>
                                     </tr>
                                 @endforelse
                             </tbody>
                             <tfoot class="bg-light">
                                 <tr>
-                                    <th colspan="4" class="text-right">Total Beban (Ekuivalen Bulanan)</th>
-                                    <th class="text-right font-weight-bold">{{ number_format($totalJatahBulanan) }}
-                                    </th>
-                                </tr>
+                                     <th colspan="5" class="text-right">Total Beban (Ekuivalen Bulanan)</th>
+                                     <th class="text-right font-weight-bold">{{ number_format($totalJatahBulanan) }}
+                                     </th>
+                                 </tr>
                             </tfoot>
                         </table>
                     </div>
@@ -168,6 +180,19 @@
                         {{-- Edit Nominal --}}
                         <div class="form-group"><label>Nominal Jatah (Rp)</label><input type="number" name="nominal"
                                 class="form-control" required value="{{ $item->nominal }}"></div>
+
+                        {{-- Edit Cabang --}}
+                        <div class="form-group">
+                            <label>Alokasi Cabang</label>
+                            <select name="cabang_id" class="form-control">
+                                <option value="">Kantor Pusat / Holding (Semua Cabang)</option>
+                                @foreach ($cabangs as $cabang)
+                                    <option value="{{ $cabang->id }}" {{ $item->cabang_id == $cabang->id ? 'selected' : '' }}>
+                                        {{ $cabang->nama_cabang }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
 
                         <div class="form-group"><label>Keterangan</label>
                             <textarea name="keterangan" class="form-control" rows="2">{{ $item->keterangan }}</textarea>

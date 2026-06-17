@@ -13,6 +13,7 @@ class Aset extends Model
 
     protected $fillable = [
         'kode_owner',
+        'cabang_id',
         'nama_aset',
         'kategori_aset',
         'tanggal_perolehan',
@@ -24,6 +25,14 @@ class Aset extends Model
         'nilai_buku',         // Tambahkan ini
         'shift_id',
     ];
+
+    /**
+     * Relasi ke Cabang
+     */
+    public function cabang()
+    {
+        return $this->belongsTo(Cabang::class, 'cabang_id');
+    }
 
     /**
      * Setiap pembelian aset bisa memiliki satu entri di kas perusahaan.

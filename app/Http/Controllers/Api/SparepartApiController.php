@@ -13,6 +13,8 @@ use App\Models\Garansi;
 use App\Models\SalarySetting;
 use App\Models\ProfitPresentase;
 use App\Models\HargaKhusus;
+use App\Models\ServiceJob;
+use App\Models\ServiceCategory;
 use App\Traits\KategoriLaciTrait;
 use App\Models\User; // Ensure User model is imported for teknisi name
 use App\Models\UserDetail; // Ensure UserDetail model is imported for teknisi saldo/details
@@ -315,6 +317,7 @@ class SparepartApiController extends Controller
                 ->get([
                     'detail_part_services.id as detail_part_id',
                     'detail_part_services.qty_part',
+                    'detail_part_services.service_job_id',
                     'detail_part_services.detail_harga_part_service',
                     'detail_part_services.is_tanggungan_teknisi',
                     'detail_part_services.user_input as id_teknisi',
@@ -328,6 +331,7 @@ class SparepartApiController extends Controller
                     return [
                         'detail_part_id' => $item->detail_part_id,
                         'qty_part' => $item->qty_part,
+                        'service_job_id' => $item->service_job_id,
                         'is_tanggungan_teknisi' => $item->is_tanggungan_teknisi,
                         'id_teknisi' => $item->id_teknisi,
                         'nama_teknisi' => $item->nama_teknisi,
@@ -345,6 +349,7 @@ class SparepartApiController extends Controller
                 ->get([
                     'detail_part_luar_services.id as detail_part_luar_id',
                     'detail_part_luar_services.nama_part',
+                    'detail_part_luar_services.service_job_id',
                     'detail_part_luar_services.qty_part',
                     'detail_part_luar_services.harga_part',
                     'detail_part_luar_services.is_tanggungan_teknisi',
@@ -355,6 +360,7 @@ class SparepartApiController extends Controller
                     return [
                         'detail_part_luar_id' => $item->detail_part_luar_id,
                         'nama_part' => $item->nama_part ?? 'Unknown Part',
+                        'service_job_id' => $item->service_job_id,
                         'qty_part' => $item->qty_part,
                         'harga_part' => $item->harga_part,
                         'is_tanggungan_teknisi' => $item->is_tanggungan_teknisi,
@@ -388,6 +394,7 @@ class SparepartApiController extends Controller
                 ],
                 'part_toko' => $part_toko_service,
                 'part_luar' => $part_luar_toko_service,
+                'jobs' => \App\Models\ServiceJob::with('category')->where('service_id', $id)->get(),
             ];
 
             return response()->json([
@@ -694,20 +701,19 @@ class SparepartApiController extends Controller
             return \DB::transaction(function () use ($request, $id) {
                 $service = modelServices::findOrFail($id);
 
-                // 1. Cari riwayat DP lama di tabel history_laci berdasarkan kode_service
-                // Kita cari transaksi 'masuk' yang pernah dicatat untuk service ini
-                $oldHistory = HistoryLaci::where('reference_code', $service->kode_service)
-                    ->where('reference_type', 'service')
-                    ->where('masuk', '>', 0)
-                    ->latest()
-                    ->first();
-
+                // 1. Dapatkan data DP lama untuk rollback
                 $oldDp = $service->dp ?? 0;
-                $oldLaciId = $oldHistory ? $oldHistory->id_kategori : null;
+                $oldDpMetode = $service->dp_metode ?? 'cash';
+                $oldDpCash = $service->dp_cash ?? (($oldDpMetode === 'transfer') ? 0 : $oldDp);
+                $oldDpTransfer = $service->dp_transfer ?? (($oldDpMetode === 'transfer') ? $oldDp : 0);
+                $oldLaciId = $service->id_kategorilaci;
 
                 $validatedData = $request->validate([
                     'nama_pelanggan' => 'nullable|string|max:255',
                     'dp'             => 'nullable|numeric|min:0',
+                    'dp_metode'      => 'nullable|string|in:cash,transfer,split',
+                    'dp_cash'        => 'nullable|numeric|min:0',
+                    'dp_transfer'    => 'nullable|numeric|min:0',
                     'id_kategorilaci'=> 'nullable|integer', // ID laci baru dari input user
                     'no_telp'        => 'nullable|string|max:25',
                     'total_biaya'    => 'nullable|numeric|min:0',
@@ -718,44 +724,150 @@ class SparepartApiController extends Controller
                     'data_unit'      => ['nullable', 'json'],
                 ]);
 
-                // 2. LOGIKA ROLLBACK (Penting agar tidak double)
-                // Jika ditemukan ada riwayat uang masuk sebelumnya, kita tarik keluar dulu
-                if ($oldHistory && $oldDp > 0) {
-                    $tanggalAsli = $oldHistory->created_at->format('d/m/Y');
-                    $this->recordLaciHistory(
-                        $oldLaciId,
-                        null,          // Masuk null
-                        $oldDp,        // Keluar (sebesar DP lama)
-                        "Rollback DP lama (Transaksi tgl $tanggalAsli) karena update: " . $service->nama_pelanggan . " - " . $service->kode_service . ' (' . $service->type_unit . ')',
-                        'service',
-                        $service->id,
-                        $service->kode_service
-                    );
+                // Hitung apakah ada perubahan di field DP
+                $dpMetodeInRequest = $request->input('dp_metode', $oldDpMetode);
+                $dpInRequest = $request->has('dp') ? (float)$request->input('dp') : $oldDp;
+                $dpCashInRequest = $request->has('dp_cash') ? (float)$request->input('dp_cash') : ($dpMetodeInRequest === 'transfer' ? 0 : $dpInRequest);
+                $dpTransferInRequest = $request->has('dp_transfer') ? (float)$request->input('dp_transfer') : ($dpMetodeInRequest === 'transfer' ? $dpInRequest : 0);
+                $laciIdInRequest = $request->has('id_kategorilaci') ? $request->input('id_kategorilaci') : $oldLaciId;
+
+                $isDpModified = ($dpInRequest != $oldDp) ||
+                                ($dpMetodeInRequest != $oldDpMetode) ||
+                                ($dpCashInRequest != $oldDpCash) ||
+                                ($dpTransferInRequest != $oldDpTransfer) ||
+                                ($laciIdInRequest != $oldLaciId);
+
+                // 2. LOGIKA ROLLBACK DP LAMA (Penting agar tidak double)
+                if ($isDpModified && $oldDp > 0) {
+                    // Rollback cash portion from laci
+                    if ($oldDpCash > 0 && $oldLaciId) {
+                        $this->recordLaciHistory(
+                            $oldLaciId,
+                            null,          // Masuk null
+                            $oldDpCash,    // Keluar (sebesar DP cash lama)
+                            "Rollback DP Cash lama karena update: " . $service->nama_pelanggan . " - " . $service->kode_service . ' (' . $service->type_unit . ')',
+                            'service',
+                            $service->id,
+                            $service->kode_service
+                        );
+                        $this->catatKas(
+                            $service,
+                            0,
+                            $oldDpCash,
+                            "Rollback DP Service (Cash) #" . $service->kode_service,
+                            now(),
+                            true
+                        );
+                    }
+                    
+                    // Rollback transfer portion
+                    if ($oldDpTransfer > 0) {
+                        $this->catatKas(
+                            $service,
+                            0,
+                            $oldDpTransfer,
+                            "Rollback DP Service (Transfer) #" . $service->kode_service,
+                            now(),
+                            false
+                        );
+                    }
                 }
 
                 // 3. Update data service di database
                 $service->update($validatedData);
 
-                // 3.1. Recalculate Commission if total_biaya changed and service is completed
-                if ($request->has('total_biaya') && in_array(strtolower($service->status_services), ['selesai', 'diambil'])) {
+                // --- Update Jobs if sent in request ---
+                if ($request->has('jobs') && is_array($request->jobs)) {
+                    // Seed/get default category
+                    $defaultCategory = ServiceCategory::where('kode_owner', $service->kode_owner)
+                        ->where('is_active', true)
+                        ->where('is_default', true)
+                        ->first();
+
+                    if (!$defaultCategory) {
+                        $defaultCategory = ServiceCategory::where('kode_owner', $service->kode_owner)
+                            ->where('is_active', true)
+                            ->first();
+                    }
+                    $defaultCategoryId = $defaultCategory ? $defaultCategory->id : null;
+
+                    // Keep jobs associated with spareparts
+                    $partJobIds = DB::table('detail_part_services')
+                        ->where('kode_services', $id)
+                        ->whereNotNull('service_job_id')
+                        ->pluck('service_job_id')
+                        ->toArray();
+                        
+                    $partLuarJobIds = DB::table('detail_part_luar_services')
+                        ->where('kode_services', $id)
+                        ->whereNotNull('service_job_id')
+                        ->pluck('service_job_id')
+                        ->toArray();
+                        
+                    $keepJobIds = array_merge($partJobIds, $partLuarJobIds);
+
+                    // Delete jobs that are NOT associated with spareparts
+                    ServiceJob::where('service_id', $id)
+                        ->whereNotIn('id', $keepJobIds)
+                        ->delete();
+
+                    // Create/Recreate standalone jobs
+                    foreach ($request->jobs as $jobData) {
+                        ServiceJob::create([
+                            'service_id' => $id,
+                            'service_category_id' => $jobData['service_category_id'] ?? $defaultCategoryId,
+                            'nama_pekerjaan' => $jobData['nama_pekerjaan'],
+                            'biaya_jasa' => $jobData['biaya_jasa'],
+                        ]);
+                    }
+                }
+
+                // 3.1. Recalculate Commission if total_biaya or jobs changed and service is completed
+                if (($request->has('total_biaya') || $request->has('jobs')) && in_array(strtolower($service->status_services), ['selesai', 'diambil'])) {
                     $this->performCommissionRecalculation($service->id);
                 }
 
                 // 4. LOGIKA CATAT DATA BARU
-                $newDp = $request->input('dp', 0);
-                $newLaciId = $request->input('id_kategorilaci');
+                if ($isDpModified) {
+                    $newDp = $service->dp ?? 0;
+                    $newDpMetode = $service->dp_metode ?? 'cash';
+                    $newDpCash = $service->dp_cash ?? (($newDpMetode === 'transfer') ? 0 : $newDp);
+                    $newDpTransfer = $service->dp_transfer ?? (($newDpMetode === 'transfer') ? $newDp : 0);
+                    $newLaciId = $service->id_kategorilaci;
 
-                // Jika ada nilai DP baru dan laci dipilih, catat sebagai uang masuk
-                if ($newDp > 0 && $newLaciId) {
-                    $this->recordLaciHistory(
-                        $newLaciId,
-                        $newDp,        // Masuk (sebesar DP baru)
-                        null,          // Keluar null
-                        "DP Service (Update): " . $service->nama_pelanggan . " - " . $service->kode_service . ' (' . $service->type_unit . ')',
-                        'service',
-                        $service->id,
-                        $service->kode_service
-                    );
+                    if ($newDp > 0) {
+                        if ($newDpCash > 0) {
+                            $this->catatKas(
+                                $service,
+                                $newDpCash,
+                                0,
+                                "DP Service (Cash-Update) #" . $service->kode_service,
+                                now(),
+                                true
+                            );
+                            if ($newLaciId) {
+                                $this->recordLaciHistory(
+                                    $newLaciId,
+                                    $newDpCash,        // Masuk (sebesar DP baru)
+                                    null,              // Keluar null
+                                    "DP Service (Cash-Update): " . $service->nama_pelanggan . " - " . $service->kode_service . ' (' . $service->type_unit . ')',
+                                    'service',
+                                    $service->id,
+                                    $service->kode_service
+                                );
+                            }
+                        }
+                        if ($newDpTransfer > 0) {
+                            $this->catatKas(
+                                $service,
+                                $newDpTransfer,
+                                0,
+                                "DP Service (Transfer-Update) #" . $service->kode_service,
+                                now(),
+                                false
+                            );
+                        }
+                    }
                 }
 
                 return response()->json([
@@ -1077,10 +1189,16 @@ class SparepartApiController extends Controller
             }
         }
 
-        // Update the service's harga_sp (Total harga sparepart yang dipasang)
-        $service->update(['harga_sp' => $total_part_for_service]);
+        $jobsSum = DB::table('service_jobs')->where('service_id', $serviceId)->sum('biaya_jasa') ?? 0;
+        $newTotalBiaya = $jobsSum;
+
+        // Update the service's harga_sp and total_biaya
+        $service->update([
+            'harga_sp' => $total_part_for_service,
+            'total_biaya' => $newTotalBiaya,
+        ]);
         $total_penalty_cost = array_sum($penalties_per_teknisi);
-        Log::info("Internal: Service Harga SP updated to: $total_part_for_service, Total Garansi: $total_garansi, Penalty: $total_penalty_cost for Service ID: $serviceId");
+        Log::info("Internal: Service Harga SP updated to: $total_part_for_service, Total Biaya updated to: $newTotalBiaya, Total Garansi: $total_garansi, Penalty: $total_penalty_cost for Service ID: $serviceId");
 
         // Initialize variables yang akan di-return
         $fix_profit_teknisi = 0;
@@ -1164,12 +1282,75 @@ class SparepartApiController extends Controller
 
                         Log::info("Internal: Profit calculation - Total Biaya: {$service->total_biaya}, Part (Shared): {$total_part_for_profit}, Total Garansi: {$total_garansi}, Service Profit: {$total_service_profit}");
 
+                        // Fetch sum of processed violation percentages for this technician in the month of the service
+                        $serviceDate = Carbon::parse($service->tgl_service ?: $service->updated_at);
+                        $violationPercentage = DB::table('violations')
+                            ->where('user_id', $id_teknisi)
+                            ->where('status', 'processed')
+                            ->whereYear('violation_date', $serviceDate->year)
+                            ->whereMonth('violation_date', $serviceDate->month)
+                            ->sum('penalty_percentage') ?? 0;
+
+                        Log::info("Internal: Violation percentage for technician {$id_teknisi} in the period of {$serviceDate->toDateString()} is {$violationPercentage}%");
+
                         $base_commission = 0;
                         if ($presentaseSetting->compensation_type === 'percentage') {
+                            // Flat percentage commission
                             if ($total_service_profit < 0) {
-                                $base_commission = $total_service_profit * $presentaseSetting->max_percentage / 100;
+                                $base_commission = $total_service_profit * ($presentaseSetting->max_percentage ?: $presentaseSetting->percentage_value) / 100;
                             } else {
-                                $base_commission = $total_service_profit * $presentaseSetting->percentage_value / 100;
+                                $adjustedPercentage = max(0, $presentaseSetting->percentage_value - $violationPercentage);
+                                $base_commission = $total_service_profit * $adjustedPercentage / 100;
+                                Log::info("Internal (Flat): Base percentage: {$presentaseSetting->percentage_value}%, Adjusted: {$adjustedPercentage}% due to {$violationPercentage}% violation");
+                            }
+                        } elseif ($presentaseSetting->compensation_type === 'tiered') {
+                            // Tiered category calculation
+                            $jobs = ServiceJob::with('category')->where('service_id', $serviceId)->get();
+
+                            if ($jobs->isEmpty()) {
+                                // Fallback to technician's default percentage if no jobs are set
+                                if ($total_service_profit < 0) {
+                                    $base_commission = $total_service_profit * ($presentaseSetting->max_percentage ?: $presentaseSetting->percentage_value) / 100;
+                                } else {
+                                    $adjustedPercentage = max(0, $presentaseSetting->percentage_value - $violationPercentage);
+                                    $base_commission = $total_service_profit * $adjustedPercentage / 100;
+                                }
+                            } else {
+                                foreach ($jobs as $job) {
+                                    // Calculate parts warranty for this job
+                                    $jobWarranty = DetailPartServices::where('service_job_id', $job->id)->sum('harga_garansi') ?? 0;
+                                    
+                                    // Calculate parts cost linked to this job (toko & luar)
+                                    // Only deduct parts that are NOT marked as 'is_tanggungan_teknisi'
+                                    $jobPartsTokoCost = DetailPartServices::where('service_job_id', $job->id)
+                                        ->where('is_tanggungan_teknisi', 0)
+                                        ->get()
+                                        ->sum(function ($pt) {
+                                            return ($pt->detail_harga_part_service ?? $pt->harga_jual ?? 0) * $pt->qty_part;
+                                        });
+                                        
+                                    $jobPartsLuarCost = DetailPartLuarService::where('service_job_id', $job->id)
+                                        ->where('is_tanggungan_teknisi', 0)
+                                        ->get()
+                                        ->sum(function ($pl) {
+                                            return ($pl->harga_part ?? 0) * $pl->qty_part;
+                                        });
+
+                                    $jobProfit = (double)($job->biaya_jasa ?? 0) - $jobWarranty - $jobPartsTokoCost - $jobPartsLuarCost;
+
+                                    // Use category percentage, or fallback to technician's default
+                                    $basePercentage = $job->category ? $job->category->persentase : $presentaseSetting->percentage_value;
+
+                                    if ($jobProfit < 0) {
+                                        $jobCommission = $jobProfit * ($presentaseSetting->max_percentage ?? $basePercentage) / 100;
+                                    } else {
+                                        $adjustedPercentage = max(0, $basePercentage - $violationPercentage);
+                                        $jobCommission = $jobProfit * $adjustedPercentage / 100;
+                                        Log::info("Internal (Tiered): Job ID {$job->id} - Base: {$basePercentage}%, Adjusted: {$adjustedPercentage}% due to {$violationPercentage}% violation");
+                                    }
+
+                                    $base_commission += $jobCommission;
+                                }
                             }
                         } 
                         
@@ -1261,7 +1442,8 @@ class SparepartApiController extends Controller
                 'kode_services' => 'required|exists:sevices,id', // Ensure service exists
                 'kode_sparepart' => 'required|exists:spareparts,id', // Ensure sparepart exists
                 'qty_part' => 'required|integer|min:1',
-                'is_tanggungan_teknisi' => 'nullable|boolean'
+                'is_tanggungan_teknisi' => 'nullable|boolean',
+                'service_job_id' => 'nullable|exists:service_jobs,id'
             ]);
 
             if ($validator->fails()) {
@@ -1312,6 +1494,7 @@ class SparepartApiController extends Controller
                         'qty_part' => $newTotalQtyForService,
                         'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
                         'user_input' => $request->id_teknisi ?? auth()->user()->id,
+                        'service_job_id' => $request->has('service_job_id') ? $request->service_job_id : $existingPart->service_job_id,
                     ]);
 
                     // Use logStockChange to update stock and variant
@@ -1343,6 +1526,7 @@ class SparepartApiController extends Controller
                         'qty_part' => $qtyToAdd,
                         'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
                         'user_input' => $request->id_teknisi ?? auth()->user()->id,
+                        'service_job_id' => $request->service_job_id,
                     ]);
 
                     // Record shift log for sparepart usage
@@ -1408,7 +1592,8 @@ class SparepartApiController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'qty_part' => 'required|integer|min:1',
-                'is_tanggungan_teknisi' => 'nullable|boolean'
+                'is_tanggungan_teknisi' => 'nullable|boolean',
+                'service_job_id' => 'nullable|exists:service_jobs,id',
             ]);
 
             if ($validator->fails()) {
@@ -1449,6 +1634,7 @@ class SparepartApiController extends Controller
                     'qty_part' => $newQty,
                     'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? $detailPartService->is_tanggungan_teknisi,
                     'user_input' => $request->id_teknisi ?? auth()->user()->id,
+                    'service_job_id' => $request->has('service_job_id') ? $request->service_job_id : $detailPartService->service_job_id,
                 ]);
 
                 // Use logStockChange to update stock and variant
@@ -1595,7 +1781,8 @@ class SparepartApiController extends Controller
             'harga_part' => 'required|numeric|min:0',
             'qty_part' => 'required|integer|min:1',
             'is_tanggungan_teknisi' => 'nullable|boolean',
-            'is_potong_kas' => 'nullable|boolean'
+            'is_potong_kas' => 'nullable|boolean',
+            'service_job_id' => 'nullable|exists:service_jobs,id'
         ]);
 
         if ($validator->fails()) {
@@ -1620,6 +1807,7 @@ class SparepartApiController extends Controller
                 'is_potong_kas' => $request->has('is_potong_kas') ? $request->is_potong_kas : 1,
                 'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
                 'user_input' => $request->id_teknisi ?? auth()->user()->id,
+                'service_job_id' => $request->service_job_id,
             ]);
 
             // PERUBAHAN: Hitung total biaya dan catat sebagai kas keluar JIKA is_potong_kas true
@@ -1667,7 +1855,8 @@ class SparepartApiController extends Controller
             'harga_part' => 'required|numeric|min:0',
             'qty_part' => 'required|integer|min:1',
             'is_tanggungan_teknisi' => 'nullable|boolean',
-            'is_potong_kas' => 'nullable|boolean'
+            'is_potong_kas' => 'nullable|boolean',
+            'service_job_id' => 'nullable|exists:service_jobs,id'
         ]);
 
         if ($validator->fails()) {
@@ -1714,6 +1903,7 @@ class SparepartApiController extends Controller
                 'is_potong_kas' => $is_potong_kas_baru,
                 'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? $update->is_tanggungan_teknisi,
                 'user_input' => $request->id_teknisi ?? auth()->user()->id,
+                'service_job_id' => $request->has('service_job_id') ? $request->service_job_id : $update->service_job_id,
             ]);
 
             $this->performCommissionRecalculation($serviceId);
@@ -1824,7 +2014,8 @@ class SparepartApiController extends Controller
                 'kode_services' => 'required|exists:sevices,id',
                 'kode_sparepart' => 'required|exists:spareparts,id',
                 'qty_part' => 'required|integer|min:1',
-                'is_tanggungan_teknisi' => 'nullable|boolean'
+                'is_tanggungan_teknisi' => 'nullable|boolean',
+                'service_job_id' => 'nullable|exists:service_jobs,id',
             ]);
 
             if ($validator->fails()) {
@@ -1873,8 +2064,8 @@ class SparepartApiController extends Controller
                     $hargaPartService = 0;
                     Log::info("Warranty claim service: setting part price to 0 for service ID {$service->id}");
                 }elseif ($request->is_tanggungan_teknisi) {
-+    $hargaPartService = 0;
-+    Log::info("Tanggungan teknisi: setting part price to 0 for service ID {$service->id}, modal={$sparepart->harga_beli}");
+                    $hargaPartService = 0;
+                    Log::info("Tanggungan teknisi: setting part price to 0 for service ID {$service->id}, modal={$sparepart->harga_beli}");
                 } else {
                     // Jika BUKAN service klaim, jalankan logika harga normal
                     $hargaKhusus = DB::table('harga_khususes')
@@ -1909,6 +2100,7 @@ class SparepartApiController extends Controller
                         'detail_harga_part_service' => $hargaPartService,
                         'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
                         'user_input' => $request->id_teknisi ?? auth()->user()->id,
+                        'service_job_id' => $request->service_job_id ?? $cek->service_job_id,
                     ]);
                     $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
 
@@ -1926,6 +2118,7 @@ class SparepartApiController extends Controller
                     DetailPartServices::create([
                         'kode_services' => $request->kode_services,
                         'kode_sparepart' => $request->kode_sparepart,
+                        'service_job_id' => $request->service_job_id,
                         'detail_modal_part_service' => $sparepart->harga_beli,
                         'detail_harga_part_service' => $hargaPartService,
                         'qty_part' => $request->qty_part,
@@ -1956,6 +2149,7 @@ class SparepartApiController extends Controller
                     \App\Models\Sparepart::class
                 );
 
+                $this->performCommissionRecalculation($service->id);
                 DB::commit();
 
                 return response()->json([
@@ -2044,6 +2238,7 @@ class SparepartApiController extends Controller
             // 4. Hapus record part dari service
             $detailPart->delete();
 
+            $this->performCommissionRecalculation($service->id);
             DB::commit();
 
             return response()->json([
@@ -2080,7 +2275,8 @@ class SparepartApiController extends Controller
             'harga_part' => 'required|numeric|min:0',
             'qty_part' => 'required|integer|min:1',
             'is_tanggungan_teknisi' => 'nullable|boolean',
-            'is_potong_kas' => 'nullable|boolean'
+            'is_potong_kas' => 'nullable|boolean',
+            'service_job_id' => 'nullable|exists:service_jobs,id',
         ]);
 
         DB::beginTransaction(); // PERUBAHAN: Menggunakan transaksi database untuk keamanan
@@ -2093,6 +2289,7 @@ class SparepartApiController extends Controller
             $create = DetailPartLuarService::create([
                 'kode_services' => $serviceId,
                 'nama_part' => $request->nama_part,
+                'service_job_id' => $request->service_job_id,
                 'harga_part' => $request->harga_part,
                 'qty_part' => $request->qty_part,
                 'is_potong_kas' => $request->has('is_potong_kas') ? $request->is_potong_kas : 1,
@@ -2115,6 +2312,7 @@ class SparepartApiController extends Controller
                 \App\Models\DetailPartLuarService::class
             );
 
+            $this->performCommissionRecalculation($service->id);
             DB::commit(); // PERUBAHAN: Commit transaksi
 
             // Mengembalikan respons sukses dengan data yang disimpan
@@ -2149,7 +2347,8 @@ class SparepartApiController extends Controller
             'harga_part' => 'required|numeric|min:0',
             'qty_part' => 'required|integer|min:1',
             'is_tanggungan_teknisi' => 'nullable|boolean',
-            'is_potong_kas' => 'nullable|boolean'
+            'is_potong_kas' => 'nullable|boolean',
+            'service_job_id' => 'nullable|exists:service_jobs,id',
         ]);
 
         DB::beginTransaction(); // PERUBAHAN: Menggunakan transaksi database
@@ -2183,6 +2382,7 @@ class SparepartApiController extends Controller
             // Update data part luar
             $update->update([
                 'nama_part' => $request->nama_part,
+                'service_job_id' => $request->has('service_job_id') ? $request->service_job_id : $update->service_job_id,
                 'harga_part' => $request->harga_part,
                 'qty_part' => $request->qty_part,
                 'is_potong_kas' => $is_potong_kas_baru,
@@ -2190,6 +2390,7 @@ class SparepartApiController extends Controller
                 'user_input' => $request->id_teknisi ?? auth()->user()->id,
             ]);
 
+            $this->performCommissionRecalculation($service->id);
             DB::commit(); // PERUBAHAN: Commit transaksi
 
             return response()->json(['message' => 'Sparepart luar updated successfully.'], 200);
@@ -2232,6 +2433,7 @@ class SparepartApiController extends Controller
             // Hapus data
             $data->delete();
 
+            $this->performCommissionRecalculation($service->id);
             DB::commit(); // PERUBAHAN: Commit transaksi
 
             return response()->json(['message' => 'Sparepart luar deleted successfully.'], 200);
@@ -2262,36 +2464,56 @@ class SparepartApiController extends Controller
         }
 
         try {
+            $service = modelServices::findOrFail($id);
+            $oldStatus = $service->status_services;
+            $newStatus = $request->status_services;
+
             $validator = Validator::make($request->all(), [
-                'status_services' => 'required|string|in:Selesai,Proses,Antri',
-                'id_teknisi' => 'nullable|exists:users,id',
+                'status_services' => 'required|string|in:Selesai,Proses,Antri,Diambil',
+                'id_teknisi' => [
+                    'nullable',
+                    'exists:users,id',
+                    function ($attribute, $value, $fail) use ($request, $service) {
+                        $newStatus = $request->status_services;
+                        $finalTechId = $request->has('id_teknisi') ? $value : $service->id_teknisi;
+                        if (in_array($newStatus, ['Selesai', 'Diambil']) && empty($finalTechId)) {
+                            $fail('Teknisi harus ditentukan sebelum menyelesaikan atau mengambil unit servis.');
+                        }
+                    }
+                ],
             ]);
 
             if ($validator->fails()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Validation error',
+                    'message' => $validator->errors()->first(),
                     'errors' => $validator->errors()
                 ], 422);
             }
 
-            $service = modelServices::findOrFail($id);
-            $oldStatus = $service->status_services;
-            $newStatus = $request->status_services;
-            $newTechnicianId = $request->id_teknisi;
+            $oldTechnicianId = $service->id_teknisi;
+            $newTechnicianId = $request->has('id_teknisi') ? $request->id_teknisi : $service->id_teknisi;
 
             DB::beginTransaction();
 
             $service->update([
                 'status_services' => $newStatus,
                 'id_teknisi' => $newTechnicianId,
-                'tgl_service' => Carbon::now()->format('Y-m-d H:i:s'),
+                'tgl_service' => in_array($newStatus, ['Selesai', 'Diambil']) ? ($service->tgl_service ?: \Carbon\Carbon::now()->format('Y-m-d H:i:s')) : $service->tgl_service,
             ]);
 
-            // Komisi: Hitung atau revert berdasarkan perubahan status
-            if ($newStatus === 'Selesai' && $oldStatus !== 'Selesai') {
+            // Recompute or revert commissions
+            $isNewStatusCompleted = in_array(strtolower($newStatus), ['selesai', 'diambil']);
+            $isOldStatusCompleted = in_array(strtolower($oldStatus), ['selesai', 'diambil']);
+
+            if ($isNewStatusCompleted && !$isOldStatusCompleted) {
+                // Transition to completed/picked up
                 $this->performCommissionRecalculation($id);
-            } elseif ($newStatus !== 'Selesai' && $oldStatus === 'Selesai') {
+            } elseif ($isNewStatusCompleted && $isOldStatusCompleted && $oldTechnicianId != $newTechnicianId) {
+                // Technician changed while remaining completed/picked up
+                $this->performCommissionRecalculation($id);
+            } elseif (!$isNewStatusCompleted && $isOldStatusCompleted) {
+                // Transitioned from completed/picked up back to pending/queue
                 $profitPresentases = ProfitPresentase::where('kode_service', $id)->get();
                 foreach ($profitPresentases as $profitPresentase) {
                     if ($profitPresentase->profit < 0) {
@@ -2307,7 +2529,7 @@ class SparepartApiController extends Controller
                     }
                     $profitPresentase->delete();
                 }
-                Log::info("Semua komisi/penalti dibatalkan untuk Service ID: $id karena status berubah dari Selesai.");
+                Log::info("Semua komisi/penalti dibatalkan untuk Service ID: $id karena status berubah dari completed.");
             }
 
             // Kirim WhatsApp jika selesai
@@ -2369,13 +2591,14 @@ class SparepartApiController extends Controller
         DB::beginTransaction();
         try {
             $service = modelServices::findOrFail($id);
+            $oldStatus = $service->status_services;
 
-            // Only revert if the service is currently 'Selesai'
-            if ($service->status_services !== 'Selesai') {
+            // Allow revert if status is 'Selesai' or 'Diambil'
+            if (!in_array($oldStatus, ['Selesai', 'Diambil'])) {
                 DB::rollBack();
                 return response()->json([
                     'success' => false,
-                    'message' => 'Service can only be reverted if its status is "Selesai". Current status: ' . $service->status_services
+                    'message' => 'Service can only be reverted if its status is "Selesai" or "Diambil". Current status: ' . $oldStatus
                 ], 400);
             }
 
@@ -2401,10 +2624,74 @@ class SparepartApiController extends Controller
                 $profitPresentase->delete();
             }
 
-            // Update service status and clear technician
+            // Rollback Pengambilan details if status was 'Diambil'
+            if ($oldStatus === 'Diambil') {
+                if ($service->kode_pengambilan) {
+                    $pengambilan = Pengambilan::find($service->kode_pengambilan);
+                    if ($pengambilan) {
+                        // 1. Rollback Kas Perusahaan
+                        if ($pengambilan->jumlah_cash > 0) {
+                            $this->catatKas(
+                                $pengambilan,
+                                0,
+                                $pengambilan->jumlah_cash,
+                                "Rollback Pelunasan Service (Batal Diambil) #" . $pengambilan->kode_pengambilan,
+                                now(),
+                                true
+                            );
+                        }
+                        if ($pengambilan->jumlah_transfer > 0) {
+                            $this->catatKas(
+                                $pengambilan,
+                                0,
+                                $pengambilan->jumlah_transfer,
+                                "Rollback Pelunasan Service (Batal Diambil) #" . $pengambilan->kode_pengambilan,
+                                now(),
+                                false
+                            );
+                        }
+
+                        // 2. Rollback History Laci
+                        $oldHistory = HistoryLaci::where('reference_id', $pengambilan->id)
+                            ->where('reference_type', 'Pengambilan')
+                            ->where('masuk', '>', 0)
+                            ->first();
+                        if ($oldHistory && $pengambilan->jumlah_cash > 0) {
+                            $this->recordLaciHistory(
+                                $oldHistory->id_kategori,
+                                null,
+                                $pengambilan->jumlah_cash,
+                                "Rollback Pelunasan Service (Batal Diambil): " . $service->kode_service,
+                                'Pengambilan',
+                                $pengambilan->id,
+                                $pengambilan->kode_pengambilan
+                            );
+                        }
+
+                        // 3. Mark Pengambilan as cancelled or delete it
+                        $otherServicesCount = modelServices::where('kode_pengambilan', $pengambilan->id)
+                            ->where('id', '!=', $id)
+                            ->count();
+                        if ($otherServicesCount === 0) {
+                            $pengambilan->delete();
+                        } else {
+                            $pengambilan->update([
+                                'total_bayar' => max(0, $pengambilan->total_bayar - ($service->total_biaya - $service->dp)),
+                                'total_services' => max(0, $pengambilan->total_services - $service->total_biaya),
+                                'dp' => max(0, $pengambilan->dp - $service->dp),
+                                'jumlah_cash' => max(0, $pengambilan->jumlah_cash - ($pengambilan->metode_bayar === 'cash' ? ($service->total_biaya - $service->dp) : 0)),
+                                'jumlah_transfer' => max(0, $pengambilan->jumlah_transfer - ($pengambilan->metode_bayar === 'transfer' ? ($service->total_biaya - $service->dp) : 0)),
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            // Update service status and clear technician/pengambilan
             $service->update([
                 'status_services' => 'Antri',
                 'id_teknisi' => null, // Clear technician assignment
+                'kode_pengambilan' => null, // Clear pengambilan ID
                 'updated_at' => now(), // Update timestamp
             ]);
 
@@ -2412,7 +2699,7 @@ class SparepartApiController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Service successfully reverted to "Antri" status. Technician commission corrected.',
+                'message' => 'Service successfully reverted to "Antri" status. Technician commission and payments corrected.',
                 'data' => [
                     'service_id' => $id,
                     'new_status' => 'Antri',
@@ -3027,6 +3314,188 @@ class SparepartApiController extends Controller
     }
 }
 
+    /**
+     * Add manual job to service.
+     */
+    public function addJobToService($serviceId, Request $request)
+    {
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'nama_pekerjaan' => 'required|string|max:255',
+            'biaya_jasa' => 'required|numeric|min:0',
+            'service_category_id' => 'nullable|exists:service_categories,id'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $service = modelServices::findOrFail($serviceId);
+            $userUpline = $this->getThisUser()->id_upline;
+            $userRole = auth()->user()->userDetail->jabatan ?? '3';
+
+            // Enforce keyword-based auto-categorization for non-admin (jabatan !== '1')
+            if ($userRole !== '1') {
+                $serviceCategoryId = ServiceCategory::determineCategoryFromJobName($request->nama_pekerjaan, $userUpline);
+            } else {
+                // Admin can manually select category
+                $serviceCategoryId = $request->service_category_id;
+                if (!$serviceCategoryId) {
+                    $serviceCategoryId = ServiceCategory::determineCategoryFromJobName($request->nama_pekerjaan, $userUpline);
+                }
+            }
+
+            $job = \App\Models\ServiceJob::create([
+                'service_id' => $serviceId,
+                'service_category_id' => $serviceCategoryId,
+                'nama_pekerjaan' => $request->nama_pekerjaan,
+                'biaya_jasa' => $request->biaya_jasa,
+            ]);
+
+            // Recalculate commission and total cost
+            $this->performCommissionRecalculation($serviceId);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pekerjaan berhasil ditambahkan.',
+                'data' => $job
+            ], 200);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menambahkan pekerjaan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update manual job details.
+     */
+    public function updateJobInService($jobId, Request $request)
+    {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'nama_pekerjaan' => 'required|string|max:255',
+            'biaya_jasa' => 'required|numeric|min:0',
+            'service_category_id' => 'nullable|exists:service_categories,id'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $job = \App\Models\ServiceJob::findOrFail($jobId);
+            $userUpline = $this->getThisUser()->id_upline;
+            $userRole = auth()->user()->userDetail->jabatan ?? '3';
+
+            // Enforce keyword-based auto-categorization for non-admin (jabatan !== '1')
+            if ($userRole !== '1') {
+                $serviceCategoryId = ServiceCategory::determineCategoryFromJobName($request->nama_pekerjaan, $userUpline);
+            } else {
+                $serviceCategoryId = $request->service_category_id;
+                if (!$serviceCategoryId) {
+                    $serviceCategoryId = ServiceCategory::determineCategoryFromJobName($request->nama_pekerjaan, $userUpline);
+                }
+            }
+
+            $job->update([
+                'nama_pekerjaan' => $request->nama_pekerjaan,
+                'biaya_jasa' => $request->biaya_jasa,
+                'service_category_id' => $serviceCategoryId,
+            ]);
+
+            // Recalculate commission and total cost
+            $this->performCommissionRecalculation($job->service_id);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pekerjaan berhasil diperbarui.',
+                'data' => $job
+            ], 200);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memperbarui pekerjaan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete manual job.
+     */
+    public function deleteJobFromService($jobId)
+    {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $job = \App\Models\ServiceJob::findOrFail($jobId);
+            $serviceId = $job->service_id;
+
+            $job->delete();
+
+            // Recalculate commission and total cost
+            $this->performCommissionRecalculation($serviceId);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pekerjaan berhasil dihapus.'
+            ], 200);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menghapus pekerjaan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 
 }
 

@@ -805,6 +805,7 @@ class StockOpnameController extends Controller
                 'kode_kategori'  => $request->kode_kategori,
                 'kode_spl'       => $request->kode_supplier,
                 'kode_owner'     => $kode_owner,
+                'cabang_id'      => $user->cabang_id,
                 'foto_sparepart' => '-',
                 'kode_sub_kategori' => null,
                 'stock_asli' => null,

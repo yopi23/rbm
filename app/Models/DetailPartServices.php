@@ -11,6 +11,7 @@ class DetailPartServices extends Model
     protected $fillable = [
         'kode_services',
         'kode_sparepart',
+        'service_job_id',
         'detail_modal_part_service',
         'detail_harga_part_service',
         'harga_garansi',
@@ -22,6 +23,11 @@ class DetailPartServices extends Model
     {
         // Parameter kedua adalah nama kolom foreign key di tabel 'detail_part_services'
         return $this->belongsTo(Sevices::class , 'kode_services');
+    }
+
+    public function job()
+    {
+        return $this->belongsTo(ServiceJob::class, 'service_job_id');
     }
 
     /**

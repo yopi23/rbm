@@ -13,6 +13,7 @@
                     <thead>
                         <tr>
                             <th>Nama Aset</th>
+                            <th>Cabang</th>
                             <th>Nilai Perolehan (Rp)</th>
                             <th>Penyusutan (Rp)</th>
                             <th>Nilai Buku Saat Ini (Rp)</th>
@@ -23,6 +24,7 @@
                         @foreach ($asets as $aset)
                             <tr>
                                 <td>{{ $aset->nama_aset }}</td>
+                                <td>{{ $aset->cabang ? $aset->cabang->nama_cabang : 'Kantor Pusat / Holding' }}</td>
                                 <td>{{ number_format($aset->nilai_perolehan) }}</td>
                                 <td><small>{{ number_format($aset->penyusutan_terakumulasi) }}</small></td>
                                 <td class="font-weight-bold">{{ number_format($aset->nilai_buku) }}</td>

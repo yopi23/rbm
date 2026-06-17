@@ -53,6 +53,52 @@ class Attendance extends Model
 
         return 0;
     }
+
+    protected static function booted()
+    {
+        static::saved(function ($attendance) {
+            if ($attendance->status === 'hadir' && $attendance->check_in) {
+                // Check if user has a fixed compensation setting
+                $salarySetting = SalarySetting::where('user_id', $attendance->user_id)->first();
+                if ($salarySetting && $salarySetting->compensation_type === 'fixed') {
+                    // Check if already created daily salary for this date
+                    $exists = ProfitPresentase::where('kode_user', $attendance->user_id)
+                        ->whereDate('tgl_profit', $attendance->attendance_date->toDateString())
+                        ->where('kode_service', 0)
+                        ->where('profit', '>', 0)
+                        ->exists();
+
+                    if (!$exists && $salarySetting->basic_salary > 0) {
+                        ProfitPresentase::create([
+                            'tgl_profit' => $attendance->attendance_date->toDateString(),
+                            'kode_service' => 0,
+                            'kode_presentase' => $salarySetting->id,
+                            'kode_user' => $attendance->user_id,
+                            'profit' => $salarySetting->basic_salary,
+                            'profit_toko' => 0,
+                            'is_cair' => 0, // Withheld
+                        ]);
+                    }
+                }
+            } else {
+                // If status changed from 'hadir' to something else, remove the daily salary record
+                ProfitPresentase::where('kode_user', $attendance->user_id)
+                    ->whereDate('tgl_profit', $attendance->attendance_date->toDateString())
+                    ->where('kode_service', 0)
+                    ->where('profit', '>', 0)
+                    ->delete();
+            }
+        });
+
+        static::deleted(function ($attendance) {
+            // Remove the daily salary record if attendance is deleted
+            ProfitPresentase::where('kode_user', $attendance->user_id)
+                ->whereDate('tgl_profit', $attendance->attendance_date->toDateString())
+                ->where('kode_service', 0)
+                ->where('profit', '>', 0)
+                ->delete();
+        });
+    }
 }
 
 
