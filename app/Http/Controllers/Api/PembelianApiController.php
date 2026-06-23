@@ -166,6 +166,7 @@ class PembelianApiController extends Controller
                 'item_kategori' => $detail->item_kategori,
                 'attributes' => $detail->attributes,
                 'variants' => $variants,
+                'product_variant' => $detail->productVariant,
                 ];
             });
 
