@@ -436,6 +436,7 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
 
         Route::get('/hutang', [HutangApiController::class , 'index'])->name('api.hutang.index');
         Route::post('/hutang/bayar/{id}', [HutangApiController::class , 'bayar'])->name('api.hutang.bayar');
+        Route::get('/tempo-tracking', [HutangApiController::class, 'tempoTracking'])->name('api.hutang.tempoTracking');
 
         // Customer Management
         Route::prefix('customer')->group(function () {

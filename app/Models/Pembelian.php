@@ -31,5 +31,9 @@ class Pembelian extends Model
     {
         return $this->morphOne(KasPerusahaan::class, 'sourceable');
     }
+    public function shift()
+    {
+        return $this->belongsTo(Shift::class, 'shift_id');
+    }
 
 }
