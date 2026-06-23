@@ -678,13 +678,21 @@ class FinancialReportApiController extends Controller
                     break;
 
                 case 'pengeluaran_toko':
-                    $query = PengeluaranToko::where('kode_owner', $kode_owner)
-                        ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+                    $query = PengeluaranToko::leftJoin('shifts', 'pengeluaran_tokos.shift_id', '=', 'shifts.id')
+                        ->leftJoin('user_details', 'shifts.user_id', '=', 'user_details.kode_user')
+                        ->where('pengeluaran_tokos.kode_owner', $kode_owner)
+                        ->whereBetween('pengeluaran_tokos.created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
                     if ($cabangId) {
-                        $query->whereIn('shift_id', $shiftIds);
+                        $query->whereIn('pengeluaran_tokos.shift_id', $shiftIds);
                     }
-                    $data = $query->select('nama_pengeluaran as judul', 'catatan_pengeluaran as catatan', 'jumlah_pengeluaran as jumlah', 'created_at')
-                        ->orderBy('created_at', 'desc')
+                    $data = $query->select(
+                            'pengeluaran_tokos.nama_pengeluaran as judul',
+                            'pengeluaran_tokos.catatan_pengeluaran as catatan',
+                            'pengeluaran_tokos.jumlah_pengeluaran as jumlah',
+                            'pengeluaran_tokos.created_at',
+                            'user_details.fullname as kasir_fullname'
+                        )
+                        ->orderBy('pengeluaran_tokos.created_at', 'desc')
                         ->get()
                         ->map(function ($item) {
                             $item->type = 'Pengeluaran Toko';
@@ -693,13 +701,21 @@ class FinancialReportApiController extends Controller
                     break;
 
                 case 'pengeluaran_operasional':
-                    $query = PengeluaranOperasional::where('kode_owner', $kode_owner)
-                        ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+                    $query = PengeluaranOperasional::leftJoin('shifts', 'pengeluaran_operasionals.shift_id', '=', 'shifts.id')
+                        ->leftJoin('user_details', 'shifts.user_id', '=', 'user_details.kode_user')
+                        ->where('pengeluaran_operasionals.kode_owner', $kode_owner)
+                        ->whereBetween('pengeluaran_operasionals.created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
                     if ($cabangId) {
-                        $query->whereIn('shift_id', $shiftIds);
+                        $query->whereIn('pengeluaran_operasionals.shift_id', $shiftIds);
                     }
-                    $data = $query->select('nama_pengeluaran as judul', 'desc_pengeluaran as catatan', 'jml_pengeluaran as jumlah', 'created_at')
-                        ->orderBy('created_at', 'desc')
+                    $data = $query->select(
+                            'pengeluaran_operasionals.nama_pengeluaran as judul',
+                            'pengeluaran_operasionals.desc_pengeluaran as catatan',
+                            'pengeluaran_operasionals.jml_pengeluaran as jumlah',
+                            'pengeluaran_operasionals.created_at',
+                            'user_details.fullname as kasir_fullname'
+                        )
+                        ->orderBy('pengeluaran_operasionals.created_at', 'desc')
                         ->get()
                         ->map(function ($item) {
                             $item->type = 'Pengeluaran Operasional';
@@ -708,15 +724,23 @@ class FinancialReportApiController extends Controller
                     break;
 
                 case 'pembelian_tunai':
-                     $query = Pembelian::where('kode_owner', $kode_owner)
-                        ->where('status', 'selesai')
-                        ->where('metode_pembayaran', '!=', 'Hutang')
-                        ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
-                     if ($cabangId) {
-                         $query->whereIn('shift_id', $shiftIds);
-                     }
-                     $data = $query->select('kode_pembelian as judul', 'supplier as catatan', 'total_harga as jumlah', 'updated_at as created_at')
-                        ->orderBy('updated_at', 'desc')
+                      $query = Pembelian::leftJoin('shifts', 'pembelians.shift_id', '=', 'shifts.id')
+                        ->leftJoin('user_details', 'shifts.user_id', '=', 'user_details.kode_user')
+                        ->where('pembelians.kode_owner', $kode_owner)
+                        ->where('pembelians.status', 'selesai')
+                        ->where('pembelians.metode_pembayaran', '!=', 'Hutang')
+                        ->whereBetween('pembelians.updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+                      if ($cabangId) {
+                          $query->whereIn('pembelians.shift_id', $shiftIds);
+                      }
+                      $data = $query->select(
+                            'pembelians.kode_pembelian as judul',
+                            'pembelians.supplier as catatan',
+                            'pembelians.total_harga as jumlah',
+                            'pembelians.updated_at as created_at',
+                            'user_details.fullname as kasir_fullname'
+                        )
+                        ->orderBy('pembelians.updated_at', 'desc')
                         ->get()
                         ->map(function ($item) {
                             $item->type = 'Pembelian Tunai';
@@ -725,15 +749,15 @@ class FinancialReportApiController extends Controller
                     break;
                 
                 case 'pembayaran_hutang':
-                     $query = Hutang::where('kode_owner', $kode_owner)
+                      $query = Hutang::where('kode_owner', $kode_owner)
                         ->where('status', 'Lunas')
                         ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
-                     if ($cabangId) {
-                         $query->whereHas('pembelian', function($q) use ($shiftIds) {
-                             $q->whereIn('shift_id', $shiftIds);
-                         });
-                     }
-                     $data = $query->with('supplier')
+                      if ($cabangId) {
+                          $query->whereHas('pembelian', function($q) use ($shiftIds) {
+                              $q->whereIn('shift_id', $shiftIds);
+                          });
+                      }
+                      $data = $query->with('supplier')
                         ->orderBy('updated_at', 'desc')
                         ->get()
                         ->map(function ($item) {
@@ -742,30 +766,47 @@ class FinancialReportApiController extends Controller
                                 'catatan' => 'Supplier: ' . ($item->supplier->nama_supplier ?? '-'),
                                 'jumlah' => $item->total_hutang,
                                 'created_at' => $item->updated_at,
-                                'type' => 'Pembayaran Hutang'
+                                'type' => 'Pembayaran Hutang',
+                                'kasir_fullname' => '-'
                             ];
                         });
                     break;
 
                 case 'pengeluaran':
-                    $queryToko = PengeluaranToko::where('kode_owner', $kode_owner)
-                        ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+                    $queryToko = PengeluaranToko::leftJoin('shifts', 'pengeluaran_tokos.shift_id', '=', 'shifts.id')
+                        ->leftJoin('user_details', 'shifts.user_id', '=', 'user_details.kode_user')
+                        ->where('pengeluaran_tokos.kode_owner', $kode_owner)
+                        ->whereBetween('pengeluaran_tokos.created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
                     if ($cabangId) {
-                        $queryToko->whereIn('shift_id', $shiftIds);
+                        $queryToko->whereIn('pengeluaran_tokos.shift_id', $shiftIds);
                     }
-                    $pengeluaranToko = $queryToko->select('nama_pengeluaran as judul', 'catatan_pengeluaran as catatan', 'jumlah_pengeluaran as jumlah', 'created_at')
+                    $pengeluaranToko = $queryToko->select(
+                            'pengeluaran_tokos.nama_pengeluaran as judul',
+                            'pengeluaran_tokos.catatan_pengeluaran as catatan',
+                            'pengeluaran_tokos.jumlah_pengeluaran as jumlah',
+                            'pengeluaran_tokos.created_at',
+                            'user_details.fullname as kasir_fullname'
+                        )
                         ->get()
                         ->map(function ($item) {
                             $item->type = 'Pengeluaran Toko';
                             return $item;
                         });
 
-                    $queryOps = PengeluaranOperasional::where('kode_owner', $kode_owner)
-                        ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+                    $queryOps = PengeluaranOperasional::leftJoin('shifts', 'pengeluaran_operasionals.shift_id', '=', 'shifts.id')
+                        ->leftJoin('user_details', 'shifts.user_id', '=', 'user_details.kode_user')
+                        ->where('pengeluaran_operasionals.kode_owner', $kode_owner)
+                        ->whereBetween('pengeluaran_operasionals.created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
                     if ($cabangId) {
-                        $queryOps->whereIn('shift_id', $shiftIds);
+                        $queryOps->whereIn('pengeluaran_operasionals.shift_id', $shiftIds);
                     }
-                    $pengeluaranOps = $queryOps->select('nama_pengeluaran as judul', 'desc_pengeluaran as catatan', 'jml_pengeluaran as jumlah', 'created_at')
+                    $pengeluaranOps = $queryOps->select(
+                            'pengeluaran_operasionals.nama_pengeluaran as judul',
+                            'pengeluaran_operasionals.desc_pengeluaran as catatan',
+                            'pengeluaran_operasionals.jml_pengeluaran as jumlah',
+                            'pengeluaran_operasionals.created_at',
+                            'user_details.fullname as kasir_fullname'
+                        )
                         ->get()
                         ->map(function ($item) {
                             $item->type = 'Pengeluaran Operasional';
@@ -820,35 +861,53 @@ class FinancialReportApiController extends Controller
     // Helper Methods untuk Detail Reports
     private function getServiceDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId = null)
     {
-        $query = Sevices::where('kode_owner', $kode_owner)
-            ->where('status_services', 'Diambil')
-            ->whereBetween('updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+        $query = Sevices::leftJoin('shifts', 'sevices.shift_id', '=', 'shifts.id')
+            ->leftJoin('user_details', 'shifts.user_id', '=', 'user_details.kode_user')
+            ->where('sevices.kode_owner', $kode_owner)
+            ->where('sevices.status_services', 'Diambil')
+            ->whereBetween('sevices.updated_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
         if ($cabangId) {
             $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
-            $query->whereIn('shift_id', $shiftIds);
+            $query->whereIn('sevices.shift_id', $shiftIds);
         }
-        return $query->select('id', 'kode_service', 'nama_pelanggan', 'type_unit', 'total_biaya', 'dp', 'updated_at')
-            ->orderBy('updated_at', 'desc')
+        return $query->select(
+                'sevices.id',
+                'sevices.kode_service',
+                'sevices.nama_pelanggan',
+                'sevices.type_unit',
+                'sevices.total_biaya',
+                'sevices.dp',
+                'sevices.updated_at',
+                'user_details.fullname as kasir_fullname'
+            )
+            ->orderBy('sevices.updated_at', 'desc')
             ->get()
             ->map(function($item) {
                 $item->net_amount = $item->total_biaya - $item->dp;
 
                 // Hitung total biaya parts untuk analisis profit
                 $totalPartsPrice = 0;
+                $partsList = [];
 
-                $partsToko = DetailPartServices::where('kode_services', $item->id)->get();
+                $partsToko = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+                    ->where('detail_part_services.kode_services', $item->id)
+                    ->select('spareparts.nama_sparepart', 'detail_part_services.qty_part', 'detail_part_services.detail_harga_part_service')
+                    ->get();
                 foreach ($partsToko as $part) {
                     $totalPartsPrice += $part->detail_harga_part_service;
+                    $partsList[] = $part->nama_sparepart . ' (x' . $part->qty_part . ')';
                 }
 
                 $partsLuar = DetailPartLuarService::where('kode_services', $item->id)->get();
                 foreach ($partsLuar as $part) {
                     $totalPartsPrice += ($part->harga_part * $part->qty_part);
+                    $partsList[] = $part->nama_part . ' (x' . $part->qty_part . ') [Luar]';
                 }
 
                 $item->total_parts_cost = $totalPartsPrice;
                 $item->service_profit = $item->total_biaya - $totalPartsPrice;
                 $item->is_profitable = $item->service_profit >= 0;
+                $item->parts_used = count($partsList) > 0 ? implode(', ', $partsList) : '-';
 
                 return $item;
             });
@@ -934,28 +993,44 @@ class FinancialReportApiController extends Controller
 
     private function getSalesDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId = null)
     {
-        $query = Penjualan::where('kode_owner', $kode_owner)
-            ->where('status_penjualan', '1')
-            ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+        $query = Penjualan::leftJoin('user_details', 'penjualans.user_input', '=', 'user_details.kode_user')
+            ->where('penjualans.kode_owner', $kode_owner)
+            ->where('penjualans.status_penjualan', '1')
+            ->whereBetween('penjualans.created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
         if ($cabangId) {
             $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
-            $query->whereIn('shift_id', $shiftIds);
+            $query->whereIn('penjualans.shift_id', $shiftIds);
         }
-        return $query->select('kode_penjualan', 'nama_customer', 'total_penjualan', 'total_bayar', 'created_at')
-            ->orderBy('created_at', 'desc')
+        return $query->select(
+                'penjualans.kode_penjualan',
+                'penjualans.nama_customer',
+                'penjualans.total_penjualan',
+                'penjualans.total_bayar',
+                'penjualans.created_at',
+                'user_details.fullname as kasir_fullname'
+            )
+            ->orderBy('penjualans.created_at', 'desc')
             ->get();
     }
 
     private function getOtherIncomeDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId = null)
     {
-        $query = PemasukkanLain::where('kode_owner', $kode_owner)
-            ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
+        $query = PemasukkanLain::leftJoin('shifts', 'pemasukkan_lains.shift_id', '=', 'shifts.id')
+            ->leftJoin('user_details', 'shifts.user_id', '=', 'user_details.kode_user')
+            ->where('pemasukkan_lains.kode_owner', $kode_owner)
+            ->whereBetween('pemasukkan_lains.created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
         if ($cabangId) {
             $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
-            $query->whereIn('shift_id', $shiftIds);
+            $query->whereIn('pemasukkan_lains.shift_id', $shiftIds);
         }
-        return $query->select('judul_pemasukan', 'catatan_pemasukkan', 'jumlah_pemasukkan', 'created_at')
-            ->orderBy('created_at', 'desc')
+        return $query->select(
+                'pemasukkan_lains.judul_pemasukan',
+                'pemasukkan_lains.catatan_pemasukkan',
+                'pemasukkan_lains.jumlah_pemasukkan',
+                'pemasukkan_lains.created_at',
+                'user_details.fullname as kasir_fullname'
+            )
+            ->orderBy('pemasukkan_lains.created_at', 'desc')
             ->get();
     }
 

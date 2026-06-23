@@ -390,7 +390,17 @@ class CommissionController extends Controller
                 $query->where('user_details.id_upline', $user->id);
             }
 
-            $pendingCommissions = $query->orderBy('profit_presentases.created_at', 'desc')->get();
+            $pendingCommissions = $query->orderBy('profit_presentases.created_at', 'desc')
+                ->get()
+                ->map(function ($item) {
+                    if (isset($item->nominal)) {
+                        $item->nominal = (int) $item->nominal;
+                    }
+                    if (isset($item->saldo)) {
+                        $item->saldo = (int) $item->saldo;
+                    }
+                    return $item;
+                });
 
             return response()->json([
                 'success' => true,
@@ -459,7 +469,7 @@ class CommissionController extends Controller
                 'message' => "$processedCount komisi tertahan berhasil dicairkan.",
                 'data' => [
                     'processed_count' => $processedCount,
-                    'total_amount' => $totalAmount
+                    'total_amount' => (int) $totalAmount
                 ]
             ]);
         } catch (\Exception $e) {
