@@ -476,7 +476,7 @@ class PembelianController extends Controller
     {
         // Validasi input
         $validated = $request->validate([
-            'nama_item' => 'required|string|max:255',
+            'nama_item' => 'required|string|max:8000',
             'jumlah' => 'required|integer|min:1',
             'harga_beli' => 'required|numeric|min:0',
             'product_variant_id' => 'nullable|exists:product_variants,id',
