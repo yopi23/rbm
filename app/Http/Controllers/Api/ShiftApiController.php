@@ -267,9 +267,8 @@ class ShiftApiController extends Controller
             $biayaLokal = \App\Models\PengeluaranToko::where('shift_id', $shift->id)->sum('jumlah_pengeluaran') +
                            \App\Models\PengeluaranOperasional::where('shift_id', $shift->id)->whereNull('beban_operasional_id')->sum('jml_pengeluaran');
 
-            // 3. Calculate technician commissions (include commissions created during this shift's timeframe)
-            $komisiTeknisi = \App\Models\ProfitPresentase::whereNotNull('kode_service')
-                ->whereBetween('created_at', [$shift->start_time, now()])
+            // 3. Calculate technician commissions (only for services completed/picked up in this shift)
+            $komisiTeknisi = \App\Models\ProfitPresentase::whereIn('kode_service', $services)
                 ->sum('profit');
 
             // 4. Create JurnalHarianCabang
