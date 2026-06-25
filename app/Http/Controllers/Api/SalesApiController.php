@@ -709,17 +709,17 @@ class SalesApiController extends Controller
         }
     }
     // Get sales history
-    public function getSalesHistory()
+    public function getSalesHistory(Request $request)
     {
-        // Mendapatkan tanggal 7 hari terakhir
-        $oneWeekAgo = now()->subDays(7)->toDateString();
-        $today = now()->toDateString();
+        // Gunakan parameter dari request jika ada, jika tidak gunakan 7 hari terakhir
+        $startDate = $request->query('start_date', now()->subDays(7)->toDateString());
+        $endDate = $request->query('end_date', now()->toDateString());
 
         $sales = Penjualan::where([
             ['kode_owner', '=', $this->getThisUser()->id_upline],
             ['status_penjualan', '!=', '0']
         ])
-            ->whereBetween('tgl_penjualan', [$oneWeekAgo, $today]) // Filter 7 hari terakhir
+            ->whereBetween('tgl_penjualan', [$startDate, $endDate])
             ->latest()
             ->with(['detailBarang', 'detailSparepart'])
             ->get();
