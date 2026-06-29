@@ -1104,9 +1104,13 @@ class SalesApiController extends Controller
             'metode_bayar' => ['nullable', 'in:cash,transfer,split'],
             'jumlah_cash' => ['nullable', 'numeric'],
             'jumlah_transfer' => ['nullable', 'numeric'],
+            'sifat_pemasukan' => ['nullable', 'in:laba,pendapatan,titipan'],
+            'modal_pemasukan' => ['nullable', 'numeric'],
         ]);
 
         $metodeBayar = $request->metode_bayar ?? 'cash';
+        $sifatPemasukan = $request->sifat_pemasukan ?? 'laba';
+        $modalPemasukan = $request->modal_pemasukan ?? 0;
 
         try {
             DB::beginTransaction();
@@ -1119,6 +1123,15 @@ class SalesApiController extends Controller
                 $jumlahCash = $request->jumlah_cash ?? 0;
                 $jumlahTransfer = $request->jumlah_transfer ?? 0;
 
+                // Split modal_pemasukan proportionally based on amount
+                $modalCash = 0;
+                $modalTransfer = 0;
+                if ($modalPemasukan > 0 && ($jumlahCash + $jumlahTransfer) > 0) {
+                    $totalJumlah = $jumlahCash + $jumlahTransfer;
+                    $modalCash = round(($jumlahCash / $totalJumlah) * $modalPemasukan);
+                    $modalTransfer = $modalPemasukan - $modalCash;
+                }
+
                 if ($jumlahCash > 0) {
                     $cashRecord = PemasukkanLain::create([
                         'tgl_pemasukkan' => date('Y-m-d'),
@@ -1130,6 +1143,8 @@ class SalesApiController extends Controller
                         'metode_bayar' => 'cash',
                         'kode_owner' => $ownerId,
                         'shift_id' => $shiftId,
+                        'sifat_pemasukan' => $sifatPemasukan,
+                        'modal_pemasukan' => $modalCash,
                     ]);
 
                     // Ditangani oleh PemasukkanLainObserver untuk menghindari log ganda
@@ -1152,6 +1167,8 @@ class SalesApiController extends Controller
                         'metode_bayar' => 'transfer',
                         'kode_owner' => $ownerId,
                         'shift_id' => $shiftId,
+                        'sifat_pemasukan' => $sifatPemasukan,
+                        'modal_pemasukan' => $modalTransfer,
                     ]);
 
                     // Ditangani oleh PemasukkanLainObserver untuk menghindari log ganda
@@ -1169,6 +1186,8 @@ class SalesApiController extends Controller
                     'metode_bayar' => $metodeBayar,
                     'kode_owner' => $ownerId,
                     'shift_id' => $shiftId,
+                    'sifat_pemasukan' => $sifatPemasukan,
+                    'modal_pemasukan' => $modalPemasukan,
                 ]);
 
                 // Ditangani oleh PemasukkanLainObserver untuk menghindari log ganda
@@ -1587,6 +1606,65 @@ class SalesApiController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['status' => 'error', 'message' => 'Gagal mengedit penjualan: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function cairkanTitipan($id)
+    {
+        try {
+            DB::beginTransaction();
+
+            $pemasukan = PemasukkanLain::findOrFail($id);
+
+            if ($pemasukan->sifat_pemasukan !== 'titipan') {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Hanya pemasukan dengan sifat Titipan yang dapat dicairkan.'
+                ], 400);
+            }
+
+            if ($pemasukan->status_titipan === 'dicairkan') {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Titipan ini sudah dicairkan sebelumnya.'
+                ], 400);
+            }
+
+            $pemasukan->status_titipan = 'dicairkan';
+            $pemasukan->save();
+
+            // Catat pengeluaran di KasPerusahaan
+            $lastKas = \App\Models\KasPerusahaan::where('kode_owner', $pemasukan->kode_owner)
+                ->latest('id')
+                ->first();
+            $saldoTerakhir = $lastKas ? $lastKas->saldo : 0;
+
+            \App\Models\KasPerusahaan::create([
+                'kode_owner' => $pemasukan->kode_owner,
+                'tanggal' => now(),
+                'deskripsi' => '[PENCAIRAN TITIPAN] ' . $pemasukan->judul_pemasukan,
+                'debit' => 0,
+                'kredit' => $pemasukan->jumlah_pemasukkan,
+                'saldo' => $saldoTerakhir - $pemasukan->jumlah_pemasukkan,
+                'is_cash' => $pemasukan->metode_bayar === 'cash',
+                'shift_id' => $pemasukan->shift_id,
+                'sourceable_id' => $pemasukan->id,
+                'sourceable_type' => PemasukkanLain::class,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Titipan berhasil dicairkan. Saldo kas telah dikurangi.',
+                'data' => $pemasukan
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal mencairkan titipan: ' . $e->getMessage()
+            ], 500);
         }
     }
 }

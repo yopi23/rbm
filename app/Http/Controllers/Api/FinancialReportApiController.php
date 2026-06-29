@@ -109,27 +109,43 @@ class FinancialReportApiController extends Controller
             }
             $totalCashInSales = $totalCashInSalesQuery->sum('total_penjualan');
 
-            $totalCashInOtherQuery = PemasukkanLain::where('kode_owner', $kode_owner)
+            // Base query for Pemasukkan Lain
+            $baseOtherQuery = PemasukkanLain::where('kode_owner', $kode_owner)
                 ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
             if ($cabangId) {
-                $totalCashInOtherQuery->whereIn('shift_id', $shiftIds);
+                $baseOtherQuery->whereIn('shift_id', $shiftIds);
             }
-            $totalCashInOther = $totalCashInOtherQuery->sum('jumlah_pemasukkan');
 
-            // Breakdown pemasukan lainnya cash dan transfer
-            $totalCashInOtherCashQuery = PemasukkanLain::where('kode_owner', $kode_owner)
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
-            if ($cabangId) {
-                $totalCashInOtherCashQuery->whereIn('shift_id', $shiftIds);
-            }
-            $totalCashInOtherCash = $totalCashInOtherCashQuery->sum('jumlah_cash');
+            // Total Cash Flow In dari Pemasukan Lain (termasuk titipan)
+            $totalCashInOther = (clone $baseOtherQuery)->sum('jumlah_pemasukkan');
+            $totalCashInOtherCash = (clone $baseOtherQuery)->sum('jumlah_cash');
+            $totalCashInOtherTransfer = (clone $baseOtherQuery)->sum('jumlah_transfer');
 
-            $totalCashInOtherTransferQuery = PemasukkanLain::where('kode_owner', $kode_owner)
-                ->whereBetween('created_at', [$tgl_awal . ' 00:00:00', $tgl_akhir . ' 23:59:59']);
-            if ($cabangId) {
-                $totalCashInOtherTransferQuery->whereIn('shift_id', $shiftIds);
-            }
-            $totalCashInOtherTransfer = $totalCashInOtherTransferQuery->sum('jumlah_transfer');
+            // Total Pemasukan Lain (Laba + Pendapatan, EXCLUDE titipan)
+            $totalPemasukanLainPendapatanLaba = (clone $baseOtherQuery)
+                ->whereIn('sifat_pemasukan', ['laba', 'pendapatan'])
+                ->sum('jumlah_pemasukkan');
+
+            // NEW: Titipan
+            $totalTitipan = (clone $baseOtherQuery)
+                ->where('sifat_pemasukan', 'titipan')
+                ->sum('jumlah_pemasukkan');
+
+            // NEW: Laba Pemasukan Lain
+            $labaPemasukanLain = (clone $baseOtherQuery)
+                ->where('sifat_pemasukan', 'laba')
+                ->sum('jumlah_pemasukkan');
+            
+            $pendapatanPemasukanLain = (clone $baseOtherQuery)
+                ->where('sifat_pemasukan', 'pendapatan')
+                ->sum('jumlah_pemasukkan');
+
+            $modalPemasukanLain = (clone $baseOtherQuery)
+                ->where('sifat_pemasukan', 'pendapatan')
+                ->sum('modal_pemasukan');
+
+            $labaPemasukanLain += ($pendapatanPemasukanLain - $modalPemasukanLain);
+            $totalModalPemasukanLain = $modalPemasukanLain;
 
             // Uang real di laci dan bank dari penjualan, pengambilan, dan DP service
             $uangRealDiLaciPenjualanQuery = Penjualan::where('kode_owner', $kode_owner)
@@ -277,7 +293,7 @@ class FinancialReportApiController extends Controller
             // Response data structure mapping
             $reportData = [
                 // CASH FLOW
-                'total_pendapatan' => $totalCashIn,
+                'total_pendapatan' => $totalCashInService + $totalCashInDP + $totalCashInSales + $totalPemasukanLainPendapatanLaba,
                 'total_pengeluaran' => $totalCashOut,
                 'saldo_kas' => $netCashFlow,
                 'uang_real_di_laci' => $uangRealDiLaci,
@@ -288,9 +304,14 @@ class FinancialReportApiController extends Controller
                 'total_pendapatan_service' => $totalCashInService,
                 'dp_service' => $totalCashInDP,
                 'total_penjualan' => $totalCashInSales,
-                'total_pemasukkan_lain' => $totalCashInOther,
+                'total_pemasukkan_lain' => $totalPemasukanLainPendapatanLaba,
                 'total_pemasukkan_lain_cash' => $totalCashInOtherCash,
                 'total_pemasukkan_lain_transfer' => $totalCashInOtherTransfer,
+                
+                // NEW: OTHER INCOME DETAILS
+                'total_titipan' => $totalTitipan,
+                'laba_pemasukan_lain' => $labaPemasukanLain,
+                'total_modal_pemasukan_lain' => $totalModalPemasukanLain,
                 
                 // Expenses Breakdown
                 'total_pengeluaran_toko' => $totalCashOutStore,
@@ -303,12 +324,12 @@ class FinancialReportApiController extends Controller
                 'total_part_luar' => $totalCashOutPartsLuar, // NEW (Replacing total_part_service mix)
                 'total_part_service' => $totalCashOutPartsLuar, // Legacy field for compatibility 
 
-                // PROFIT ANALYSIS (FROM TRAIT - ACCURATE)
+                // PROFIT ANALYSIS (FROM TRAIT - ACCURATE + Pemasukan Lain Laba)
                 'laba_service' => 0, // Combined in laba_kotor now
                 'laba_penjualan' => 0, // Combined in laba_kotor now
-                'total_laba_kotor' => $profitData['laba_kotor'],
+                'total_laba_kotor' => $profitData['laba_kotor'] + $labaPemasukanLain,
                 'total_beban_operasional' => $profitData['total_beban'],
-                'laba_bersih_bisnis' => $profitData['laba_bersih'],
+                'laba_bersih_bisnis' => $profitData['laba_bersih'] + $labaPemasukanLain,
                 'detail_beban' => $profitData['detail_beban'],
                 'detail_hpp' => $profitData['detail_hpp'] ?? [], // NEW: Return detail HPP
 
@@ -318,7 +339,7 @@ class FinancialReportApiController extends Controller
                 'analisis_part_toko' => $this->getPartServiceDetails($kode_owner, $tgl_awal, $tgl_akhir, $cabangId), // Restored
                 
                 // BACKWARD COMPATIBILITY
-                'laba_bersih' => $profitData['laba_bersih'], 
+                'laba_bersih' => $profitData['laba_bersih'] + $labaPemasukanLain, 
 
                 // META
                 'periode' => [
@@ -403,14 +424,36 @@ class FinancialReportApiController extends Controller
         // 1. Profit Summary (Operational)
         $labaResult = $this->financialService->calculateNetProfit($ownerId, $date, $date, $cabangId);
         
-        $totalRevenue = $labaResult['laba_kotor'] + ($labaResult['detail_beban']['HPP (Modal Pokok Penjualan)'] ?? 0);
+        // Fetch Pemasukan Lain untuk hari ini
+        $baseOtherQuery = PemasukkanLain::where('kode_owner', $ownerId)
+            ->whereBetween('created_at', [$date . ' 00:00:00', $date . ' 23:59:59']);
+        if ($cabangId) {
+            $shiftIds = \App\Models\Shift::where('cabang_id', $cabangId)->pluck('id');
+            $baseOtherQuery->whereIn('shift_id', $shiftIds);
+        }
+
+        $labaPemasukanLain = (clone $baseOtherQuery)
+            ->where('sifat_pemasukan', 'laba')
+            ->sum('jumlah_pemasukkan');
+        
+        $pendapatanPemasukanLain = (clone $baseOtherQuery)
+            ->where('sifat_pemasukan', 'pendapatan')
+            ->sum('jumlah_pemasukkan');
+            
+        $modalPemasukanLain = (clone $baseOtherQuery)
+            ->where('sifat_pemasukan', 'pendapatan')
+            ->sum('modal_pemasukan');
+            
+        $labaPemasukanLain += ($pendapatanPemasukanLain - $modalPemasukanLain);
+        
+        $totalRevenue = $labaResult['laba_kotor'] + ($labaResult['detail_beban']['HPP (Modal Pokok Penjualan)'] ?? 0) + $labaPemasukanLain;
         
         $operatingExpenses = ($labaResult['detail_beban']['Biaya Operasional Lokal'] ?? 0) 
                              + ($labaResult['detail_beban']['Biaya Komisi Teknisi'] ?? 0);
                              
         $depreciation = $labaResult['detail_beban']['Beban Penyusutan Aset'] ?? 0;
         $bebanTetap = $labaResult['detail_beban']['Beban Tetap Periodik'] ?? 0;
-        $netProfit = $labaResult['laba_bersih'];
+        $netProfit = $labaResult['laba_bersih'] + $labaPemasukanLain;
 
         // 2. Inventory Value (ASSET) - Hanya dihitung di level Owner/Holding (jika cabangId null)
         $inventoryValue = 0;
@@ -1129,7 +1172,17 @@ class FinancialReportApiController extends Controller
                 if ($cabangId) {
                     $otherIncomeQuery->whereIn('shift_id', $shiftIds);
                 }
-                $otherIncome = $otherIncomeQuery->sum('jumlah_pemasukkan');
+                $otherIncomeList = $otherIncomeQuery->get();
+                
+                $otherIncome = 0;
+                foreach ($otherIncomeList as $p) {
+                    $sifat = $p->sifat_pemasukan ?? 'laba';
+                    if ($sifat === 'laba') {
+                        $otherIncome += $p->jumlah_pemasukkan;
+                    } else if ($sifat === 'pendapatan') {
+                        $otherIncome += ($p->jumlah_pemasukkan - $p->modal_pemasukan);
+                    }
+                }
 
                 // Pengeluaran harian
                 $partLuarExpenseQuery = DetailPartLuarService::join('sevices', 'detail_part_luar_services.kode_services', '=', 'sevices.id')

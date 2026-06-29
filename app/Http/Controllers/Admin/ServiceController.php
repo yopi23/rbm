@@ -727,8 +727,10 @@ class ServiceController extends Controller
                     $violationPercentage = \DB::table('violations')
                         ->where('user_id', $id_teknisi)
                         ->where('status', 'processed')
-                        ->whereYear('violation_date', $serviceDate->year)
-                        ->whereMonth('violation_date', $serviceDate->month)
+                        ->whereBetween('violation_date', [
+                            (clone $serviceDate)->subDays(14)->toDateString(),
+                            $serviceDate->toDateString()
+                        ])
                         ->sum('penalty_percentage') ?? 0;
 
                     $adjustedPercentage = max(0, $presentase->percentage_value - $violationPercentage);

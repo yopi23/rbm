@@ -35,10 +35,21 @@ class CommissionController extends Controller
             $avgShopLoadPercentage = $avgPercentage ?? 0;
 
 
+            $fourteenDaysAgo = Carbon::parse($date)->subDays(14)->toDateString();
+
+            $violationSub = DB::table('violations')
+                ->select('user_id', DB::raw('SUM(penalty_percentage) as total_penalty_percentage'))
+                ->where('status', 'processed')
+                ->whereBetween('violation_date', [$fourteenDaysAgo, Carbon::parse($date)->toDateString()])
+                ->groupBy('user_id');
+
             // LANGKAH 2: Gunakan rata-rata persentase dalam query utama
             $commissions = DB::table('users')
                 ->join('user_details', 'users.id', '=', 'user_details.kode_user')
                 ->join('salary_settings', 'users.id', '=', 'salary_settings.user_id')
+                ->leftJoinSub($violationSub, 'v', function($join) {
+                    $join->on('users.id', '=', 'v.user_id');
+                })
                 ->leftJoin('sevices', function($join) use ($kode_owner) {
                     $join->on('users.id', '=', 'sevices.id_teknisi')
                         ->where('sevices.kode_owner', '=', $kode_owner);
@@ -52,17 +63,17 @@ class CommissionController extends Controller
                     'users.id as user_id',
                     'salary_settings.compensation_type',
 
-                    // 1. Nilai untuk DITAMPILKAN (actual_commission) - Tidak berubah
+                    // 1. Nilai untuk DITAMPILKAN (actual_commission) - Sesuai komisi riil di database
                     DB::raw("CASE
                         WHEN salary_settings.compensation_type = 'fixed' THEN 0
-                        ELSE SUM((IFNULL(p.profit, 0) + IFNULL(p.profit_toko, 0)) * salary_settings.max_percentage / 100)
+                        ELSE SUM(CASE WHEN p.kode_service > 0 THEN IFNULL(p.profit, 0) ELSE 0 END)
                     END as actual_commission"),
 
-                    // 2. Nilai untuk DIBANDINGKAN (generated_profit) - DIUBAH TOTAL
+                    // 2. Nilai untuk DIBANDINGKAN (generated_profit) - Mengembalikan potensi komisi sebelum potongan kehadiran agar adil
                     DB::raw("CASE
                         WHEN salary_settings.compensation_type = 'fixed'
-                        THEN SUM(IFNULL(p.profit, 0) + IFNULL(p.profit_toko, 0)) * ({$avgShopLoadPercentage} / 100)
-                        ELSE SUM((IFNULL(p.profit, 0) + IFNULL(p.profit_toko, 0)) * salary_settings.max_percentage / 100)
+                        THEN SUM(CASE WHEN p.kode_service > 0 AND (IFNULL(p.profit, 0) + IFNULL(p.profit_toko, 0)) > 0 THEN (IFNULL(p.profit, 0) + IFNULL(p.profit_toko, 0)) ELSE 0 END) * ({$avgShopLoadPercentage} / 100)
+                        ELSE SUM(CASE WHEN p.kode_service > 0 AND (IFNULL(p.profit, 0) + (IFNULL(p.profit, 0) + IFNULL(p.profit_toko, 0)) * IFNULL(v.total_penalty_percentage, 0) / 100) > 0 THEN (IFNULL(p.profit, 0) + (IFNULL(p.profit, 0) + IFNULL(p.profit_toko, 0)) * IFNULL(v.total_penalty_percentage, 0) / 100) ELSE 0 END)
                     END as generated_profit"),
 
                     DB::raw('COUNT(DISTINCT p.id) as service_count')

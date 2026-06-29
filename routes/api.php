@@ -143,6 +143,13 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::post('/karyawan-manage', [\App\Http\Controllers\Api\EmployeeApiController::class, 'store']);
     Route::put('/karyawan-manage/{id}', [\App\Http\Controllers\Api\EmployeeApiController::class, 'update']);
     Route::delete('/karyawan-manage/{id}', [\App\Http\Controllers\Api\EmployeeApiController::class, 'destroy']);
+    
+    // Violation API Routes
+    Route::get('/karyawan-manage/violations/pdf', [\App\Http\Controllers\Api\EmployeeApiController::class, 'violationsPdf']);
+    Route::get('/karyawan-manage/violations', [\App\Http\Controllers\Api\EmployeeApiController::class, 'violationsIndex']);
+    Route::post('/karyawan-manage/violations', [\App\Http\Controllers\Api\EmployeeApiController::class, 'violationsStore']);
+    Route::post('/karyawan-manage/violations/update-status', [\App\Http\Controllers\Api\EmployeeApiController::class, 'violationsUpdateStatus']);
+    Route::post('/karyawan-manage/violations/reverse-penalty', [\App\Http\Controllers\Api\EmployeeApiController::class, 'reversePenalty']);
 
     //pembeliaan
     // Helper routes
@@ -344,6 +351,7 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
         Route::put('/sales/{id}/cancel', [SalesApiController::class , 'cancelSale']);
         Route::post('/sales/{id}/refund', [SalesApiController::class , 'refundSale']);
         Route::put('/sales/{id}/edit-items', [SalesApiController::class , 'updateSaleItems']);
+        Route::post('/pemasukan/{id}/cairkan', [SalesApiController::class , 'cairkanTitipan']);
 
 
         // **ROUTE SUPPLIERS DARI FILE LAMA - JANGAN DIHAPUS**

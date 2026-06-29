@@ -23,7 +23,10 @@ class PemasukkanLain extends Model
         'jumlah_transfer',
         'metode_bayar',
         'kode_owner',
-        'shift_id'
+        'shift_id',
+        'sifat_pemasukan',
+        'modal_pemasukan',
+        'status_titipan'
     ];
 
     /**

@@ -1293,8 +1293,10 @@ class SparepartApiController extends Controller
                         $violationPercentage = DB::table('violations')
                             ->where('user_id', $id_teknisi)
                             ->where('status', 'processed')
-                            ->whereYear('violation_date', $serviceDate->year)
-                            ->whereMonth('violation_date', $serviceDate->month)
+                            ->whereBetween('violation_date', [
+                                (clone $serviceDate)->subDays(14)->toDateString(),
+                                $serviceDate->toDateString()
+                            ])
                             ->sum('penalty_percentage') ?? 0;
 
                         Log::info("Internal: Violation percentage for technician {$id_teknisi} in the period of {$serviceDate->toDateString()} is {$violationPercentage}%");

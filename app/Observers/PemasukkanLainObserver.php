@@ -103,10 +103,11 @@ class PemasukkanLainObserver
             }
         }
 
+        $sifat = strtoupper($pemasukkanLain->sifat_pemasukan ?? 'LABA');
         KasPerusahaan::create([
             'kode_owner' => $ownerId,
             'tanggal' => $tanggalKas,
-            'deskripsi' => $pemasukkanLain->judul_pemasukan . ($pemasukkanLain->catatan_pemasukkan ? ' - ' . $pemasukkanLain->catatan_pemasukkan : ''),
+            'deskripsi' => "[$sifat] " . $pemasukkanLain->judul_pemasukan . ($pemasukkanLain->catatan_pemasukkan ? ' - ' . $pemasukkanLain->catatan_pemasukkan : ''),
             'debit' => $debit,
             'kredit' => 0,
             'saldo' => $saldoBaru,

@@ -80,8 +80,29 @@ class FinancialService
             SUM(komisi_teknisi) as total_komisi_teknisi
         ')->first();
 
+        // Query PemasukkanLain to exclude titipan and include modal_pemasukan
+        $pemasukanQuery = PemasukkanLain::where('kode_owner', $ownerId)
+            ->whereBetween('created_at', [$startRange->toDateTimeString(), $endRange->toDateTimeString()])
+            ->whereHas('shift', function ($q) {
+                $q->where('status', 'closed');
+            });
+        if ($cabangId) {
+            $pemasukanQuery->whereHas('shift', function ($q) use ($cabangId) {
+                $q->where('cabang_id', $cabangId);
+            });
+        }
+        $pemasukanData = $pemasukanQuery->selectRaw('
+            SUM(CASE WHEN sifat_pemasukan = "titipan" THEN jumlah_pemasukkan ELSE 0 END) as total_titipan,
+            SUM(CASE WHEN sifat_pemasukan = "pendapatan" THEN modal_pemasukan ELSE 0 END) as total_modal_pendapatan
+        ')->first();
+
+        $totalTitipan = $pemasukanData->total_titipan ?? 0;
+        $totalModalPendapatan = $pemasukanData->total_modal_pendapatan ?? 0;
+
         $revenue = ($jurnalSummary->total_omset_tunai ?? 0) + ($jurnalSummary->total_omset_non_tunai ?? 0);
-        $hpp = $jurnalSummary->total_hpp ?? 0;
+        $revenue -= $totalTitipan;
+
+        $hpp = ($jurnalSummary->total_hpp ?? 0) + $totalModalPendapatan;
         
         // LABA KOTOR
         $grossProfit = $revenue - $hpp;
