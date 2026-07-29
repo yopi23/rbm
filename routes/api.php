@@ -462,6 +462,7 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
         // HP (Device Model) Management
         // **ROUTE HP DARI FILE LAMA - JANGAN DIHAPUS**
         Route::get('/hp', [HpApiController::class , 'search']); // Use HpApiController for all /hp routes
+        Route::post('/hp', [HpApiController::class , 'store']); // Create/Add HP & auto-create master relations
         Route::get('/hp/search', [HpApiController::class , 'search']);
         Route::get('/hp/type', [HpApiController::class , 'searchByType']);
         Route::get('/hp/filters', [HpApiController::class , 'filters']);

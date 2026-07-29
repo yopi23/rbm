@@ -9,7 +9,7 @@ class HpData extends Model
 {
     use HasFactory;
     protected $table = 'hp_datas';
-    protected $fillable = ['brand_id', 'type', 'screen_size_id', 'camera_position_id'];
+    protected $fillable = ['brand_id', 'type', 'code_tg', 'screen_size_id', 'camera_position_id'];
 
     public function brand()
     {

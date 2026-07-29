@@ -80,8 +80,40 @@ class HpController extends Controller
         $screenSizes = ScreenSize::all();
         $cameraPositions = CameraPosition::all();
 
+        // Ambil seluruh Kode Antigores yang ada beserta relasi Brand, Ukuran Layar, dan Posisi Kamera
+        $existingCodes = HpData::select('code_tg', 'brand_id', 'screen_size_id', 'camera_position_id')
+            ->whereNotNull('code_tg')
+            ->where('code_tg', '!=', '')
+            ->with(['brand', 'screenSize', 'cameraPosition'])
+            ->get()
+            ->unique('code_tg')
+            ->values()
+            ->map(function($item) {
+                if (!$item->camera_position_id || !$item->cameraPosition) {
+                    $validCam = HpData::where('code_tg', $item->code_tg)->whereNotNull('camera_position_id')->with('cameraPosition')->first();
+                    if ($validCam) {
+                        $item->camera_position_id = $validCam->camera_position_id;
+                        $item->cameraPosition = $validCam->cameraPosition;
+                    }
+                }
+                if (!$item->screen_size_id || !$item->screenSize) {
+                    $validSize = HpData::where('code_tg', $item->code_tg)->whereNotNull('screen_size_id')->with('screenSize')->first();
+                    if ($validSize) {
+                        $item->screen_size_id = $validSize->screen_size_id;
+                        $item->screenSize = $validSize->screenSize;
+                    }
+                }
+                $models = HpData::where('code_tg', $item->code_tg)->pluck('type')->toArray();
+                $item->models_str = implode(', ', $models);
+                $brandName = $item->brand ? $item->brand->name : 'Umum';
+                $modelsShort = implode(', ', array_slice($models, 0, 3));
+                if (count($models) > 3) $modelsShort .= '...';
+                $item->display_label = "{$brandName} {$modelsShort} (Kode: {$item->code_tg})";
+                return $item;
+            });
+
         $page = 'Tambah Data HP Baru';
-        $content = view('admin.page.tg.create', compact('brands', 'screenSizes', 'cameraPositions'))->render();
+        $content = view('admin.page.tg.create', compact('brands', 'screenSizes', 'cameraPositions', 'existingCodes'))->render();
         return view('admin.layout.blank_page', compact('page', 'content'));
     }
 
@@ -92,27 +124,53 @@ class HpController extends Controller
         if (!$activeShift) {
             return redirect()->back()->with('error', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
         }
-        $tipeList = $request->input('tipe_hp'); // array: ['a3s', 'a5s', 'a7s']
-        $tipeArray = array_map('trim', explode(',', $tipeList)); // ['a3s', 'a5s', 'a7s']
 
-        $ukuran = $request->input('screen_size_id'); // array: ['a3s' => '6.2"', 'a5s' => '6.5"', ...]
-        $kamera = $request->input('camera_position_id');
-        $brand  = $request->input('brand_id');
+        $brandId = $request->input('brand_id');
+        if ($brandId === 'NEW' || empty($brandId)) {
+            $newBrandName = trim($request->input('new_brand') ?? 'Umum');
+            $brandObj = Brand::firstOrCreate(['name' => $newBrandName]);
+            $brandId = $brandObj->id;
+        }
+
+        $screenSizeId = $request->input('screen_size_id');
+        if ($screenSizeId === 'NEW' || empty($screenSizeId)) {
+            $newScreenSize = trim($request->input('new_screen_size') ?? '6.5 inch');
+            $sizeObj = ScreenSize::firstOrCreate(['size' => $newScreenSize]);
+            $screenSizeId = $sizeObj->id;
+        }
+
+        $cameraPosId = $request->input('camera_position_id');
+        if ($cameraPosId === 'NEW' || empty($cameraPosId)) {
+            $newCamPos = trim($request->input('new_camera_position') ?? 'Waterdrop');
+            $newCamGroup = trim($request->input('new_camera_group') ?? 'A');
+            $camObj = CameraPosition::firstOrCreate(
+                ['position' => $newCamPos],
+                ['group' => $newCamGroup]
+            );
+            $cameraPosId = $camObj->id;
+        }
+
+        $codeTg = $request->input('code_tg');
+        if ($codeTg === 'NEW' || empty($codeTg)) {
+            $codeTg = trim($request->input('new_code_tg') ?? '');
+        }
 
         foreach ($tipeArray as $tipe) {
             if ($tipe === '') continue;
-            $data = [
-                'type' => $tipe,
-                'screen_size_id' => $ukuran,
-                'camera_position_id' => $kamera,
-                'brand_id' => $brand,
-            ];
-
-            // Simpan ke database, misal:
-            HpData::create($data); // pastikan model HpModel diatur fillable-nya
+            HpData::firstOrCreate(
+                [
+                    'type' => $tipe,
+                    'brand_id' => $brandId,
+                ],
+                [
+                    'code_tg' => $codeTg,
+                    'screen_size_id' => $screenSizeId,
+                    'camera_position_id' => $cameraPosId,
+                ]
+            );
         }
 
-        return redirect()->back()->with('success', 'Data berhasil disimpan!');
+        return redirect()->back()->with('success', 'Data HP berhasil disimpan!');
     }
 
     // Form edit data HP
@@ -138,6 +196,7 @@ class HpController extends Controller
         $validated = $request->validate([
             'brand_id' => 'required|exists:brands,id',
             'type' => 'required|string|max:255',
+            'code_tg' => 'nullable|string|max:50',
             'screen_size_id' => 'required|exists:screen_sizes,id',
             'camera_position_id' => 'required|exists:camera_positions,id'
         ]);

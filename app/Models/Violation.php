@@ -124,6 +124,10 @@ class Violation extends Model
                 }
             } elseif ($this->penalty_amount > 0) {
                 $penaltyAmount = $this->penalty_amount;
+                $userDetail = UserDetail::where('kode_user', $this->user_id)->first();
+                if ($userDetail) {
+                    $userDetail->decrement('saldo', $penaltyAmount);
+                }
             }
         }
 
