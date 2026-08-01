@@ -154,6 +154,40 @@ services:
     #             reservations:
     #                 memory: 256M
 
+    # ---- Laravel Schedule Worker (Cron) ----
+    rbm-scheduler:
+        build:
+            context: .
+            dockerfile: Dockerfile.stb
+        image: rbmdocker
+        user: "1002:1002"
+        container_name: rbm-scheduler
+        restart: unless-stopped
+        working_dir: /www/wwwroot/rbm
+        command: php artisan schedule:work
+        volumes:
+            - .:/www/wwwroot/rbm
+            - ./storage/php.ini:/usr/local/etc/php/conf.d/local.ini
+        env_file:
+            - .env.docker
+        depends_on:
+            - rbm-app
+            - rbm-db
+        deploy:
+            resources:
+                limits:
+                    cpus: '0.25'
+                    memory: 128M
+                reservations:
+                    memory: 64M
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "5m"
+                max-file: "2"
+        networks:
+            - rbm-internal
+
     # ---- Cloudflare Tunnel (Cloudflared) ----
     rbm-tunnel:
         image: cloudflare/cloudflared:latest
@@ -184,4 +218,5 @@ networks:
         driver: bridge
     app-network:
         external: true
+
 
