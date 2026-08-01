@@ -3,7 +3,7 @@ services:
     app:
         build:
             context: .
-            dockerfile: Dockerfile
+            dockerfile: Dockerfile.vps
         image: rbmdocker
         user: "1002:1002"
         container_name: apprbmdocker
@@ -26,6 +26,11 @@ services:
                     memory: 512M    # Maksimal menggunakan 512MB RAM
                 reservations:
                     memory: 128M
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
         networks:
             - rbmnet
         platform: linux/amd64
@@ -64,6 +69,11 @@ services:
             - ./certs:/etc/ssl/certs # Folder untuk sertifikat SSL
             - ./keys:/etc/ssl/private # Folder untuk private key SSL
             - /etc/letsencrypt:/etc/letsencrypt:ro
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
         networks:
             - rbmnet
         platform: linux/amd64
@@ -83,6 +93,11 @@ services:
             SERVICE_NAME: mysql
         volumes:
             - lbdata:/var/lib/mysql
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
         networks:
             - rbmnet
         platform: linux/amd64
@@ -104,36 +119,41 @@ services:
         restart: unless-stopped
         ports:
             - "7500:80"
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "5m"
+                max-file: "2"
         networks:
             - rbmnet
         platform: linux/amd64
 
-    # n8n Service
-    n8n:
-        image: n8nio/n8n:latest
-        container_name: n8n_rbm
-        restart: unless-stopped
-        ports:
-            - "5678:5678"
-        environment:
-            - N8N_HOST=n8n.yoyoycell.my.id
-            - N8N_PORT=5678
-            - N8N_PROTOCOL=https
-            - NODE_ENV=production
-            - WEBHOOK_URL=https://n8n.yoyoycell.my.id/
-            - GENERIC_TIMEZONE=Asia/Jakarta
-        volumes:
-            - n8n_data:/home/node/.n8n
-        networks:
-            - rbmnet
-        platform: linux/amd64
-        deploy:
-            resources:
-                limits:
-                    cpus: '0.50'     # Batasi CPU agar tidak 100%
-                    memory: 1G      # n8n cukup berat, beri limit 1GB
-                reservations:
-                    memory: 256M
+    # n8n Service (Belum Digunakan - Nonaktif)
+    # n8n:
+    #     image: n8nio/n8n:latest
+    #     container_name: n8n_rbm
+    #     restart: unless-stopped
+    #     ports:
+    #         - "5678:5678"
+    #     environment:
+    #         - N8N_HOST=n8n.yoyoycell.my.id
+    #         - N8N_PORT=5678
+    #         - N8N_PROTOCOL=https
+    #         - NODE_ENV=production
+    #         - WEBHOOK_URL=https://n8n.yoyoycell.my.id/
+    #         - GENERIC_TIMEZONE=Asia/Jakarta
+    #     volumes:
+    #         - n8n_data:/home/node/.n8n
+    #     networks:
+    #         - rbmnet
+    #     platform: linux/amd64
+    #     deploy:
+    #         resources:
+    #             limits:
+    #                 cpus: '0.50'     # Batasi CPU agar tidak 100%
+    #                 memory: 1G      # n8n cukup berat, beri limit 1GB
+    #             reservations:
+    #                 memory: 256M
 
 networks:
     rbmnet:
@@ -142,5 +162,6 @@ networks:
 volumes:
     lbdata:
         driver: local
-    n8n_data:
-        driver: local
+    # n8n_data:
+    #     driver: local
+

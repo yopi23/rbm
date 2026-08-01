@@ -1,0 +1,187 @@
+# ============================================
+# RBM - Docker Compose (STB / ARM Environment)
+# ============================================
+# Deploy di STB (Set-Top Box / ARM64)
+# menggunakan shared network "app-network".
+#
+# SETUP PERTAMA KALI:
+#   1. Buat shared network jika belum ada:
+#      docker network create app-network
+#
+#   2. Jalankan:
+#      docker compose -f docker-compose.stb.yml up -d --build
+# ============================================
+
+services:
+    # ---- PHP-FPM Application ----
+    rbm-app:
+        build:
+            context: .
+            dockerfile: Dockerfile.stb
+        image: rbmdocker
+        user: "1002:1002"
+        container_name: rbm-app
+        restart: unless-stopped
+        tty: true
+        working_dir: /www/wwwroot/rbm
+        volumes:
+            - .:/www/wwwroot/rbm
+            - ./storage/php.ini:/usr/local/etc/php/conf.d/local.ini
+        env_file:
+            - .env.docker
+        deploy:
+            resources:
+                limits:
+                    cpus: '0.50'     # Maksimal menggunakan 50% CPU
+                    memory: 384M    # Maksimal 384MB RAM (Disesuaikan untuk STB)
+                reservations:
+                    memory: 128M
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+        networks:
+            - rbm-internal
+            - app-network
+
+    # ---- Nginx Web Server ----
+    rbm-nginx:
+        image: nginx:alpine
+        container_name: rbm-nginx
+        restart: unless-stopped
+        tty: true
+        ports:
+            - "${RBM_PORT:-8020}:80"
+        volumes:
+            - .:/www/wwwroot/rbm
+            - ./storage/app.conf.docker:/etc/nginx/conf.d/default.conf:ro
+        depends_on:
+            - rbm-app
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+        networks:
+            - rbm-internal
+            - app-network
+
+    # ---- MariaDB Database ----
+    rbm-db:
+        image: mariadb:10.6
+        container_name: rbm-db
+        restart: unless-stopped
+        tty: true
+        command: --innodb-buffer-pool-size=128M --key-buffer-size=16M # Penghematan RAM untuk STB
+        environment:
+            MYSQL_DATABASE: ${DB_DATABASE:-rbm}
+            MYSQL_USER: ${DB_USERNAME:-Yop1}
+            MYSQL_PASSWORD: ${DB_PASSWORD:-dockerrbm}
+            MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-dockerrbm}
+            SERVICE_TAGS: dev
+            SERVICE_NAME: mysql
+        volumes:
+            - rbm-dbdata:/var/lib/mysql
+        ports:
+            - "${DB_EXTERNAL_PORT:-3308}:3306"
+        healthcheck:
+            test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$${DB_ROOT_PASSWORD:-dockerrbm}"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+        networks:
+            - rbm-internal
+            - app-network
+        deploy:
+            resources:
+                limits:
+                    memory: 512M    # Limit RAM MariaDB di STB (agar tidak OOM)
+
+    # ---- phpMyAdmin (Opsional) ----
+    rbm-pma:
+        image: phpmyadmin
+        container_name: rbm-pma
+        restart: "no"
+        ports:
+            - "${PMA_PORT:-8082}:80"
+        environment:
+            PMA_HOST: rbm-db
+            PMA_PORT: 3306
+            PMA_USER: root
+            PMA_PASSWORD: ${DB_ROOT_PASSWORD:-dockerrbm}
+            MEMORY_LIMIT: 256M
+            UPLOAD_LIMIT: 40M
+        depends_on:
+            - rbm-db
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "5m"
+                max-file: "2"
+        networks:
+            - rbm-internal
+
+    # ---- n8n Service (Belum Digunakan - Nonaktif) ----
+    # rbm-n8n:
+    #     image: n8nio/n8n:latest
+    #     container_name: rbm-n8n
+    #     restart: unless-stopped
+    #     ports:
+    #         - "${N8N_PORT:-5678}:5678"
+    #     environment:
+    #         - N8N_HOST=${N8N_HOST:-n8n.yoyoycell.my.id}
+    #         - N8N_PORT=${N8N_PORT:-5678}
+    #         - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
+    #         - NODE_ENV=production
+    #         - WEBHOOK_URL=http://${N8N_HOST:-n8n.yoyoycell.my.id}/
+    #         - GENERIC_TIMEZONE=Asia/Jakarta
+    #     volumes:
+    #         - rbm-n8n-data:/home/node/.n8n
+    #     networks:
+    #         - rbm-internal
+    #         - app-network
+    #     deploy:
+    #         resources:
+    #             limits:
+    #                 cpus: '0.50'
+    #                 memory: 1G
+    #             reservations:
+    #                 memory: 256M
+
+    # ---- Cloudflare Tunnel (Cloudflared) ----
+    rbm-tunnel:
+        image: cloudflare/cloudflared:latest
+        container_name: rbm-tunnel
+        restart: unless-stopped
+        command: tunnel --no-autoupdate --protocol http2 run
+        environment:
+            - TUNNEL_TOKEN=eyJhIjoiMTM0YmQxMDNlMGU1NzQ5NWNlMGU5NzI1YjU3NTA2YzAiLCJ0IjoiYmIxMWRjODQtZTVmOC00YjQzLWIxNmItNmNkNmI2NGU2Y2YzIiwicyI6Ik4yTmpZemd4WTJJdE1ERmtaQzAwT1RGaExUbG1aREl0WkdZMk5EY3hPR0ppTkRVMCJ9
+        depends_on:
+            - rbm-nginx
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "5m"
+                max-file: "2"
+        networks:
+            - rbm-internal
+            - app-network
+
+volumes:
+    rbm-dbdata:
+        driver: local
+    # rbm-n8n-data:
+    #     driver: local
+
+networks:
+    rbm-internal:
+        driver: bridge
+    app-network:
+        external: true
+

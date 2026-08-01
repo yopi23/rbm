@@ -1,0 +1,66 @@
+FROM php:8.3-fpm-alpine
+
+# Install system dependencies
+RUN apk add --no-cache \
+    git \
+    curl \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    oniguruma-dev \
+    libxml2-dev \
+    zip \
+    unzip \
+    icu-dev \
+    linux-headers \
+    libzip-dev \
+    build-base
+
+# Install PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install \
+        pdo_mysql \
+        mbstring \
+        exif \
+        pcntl \
+        bcmath \
+        gd \
+        zip \
+        intl \
+        opcache
+
+# OPcache config for production
+RUN echo "opcache.enable=1" >> /usr/local/etc/php/conf.d/opcache.ini \
+    && echo "opcache.memory_consumption=128" >> /usr/local/etc/php/conf.d/opcache.ini \
+    && echo "opcache.interned_strings_buffer=8" >> /usr/local/etc/php/conf.d/opcache.ini \
+    && echo "opcache.max_accelerated_files=4000" >> /usr/local/etc/php/conf.d/opcache.ini \
+    && echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/opcache.ini
+
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Set working directory
+WORKDIR /www/wwwroot/rbm
+
+# Copy composer files first for caching
+COPY composer.json composer.lock ./
+
+# Install dependencies (no dev in production)
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
+
+# Copy entire application
+COPY . .
+
+# Generate optimized autoloader
+RUN composer dump-autoload --optimize --no-dev
+
+# Set permissions
+RUN chown -R www-data:www-data /www/wwwroot/rbm \
+    && chmod -R 755 /www/wwwroot/rbm/storage \
+    && chmod -R 755 /www/wwwroot/rbm/bootstrap/cache
+
+# Expose port
+EXPOSE 9000
+
+# Start PHP-FPM
+CMD ["php-fpm"]
