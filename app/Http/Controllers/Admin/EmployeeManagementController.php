@@ -861,6 +861,13 @@ class EmployeeManagementController extends Controller
                 }
             }
 
+            if (($salarySetting->compensation_type === 'percentage' || $salarySetting->compensation_type === 'tiered') && $violation->penalty_amount > 0) {
+                $userDetail = UserDetail::where('kode_user', $violation->user_id)->first();
+                if ($userDetail) {
+                    $userDetail->decrement('saldo', $penaltyAmount);
+                }
+            }
+
             // Simpan nilai nominal denda yang diterapkan untuk catatan & pembatalan
             $violation->update([
                 'applied_penalty_amount' => $penaltyAmount,
@@ -968,6 +975,13 @@ public function reversePenalty(Request $request)
             // Sistem persentase / tiered
             // Karena denda persentase dihitung secara dinamis tiap bulannya,
             // kita tidak perlu memodifikasi salary settings pada pemulihan.
+            // Namun jika denda berupa nominal, kita kembalikan nominal tersebut ke saldo.
+            if ($violation->penalty_amount > 0) {
+                $userDetail = \App\Models\UserDetail::where('kode_user', $violation->user_id)->first();
+                if ($userDetail && $violation->applied_penalty_amount > 0) {
+                    $userDetail->increment('saldo', $violation->applied_penalty_amount);
+                }
+            }
         }
 
         // Update violation dengan data reversal

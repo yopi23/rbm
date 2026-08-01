@@ -133,30 +133,83 @@ class ServiceController extends Controller
         }
 
         $update = modelServices::findOrFail($id);
-        $update->update([
-            'tgl_service' => $request->tgl_service,
-            'nama_pelanggan' => $request->nama_pelanggan,
-            'dp' => $request->dp,
-            'no_telp' => $request->no_telp,
-            'type_unit' => $request->type_unit,
-            'keterangan' => $request->keterangan,
-            'tipe_sandi' => $request->tipe_sandi,
-            'isi_sandi' => $request->isi_sandi,
-            'data_unit' => $request->data_unit,
-            'total_biaya' => $request->total_biaya,
-            // 'created_at' => Carbon::now(),
-        ]);
-        if ($update) {
-            $currentUser = Auth::user();
-            $userDetail = UserDetail::where('kode_user', $currentUser->id)->first();
+        $oldDp = (float) ($update->dp ?? 0);
+        $oldDpMetode = $update->dp_metode ?? 'cash';
+        if ($update->dp_cash !== null || $update->dp_transfer !== null) {
+            $oldDpCash = (float) ($update->dp_cash ?? 0);
+            $oldDpTransfer = (float) ($update->dp_transfer ?? 0);
+        } else {
+            $oldDpCash = ($oldDpMetode === 'transfer') ? 0 : $oldDp;
+            $oldDpTransfer = ($oldDpMetode === 'transfer') ? $oldDp : 0;
+        }
+        $oldLaciId = $update->id_kategorilaci;
 
-            // if ($userDetail->jabatan == '1' || $userDetail->jabatan == '2') {
-            //     return redirect()->route('job');
-            // } else {
+        $newDp = $request->has('dp') ? (float) $request->dp : $oldDp;
+        $newDpMetode = $request->input('dp_metode', $oldDpMetode);
+        $newDpCash = $request->has('dp_cash') ? (float)$request->input('dp_cash') : ($newDpMetode === 'transfer' ? 0 : $newDp);
+        $newDpTransfer = $request->has('dp_transfer') ? (float)$request->input('dp_transfer') : ($newDpMetode === 'transfer' ? $newDp : 0);
+        $newLaciId = $request->has('id_kategorilaci') ? $request->input('id_kategorilaci') : $oldLaciId;
+
+        $isDpModified = ($newDp != $oldDp) ||
+                        ($newDpMetode != $oldDpMetode) ||
+                        ($newDpCash != $oldDpCash) ||
+                        ($newDpTransfer != $oldDpTransfer) ||
+                        ($newLaciId != $oldLaciId);
+
+        if ($isDpModified && $oldDp > 0) {
+            if ($oldDpCash > 0 && $oldLaciId) {
+                $this->recordLaciHistory(
+                    $oldLaciId,
+                    null,
+                    $oldDpCash,
+                    "Rollback DP Cash lama karena update: " . $update->nama_pelanggan . " - " . $update->kode_service,
+                    'service',
+                    $update->id,
+                    $update->kode_service
+                );
+            }
+            if ($oldDpCash > 0) {
+                $this->catatKas($update, 0, $oldDpCash, "Rollback DP Service (Cash) #" . $update->kode_service, now(), true);
+            }
+            if ($oldDpTransfer > 0) {
+                $this->catatKas($update, 0, $oldDpTransfer, "Rollback DP Service (Transfer) #" . $update->kode_service, now(), false);
+            }
+        }
+
+        $update->update([
+            'tgl_service' => $request->tgl_service ?? $update->tgl_service,
+            'nama_pelanggan' => $request->nama_pelanggan ?? $update->nama_pelanggan,
+            'dp' => $newDp,
+            'dp_metode' => $newDpMetode,
+            'dp_cash' => $newDpCash,
+            'dp_transfer' => $newDpTransfer,
+            'id_kategorilaci' => $newLaciId,
+            'no_telp' => $request->no_telp ?? $update->no_telp,
+            'type_unit' => $request->type_unit ?? $update->type_unit,
+            'keterangan' => $request->keterangan ?? $update->keterangan,
+            'tipe_sandi' => $request->tipe_sandi ?? $update->tipe_sandi,
+            'isi_sandi' => $request->isi_sandi ?? $update->isi_sandi,
+            'data_unit' => $request->data_unit ?? $update->data_unit,
+            'total_biaya' => $request->total_biaya ?? $update->total_biaya,
+        ]);
+
+        if ($isDpModified && $newDp > 0) {
+            if ($newDpCash > 0) {
+                $this->catatKas($update, $newDpCash, 0, "DP Service (Cash-Update) #" . $update->kode_service, now(), true);
+                if ($newLaciId) {
+                    $this->recordLaciHistory($newLaciId, $newDpCash, null, "DP Service (Cash-Update): " . $update->nama_pelanggan . " - " . $update->kode_service, 'service', $update->id, $update->kode_service);
+                }
+            }
+            if ($newDpTransfer > 0) {
+                $this->catatKas($update, $newDpTransfer, 0, "DP Service (Transfer-Update) #" . $update->kode_service, now(), false);
+            }
+        }
+
+        if ($update) {
             return redirect()->route('todolist')->with('success', 'Update Data Service Berhasil');
-        // }
         }
     }
+
     public function update_service(Request $request, $id)
     {
         // Check Active Shift
@@ -166,19 +219,78 @@ class ServiceController extends Controller
         }
 
         $update = modelServices::findOrFail($id);
+        $oldDp = (float) ($update->dp ?? 0);
+        $oldDpMetode = $update->dp_metode ?? 'cash';
+        if ($update->dp_cash !== null || $update->dp_transfer !== null) {
+            $oldDpCash = (float) ($update->dp_cash ?? 0);
+            $oldDpTransfer = (float) ($update->dp_transfer ?? 0);
+        } else {
+            $oldDpCash = ($oldDpMetode === 'transfer') ? 0 : $oldDp;
+            $oldDpTransfer = ($oldDpMetode === 'transfer') ? $oldDp : 0;
+        }
+        $oldLaciId = $update->id_kategorilaci;
+
+        $newDp = $request->has('dp') ? (float) $request->dp : $oldDp;
+        $newDpMetode = $request->input('dp_metode', $oldDpMetode);
+        $newDpCash = $request->has('dp_cash') ? (float)$request->input('dp_cash') : ($newDpMetode === 'transfer' ? 0 : $newDp);
+        $newDpTransfer = $request->has('dp_transfer') ? (float)$request->input('dp_transfer') : ($newDpMetode === 'transfer' ? $newDp : 0);
+        $newLaciId = $request->has('id_kategorilaci') ? $request->input('id_kategorilaci') : $oldLaciId;
+
+        $isDpModified = ($newDp != $oldDp) ||
+                        ($newDpMetode != $oldDpMetode) ||
+                        ($newDpCash != $oldDpCash) ||
+                        ($newDpTransfer != $oldDpTransfer) ||
+                        ($newLaciId != $oldLaciId);
+
+        if ($isDpModified && $oldDp > 0) {
+            if ($oldDpCash > 0 && $oldLaciId) {
+                $this->recordLaciHistory(
+                    $oldLaciId,
+                    null,
+                    $oldDpCash,
+                    "Rollback DP Cash lama karena update: " . $update->nama_pelanggan . " - " . $update->kode_service,
+                    'service',
+                    $update->id,
+                    $update->kode_service
+                );
+            }
+            if ($oldDpCash > 0) {
+                $this->catatKas($update, 0, $oldDpCash, "Rollback DP Service (Cash) #" . $update->kode_service, now(), true);
+            }
+            if ($oldDpTransfer > 0) {
+                $this->catatKas($update, 0, $oldDpTransfer, "Rollback DP Service (Transfer) #" . $update->kode_service, now(), false);
+            }
+        }
+
         $update->update([
-            'tgl_service' => $request->tgl_service,
-            'nama_pelanggan' => $request->nama_pelanggan,
-            'no_telp' => $request->no_telp,
-            'type_unit' => $request->type_unit,
-            'keterangan' => $request->keterangan,
-            'tipe_sandi' => $request->tipe_sandi,
-            'isi_sandi' => $request->isi_sandi,
-            'data_unit' => $request->data_unit,
-            'dp' => $request->dp,
-            'total_biaya' => $request->total_biaya,
-            // 'created_at' => Carbon::now(),
+            'tgl_service' => $request->tgl_service ?? $update->tgl_service,
+            'nama_pelanggan' => $request->nama_pelanggan ?? $update->nama_pelanggan,
+            'no_telp' => $request->no_telp ?? $update->no_telp,
+            'type_unit' => $request->type_unit ?? $update->type_unit,
+            'keterangan' => $request->keterangan ?? $update->keterangan,
+            'tipe_sandi' => $request->tipe_sandi ?? $update->tipe_sandi,
+            'isi_sandi' => $request->isi_sandi ?? $update->isi_sandi,
+            'data_unit' => $request->data_unit ?? $update->data_unit,
+            'dp' => $newDp,
+            'dp_metode' => $newDpMetode,
+            'dp_cash' => $newDpCash,
+            'dp_transfer' => $newDpTransfer,
+            'id_kategorilaci' => $newLaciId,
+            'total_biaya' => $request->total_biaya ?? $update->total_biaya,
         ]);
+
+        if ($isDpModified && $newDp > 0) {
+            if ($newDpCash > 0) {
+                $this->catatKas($update, $newDpCash, 0, "DP Service (Cash-Update) #" . $update->kode_service, now(), true);
+                if ($newLaciId) {
+                    $this->recordLaciHistory($newLaciId, $newDpCash, null, "DP Service (Cash-Update): " . $update->nama_pelanggan . " - " . $update->kode_service, 'service', $update->id, $update->kode_service);
+                }
+            }
+            if ($newDpTransfer > 0) {
+                $this->catatKas($update, $newDpTransfer, 0, "DP Service (Transfer-Update) #" . $update->kode_service, now(), false);
+            }
+        }
+
         if ($update) {
             return redirect()->route('all_service')->with('success', 'Update Data Service Berhasil');
         }

@@ -702,10 +702,15 @@ class SparepartApiController extends Controller
                 $service = modelServices::findOrFail($id);
 
                 // 1. Dapatkan data DP lama untuk rollback
-                $oldDp = $service->dp ?? 0;
+                $oldDp = (float) ($service->dp ?? 0);
                 $oldDpMetode = $service->dp_metode ?? 'cash';
-                $oldDpCash = $service->dp_cash ?? (($oldDpMetode === 'transfer') ? 0 : $oldDp);
-                $oldDpTransfer = $service->dp_transfer ?? (($oldDpMetode === 'transfer') ? $oldDp : 0);
+                if ($service->dp_cash !== null || $service->dp_transfer !== null) {
+                    $oldDpCash = (float) ($service->dp_cash ?? 0);
+                    $oldDpTransfer = (float) ($service->dp_transfer ?? 0);
+                } else {
+                    $oldDpCash = ($oldDpMetode === 'transfer') ? 0 : $oldDp;
+                    $oldDpTransfer = ($oldDpMetode === 'transfer') ? $oldDp : 0;
+                }
                 $oldLaciId = $service->id_kategorilaci;
 
                 $validatedData = $request->validate([
@@ -739,7 +744,7 @@ class SparepartApiController extends Controller
 
                 // 2. LOGIKA ROLLBACK DP LAMA (Penting agar tidak double)
                 if ($isDpModified && $oldDp > 0) {
-                    // Rollback cash portion from laci
+                    // Rollback Cash pada Laci Operasional Toko (jika sebelumnya memilih laci)
                     if ($oldDpCash > 0 && $oldLaciId) {
                         $this->recordLaciHistory(
                             $oldLaciId,
@@ -750,6 +755,10 @@ class SparepartApiController extends Controller
                             $service->id,
                             $service->kode_service
                         );
+                    }
+
+                    // Rollback Cash pada Buku Besar Kas Perusahaan (SELALU DIEKSEKUSI jika oldDpCash > 0)
+                    if ($oldDpCash > 0) {
                         $this->catatKas(
                             $service,
                             0,
@@ -760,7 +769,7 @@ class SparepartApiController extends Controller
                         );
                     }
                     
-                    // Rollback transfer portion
+                    // Rollback Transfer pada Buku Besar Kas Perusahaan
                     if ($oldDpTransfer > 0) {
                         $this->catatKas(
                             $service,
@@ -829,10 +838,15 @@ class SparepartApiController extends Controller
 
                 // 4. LOGIKA CATAT DATA BARU
                 if ($isDpModified) {
-                    $newDp = $service->dp ?? 0;
+                    $newDp = (float) ($service->dp ?? 0);
                     $newDpMetode = $service->dp_metode ?? 'cash';
-                    $newDpCash = $service->dp_cash ?? (($newDpMetode === 'transfer') ? 0 : $newDp);
-                    $newDpTransfer = $service->dp_transfer ?? (($newDpMetode === 'transfer') ? $newDp : 0);
+                    if ($service->dp_cash !== null || $service->dp_transfer !== null) {
+                        $newDpCash = (float) ($service->dp_cash ?? 0);
+                        $newDpTransfer = (float) ($service->dp_transfer ?? 0);
+                    } else {
+                        $newDpCash = ($newDpMetode === 'transfer') ? 0 : $newDp;
+                        $newDpTransfer = ($newDpMetode === 'transfer') ? $newDp : 0;
+                    }
                     $newLaciId = $service->id_kategorilaci;
 
                     if ($newDp > 0) {

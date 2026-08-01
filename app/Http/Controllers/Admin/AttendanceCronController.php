@@ -18,7 +18,7 @@ use Illuminate\Http\Request;
 class AttendanceCronController extends Controller
 {
     /**
-     * Auto check absent employees - Run at 9:00 AM
+     * Auto check absent employees - HTTP Endpoint
      */
     public function checkAbsent(Request $request)
     {
@@ -26,28 +26,64 @@ class AttendanceCronController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthorized access'], 401);
         }
 
+        $result = $this->runCheckAbsent();
+        return response()->json($result, $result['success'] ? 200 : 500);
+    }
+
+    /**
+     * Core logic for auto check absent employees
+     */
+    public function runCheckAbsent(): array
+    {
         try {
             $today = Carbon::today();
             $currentTime = Carbon::now();
+            $dayEnglish = $today->format('l');
+
+            // Map English day to Indonesian day names in case schedule is saved in ID
+            $dayMap = [
+                'Monday' => 'Senin',
+                'Tuesday' => 'Selasa',
+                'Wednesday' => 'Rabu',
+                'Thursday' => 'Kamis',
+                'Friday' => 'Jumat',
+                'Saturday' => 'Sabtu',
+                'Sunday' => 'Minggu',
+            ];
+            $dayIndo = $dayMap[$dayEnglish] ?? $dayEnglish;
 
             Log::info('=== AUTO ABSENT CHECK STARTED ===', ['date' => $today->toDateString(), 'time' => $currentTime->toTimeString()]);
 
             DB::beginTransaction();
 
             $employees = User::join('user_details', 'users.id', '=', 'user_details.kode_user')
-                ->whereIn('user_details.jabatan', [2, 3])
+                ->whereIn('user_details.jabatan', ['2', '3', 2, 3])
                 ->get(['users.*', 'user_details.*', 'users.id as id_user']);
 
             $alphaCount = 0;
             $violationCount = 0;
+            $details = [];
 
             foreach ($employees as $employee) {
+                $employeeName = $employee->fullname ?? $employee->name ?? 'User #' . $employee->id_user;
+
+                // Match schedule by English or Indonesian day_of_week
                 $schedule = WorkSchedule::where('user_id', $employee->id_user)
-                    ->where('day_of_week', $today->format('l'))
+                    ->where(function($q) use ($dayEnglish, $dayIndo) {
+                        $q->where('day_of_week', $dayEnglish)
+                          ->orWhere('day_of_week', $dayIndo)
+                          ->orWhere('day_of_week', strtolower($dayEnglish))
+                          ->orWhere('day_of_week', strtolower($dayIndo));
+                    })
                     ->where('is_working_day', true)
                     ->first();
 
                 if (!$schedule) {
+                    $details[] = [
+                        'user_id' => $employee->id_user,
+                        'name' => $employeeName,
+                        'status' => 'Libur / Tidak ada jadwal hari ini (' . $dayEnglish . ')'
+                    ];
                     continue;
                 }
 
@@ -66,6 +102,18 @@ class AttendanceCronController extends Controller
                     if ($violation) {
                         $violationCount++;
                     }
+
+                    $details[] = [
+                        'user_id' => $employee->id_user,
+                        'name' => $employeeName,
+                        'status' => 'ALPHA (Belum Absen -> Ditandai Alpha & Denda)'
+                    ];
+                } else {
+                    $details[] = [
+                        'user_id' => $employee->id_user,
+                        'name' => $employeeName,
+                        'status' => 'Sudah Absen (' . strtoupper($attendanceExists->status) . ')'
+                    ];
                 }
             }
 
@@ -78,15 +126,16 @@ class AttendanceCronController extends Controller
                     'processed_count' => $employees->count(),
                     'alpha_count' => $alphaCount,
                     'violation_count' => $violationCount,
+                    'details' => $details,
                 ]
             ];
             Log::info('=== AUTO ABSENT CHECK COMPLETED ===', $result['data']);
-            return response()->json($result);
+            return $result;
 
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Auto absent check failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-            return response()->json(['success' => false, 'message' => 'Auto absent check failed: ' . $e->getMessage()], 500);
+            return ['success' => false, 'message' => 'Auto absent check failed: ' . $e->getMessage()];
         }
     }
 
@@ -173,7 +222,7 @@ class AttendanceCronController extends Controller
     }
 
     /**
-     * Auto checkout employees - Run at 5:00 PM
+     * Auto checkout employees - HTTP Endpoint
      */
     public function autoCheckout(Request $request)
     {
@@ -181,6 +230,15 @@ class AttendanceCronController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthorized access'], 401);
         }
 
+        $result = $this->runAutoCheckout();
+        return response()->json($result, $result['success'] ? 200 : 500);
+    }
+
+    /**
+     * Core logic for auto checkout employees
+     */
+    public function runAutoCheckout(): array
+    {
         try {
             $today = Carbon::today();
             $currentTime = Carbon::now();
@@ -208,12 +266,12 @@ class AttendanceCronController extends Controller
                 'data' => ['checked_out_count' => $attendances->count()]
             ];
             Log::info('=== AUTO CHECKOUT COMPLETED ===', $result['data']);
-            return response()->json($result);
+            return $result;
 
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Auto checkout failed', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Auto checkout failed: ' . $e->getMessage()], 500);
+            return ['success' => false, 'message' => 'Auto checkout failed: ' . $e->getMessage()];
         }
     }
 

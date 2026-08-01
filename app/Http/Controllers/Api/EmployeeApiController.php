@@ -335,9 +335,18 @@ class EmployeeApiController extends Controller
                 }
             }
 
-            $violations = Violation::where('user_id', $userId)
-                ->orderBy('violation_date', 'desc')
-                ->get();
+            $month = $request->query('month', now()->month);
+            $year = $request->query('year', now()->year);
+            $fetchAll = $request->query('all');
+
+            $query = Violation::where('user_id', $userId);
+            
+            if (!$fetchAll) {
+                $query->whereMonth('violation_date', $month)
+                      ->whereYear('violation_date', $year);
+            }
+
+            $violations = $query->orderBy('violation_date', 'desc')->get();
 
             return response()->json([
                 'success' => true,
@@ -576,6 +585,12 @@ class EmployeeApiController extends Controller
                     }
                     $pp->delete();
                 }
+            } elseif (($salarySetting->compensation_type === 'percentage' || $salarySetting->compensation_type === 'tiered') && $violation->penalty_amount > 0) {
+                // Refund nominal denda ke saldo
+                $userDetail = UserDetail::where('kode_user', $violation->user_id)->first();
+                if ($userDetail && $violation->applied_penalty_amount > 0) {
+                    $userDetail->increment('saldo', $violation->applied_penalty_amount);
+                }
             }
 
             $violation->update([
@@ -714,6 +729,11 @@ class EmployeeApiController extends Controller
                         'profit_toko' => 0,
                         'is_cair' => 0,
                     ]);
+                }
+            } elseif (($salarySetting->compensation_type === 'percentage' || $salarySetting->compensation_type === 'tiered') && $violation->penalty_amount > 0) {
+                $userDetail = UserDetail::where('kode_user', $violation->user_id)->first();
+                if ($userDetail) {
+                    $userDetail->decrement('saldo', $penaltyAmount);
                 }
             }
 
