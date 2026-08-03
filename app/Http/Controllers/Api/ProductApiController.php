@@ -201,7 +201,7 @@ class ProductApiController extends Controller
                 ]);
 
                 // Create default ProductVariant
-                ProductVariant::create([
+                $variant = ProductVariant::create([
                     'sparepart_id' => $product->id,
                     'sku' => $kode_sparepart,
                     'purchase_price' => $product->harga_beli,
@@ -210,6 +210,8 @@ class ProductApiController extends Controller
                     'internal_price' => $product->harga_jual,
                     'stock' => $product->stok_sparepart,
                 ]);
+
+                $this->syncVariantAttributes($request, $variant);
 
                 $freshProduct = Sparepart::withoutGlobalScope(\App\Scopes\ActiveScope::class)
                     ->with(['kategori', 'supplier', 'variants.attributeValues.attribute'])
@@ -394,6 +396,7 @@ class ProductApiController extends Controller
                         'internal_price' => $product->harga_jual,
                         'stock' => $product->stok_sparepart,
                     ]);
+                    $this->syncVariantAttributes($request, $variant);
                 }
 
                 $freshProduct = Sparepart::withoutGlobalScope(\App\Scopes\ActiveScope::class)
@@ -562,6 +565,49 @@ class ProductApiController extends Controller
             'created_at' => $product->created_at,
             'updated_at' => $product->updated_at,
         ];
+    }
+
+    /**
+     * Helper to extract attribute_value IDs from request and sync to ProductVariant.
+     */
+    private function syncVariantAttributes(Request $request, ProductVariant $variant)
+    {
+        $attributeValueIds = [];
+
+        if ($request->has('attributes')) {
+            $raw = $request->input('attributes');
+            if (is_string($raw)) {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    $attributeValueIds = array_values(array_filter($decoded));
+                }
+            } elseif (is_array($raw)) {
+                $attributeValueIds = array_values(array_filter($raw));
+            }
+        } elseif ($request->has('attributes_json')) {
+            $raw = $request->input('attributes_json');
+            if (is_string($raw)) {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    $attributeValueIds = array_values(array_filter($decoded));
+                }
+            }
+        } elseif ($request->has('attribute_values')) {
+            $raw = $request->input('attribute_values');
+            if (is_array($raw)) {
+                $attributeValueIds = array_values(array_filter($raw));
+            }
+        } elseif ($request->has('attribute_value_ids')) {
+            $raw = $request->input('attribute_value_ids');
+            if (is_array($raw)) {
+                $attributeValueIds = array_values(array_filter($raw));
+            }
+        }
+
+        if ($request->has('attributes') || $request->has('attributes_json') || $request->has('attribute_values') || $request->has('attribute_value_ids')) {
+            $cleanIds = array_map('intval', array_filter($attributeValueIds, fn($val) => !is_null($val) && $val !== ''));
+            $variant->attributeValues()->sync($cleanIds);
+        }
     }
     /**
      * Toggle visibility (is_active) of a product.
