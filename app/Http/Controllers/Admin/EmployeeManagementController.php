@@ -162,6 +162,7 @@ class EmployeeManagementController extends Controller
                     [
                         'check_in' => Carbon::now(),
                         'status' => 'hadir',
+                        'approval_status' => 'approved',
                         'location' => 'Scanned by Admin: ' . $admin->name,
                         'late_minutes' => $lateMinutes,
                         'created_by' => $adminId,
@@ -430,6 +431,7 @@ class EmployeeManagementController extends Controller
             [
                 'check_in' => $checkInTime,
                 'status' => 'hadir',
+                'approval_status' => 'approved',
                 'photo_in' => $photoPath,
                 'location' => $request->location,
                 'late_minutes' => $lateMinutes,
@@ -536,15 +538,38 @@ class EmployeeManagementController extends Controller
 
         $date = Carbon::parse($request->date);
 
+        // Batasi izin maksimal 1x per minggu
+        if ($request->type === 'izin') {
+            $startOfWeek = $date->copy()->startOfWeek();
+            $endOfWeek = $date->copy()->endOfWeek();
+
+            $existingWeeklyLeave = Attendance::where('user_id', $request->user_id)
+                ->whereBetween('attendance_date', [$startOfWeek, $endOfWeek])
+                ->where('status', 'izin')
+                ->where('approval_status', '!=', 'rejected')
+                ->whereDate('attendance_date', '!=', $date->toDateString())
+                ->first();
+
+            if ($existingWeeklyLeave) {
+                $errMsg = 'Batas pengajuan izin maksimal 1x dalam 1 minggu. Karyawan sudah memiliki izin pada minggu ini (tanggal ' . Carbon::parse($existingWeeklyLeave->attendance_date)->format('d/m/Y') . ').';
+                if ($request->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => $errMsg], 400);
+                }
+                return redirect()->back()->with('error', $errMsg);
+            }
+        }
+
         // Create attendance with status leave
-        Attendance::updateOrCreate(
+        $attendance = Attendance::updateOrCreate(
             [
                 'user_id' => $request->user_id,
                 'attendance_date' => $date,
             ],
             [
                 'status' => $request->type,
+                'approval_status' => 'pending',
                 'note' => $request->note,
+                'rejection_reason' => null,
                 'created_by' => auth()->id(),
             ]
         );
@@ -552,11 +577,219 @@ class EmployeeManagementController extends Controller
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
-                'message' => 'Permintaan izin berhasil dibuat'
+                'message' => 'Permintaan izin berhasil dibuat',
+                'data' => $attendance
             ]);
         }
 
         return redirect()->back()->with('success', 'Permintaan izin berhasil dibuat');
+    }
+
+    /**
+     * Reject Leave Request (Web & API)
+     */
+    public function rejectLeave(Request $request)
+    {
+        $request->validate([
+            'attendance_id' => 'nullable|exists:attendances,id',
+            'user_id' => 'nullable|exists:users,id',
+            'date' => 'nullable|date',
+            'reason' => 'required|string|min:3',
+        ]);
+
+        $adminId = auth()->id();
+        $adminDetail = UserDetail::where('kode_user', $adminId)->first();
+
+        if (!$adminDetail || !in_array($adminDetail->jabatan, [1, 0])) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hanya admin yang dapat menolak izin.'
+                ], 403);
+            }
+            return redirect()->back()->with('error', 'Hanya admin yang dapat menolak izin.');
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $attendance = null;
+            if ($request->attendance_id) {
+                $attendance = Attendance::find($request->attendance_id);
+            } elseif ($request->user_id && $request->date) {
+                $attendance = Attendance::where('user_id', $request->user_id)
+                    ->whereDate('attendance_date', Carbon::parse($request->date))
+                    ->first();
+            }
+
+            if (!$attendance) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Data permohonan izin tidak ditemukan.'
+                    ], 404);
+                }
+                return redirect()->back()->with('error', 'Data permohonan izin tidak ditemukan.');
+            }
+
+            // Validate owner access
+            if (!$this->validateUserOwnerAccess($attendance->user_id)) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Tidak memiliki akses ke karyawan ini.'
+                    ], 403);
+                }
+                return redirect()->back()->with('error', 'Tidak memiliki akses ke karyawan ini.');
+            }
+
+            // Update attendance record as rejected
+            $attendance->update([
+                'approval_status' => 'rejected',
+                'rejection_reason' => $request->reason,
+                'approved_by' => $adminId,
+                'approved_at' => now(),
+            ]);
+
+            DB::commit();
+
+            // Send FCM notification to employee
+            try {
+                $employee = User::find($attendance->user_id);
+                if ($employee && !empty($employee->fcm_token)) {
+                    $dateStr = Carbon::parse($attendance->attendance_date)->format('d M Y');
+                    FCMService::sendNotification(
+                        $employee->fcm_token,
+                        'Pengajuan Izin Ditolak ⚠️',
+                        "Pengajuan izin Anda untuk tanggal $dateStr ditolak oleh Admin.\nAlasan: {$request->reason}\nHarap tetap hadir dan melakukan absensi.",
+                        [
+                            'type' => 'leave_rejected',
+                            'attendance_id' => (string)$attendance->id,
+                            'date' => Carbon::parse($attendance->attendance_date)->format('Y-m-d'),
+                            'reason' => (string)$request->reason,
+                        ]
+                    );
+                }
+            } catch (\Exception $fcmError) {
+                Log::error('Failed to send FCM for rejected leave: ' . $fcmError->getMessage());
+            }
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Permohonan izin berhasil ditolak. Karyawan dapat melakukan check-in.',
+                    'data' => $attendance->fresh()
+                ]);
+            }
+
+            return redirect()->back()->with('success', 'Permohonan izin berhasil ditolak. Karyawan dapat melakukan check-in.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error rejecting leave: ' . $e->getMessage());
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal menolak izin: ' . $e->getMessage()
+                ], 500);
+            }
+
+            return redirect()->back()->with('error', 'Gagal menolak izin: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Approve Leave Request (Web & API)
+     */
+    public function approveLeave(Request $request)
+    {
+        $request->validate([
+            'attendance_id' => 'required|exists:attendances,id',
+        ]);
+
+        $adminId = auth()->id();
+        $adminDetail = UserDetail::where('kode_user', $adminId)->first();
+
+        if (!$adminDetail || !in_array($adminDetail->jabatan, [1, 0])) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hanya admin yang dapat menyetujui izin.'
+                ], 403);
+            }
+            return redirect()->back()->with('error', 'Hanya admin yang dapat menyetujui izin.');
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $attendance = Attendance::findOrFail($request->attendance_id);
+
+            // Validate owner access
+            if (!$this->validateUserOwnerAccess($attendance->user_id)) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Tidak memiliki akses ke karyawan ini.'
+                    ], 403);
+                }
+                return redirect()->back()->with('error', 'Tidak memiliki akses ke karyawan ini.');
+            }
+
+            $attendance->update([
+                'approval_status' => 'approved',
+                'rejection_reason' => null,
+                'approved_by' => $adminId,
+                'approved_at' => now(),
+            ]);
+
+            DB::commit();
+
+            // Send FCM notification to employee
+            try {
+                $employee = User::find($attendance->user_id);
+                if ($employee && !empty($employee->fcm_token)) {
+                    $dateStr = Carbon::parse($attendance->attendance_date)->format('d M Y');
+                    $typeLabel = ucfirst($attendance->status ?? 'Izin');
+                    FCMService::sendNotification(
+                        $employee->fcm_token,
+                        "Pengajuan $typeLabel Disetujui ✅",
+                        "Pengajuan $typeLabel Anda untuk tanggal $dateStr telah disetujui oleh Admin.",
+                        [
+                            'type' => 'leave_approved',
+                            'attendance_id' => (string)$attendance->id,
+                            'date' => Carbon::parse($attendance->attendance_date)->format('Y-m-d'),
+                        ]
+                    );
+                }
+            } catch (\Exception $fcmError) {
+                Log::error('Failed to send FCM for approved leave: ' . $fcmError->getMessage());
+            }
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Permohonan izin berhasil disetujui.',
+                    'data' => $attendance->fresh()
+                ]);
+            }
+
+            return redirect()->back()->with('success', 'Permohonan izin berhasil disetujui.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error approving leave: ' . $e->getMessage());
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal menyetujui izin: ' . $e->getMessage()
+                ], 500);
+            }
+
+            return redirect()->back()->with('error', 'Gagal menyetujui izin: ' . $e->getMessage());
+        }
     }
 
     // ===================================================================
@@ -2333,6 +2566,14 @@ public function getThisUser()
                 ], 400);
             }
 
+            if ($existingAttendance && in_array($existingAttendance->status, ['izin', 'sakit', 'cuti']) && $existingAttendance->approval_status !== 'rejected') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Karyawan memiliki izin/sakit/cuti hari ini (' . ($existingAttendance->approval_status ?? 'pending') . '). Silakan tolak izin terlebih dahulu jika ingin melakukan check-in.',
+                    'attendance_data' => $existingAttendance
+                ], 400);
+            }
+
             // Get work schedule
             $schedule = WorkSchedule::where('user_id', $request->employee_id)
                 ->where('day_of_week', $today->format('l'))
@@ -2387,6 +2628,7 @@ public function getThisUser()
                 [
                     'check_in' => $checkInTime,
                     'status' => 'hadir',
+                    'approval_status' => 'approved',
                     'location' => 'Manual by Admin: ' . $request->location,
                     'note' => $request->note,
                     'late_minutes' => $lateMinutes,
@@ -2659,7 +2901,7 @@ public function getThisUser()
                     'is_working_day' => $schedule->is_working_day
                 ] : null,
                 'attendance' => $attendance, // Kirim object attendance utuh agar konsisten
-                'can_check_in' => !$attendance || !$attendance->check_in,
+                'can_check_in' => (!$attendance || !$attendance->check_in) && (!in_array($attendance->status ?? '', ['izin', 'sakit', 'cuti']) || ($attendance->approval_status ?? '') === 'rejected'),
                 'can_check_out' => $attendance && $attendance->check_in && !$attendance->check_out,
                 'is_completed' => $attendance && $attendance->check_in && $attendance->check_out,
                 'salary_info' => $salaryInfo // Sertakan info gaji dan target
@@ -2878,11 +3120,18 @@ public function getThisUser()
 
             // Format data untuk dropdown/selection di mobile
             $formattedEmployees = $employees->map(function($employee) {
+                $roleName = $employee->jabatan == 2 ? 'Kasir' : ($employee->jabatan == 3 ? 'Teknisi' : 'Karyawan');
                 return [
                     'id' => $employee->id_user,
+                    'kode_user' => $employee->id_user,
                     'name' => $employee->name,
-                    'jabatan' => $employee->jabatan == 2 ? 'Kasir' : 'Teknisi',
+                    'fullname' => $employee->name,
+                    'nama' => $employee->name,
+                    'role' => $roleName,
+                    'jabatan' => $roleName,
+                    'jabatan_name' => $roleName,
                     'jabatan_code' => (int) $employee->jabatan,
+                    'saldo' => (float) ($employee->saldo ?? 0),
                     'is_active' => (bool) ($employee->is_active_technician ?? true)
                 ];
             });

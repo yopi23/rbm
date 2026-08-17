@@ -138,6 +138,8 @@
                                                     <i class="fas fa-image"></i>
                                                 </a>
                                             @endif
+                                        @elseif($attendance && in_array($attendance->status, ['izin', 'sakit', 'cuti']) && $attendance->approval_status !== 'rejected')
+                                            <span class="text-muted">-</span>
                                         @else
                                             <button class="btn btn-success btn-sm"
                                                 onclick="showCheckInModal({{ $employee->id_user }})">
@@ -171,11 +173,23 @@
                                                 @break
 
                                                 @case('izin')
-                                                    <span class="badge badge-warning">Izin</span>
+                                                    @if($attendance->approval_status == 'pending')
+                                                        <span class="badge badge-warning">Izin (Pending)</span>
+                                                    @elseif($attendance->approval_status == 'rejected')
+                                                        <span class="badge badge-danger">Izin (Ditolak)</span>
+                                                    @else
+                                                        <span class="badge badge-warning">Izin</span>
+                                                    @endif
                                                 @break
 
                                                 @case('sakit')
-                                                    <span class="badge badge-info">Sakit</span>
+                                                    @if($attendance->approval_status == 'pending')
+                                                        <span class="badge badge-info">Sakit (Pending)</span>
+                                                    @elseif($attendance->approval_status == 'rejected')
+                                                        <span class="badge badge-danger">Sakit (Ditolak)</span>
+                                                    @else
+                                                        <span class="badge badge-info">Sakit</span>
+                                                    @endif
                                                 @break
 
                                                 @case('alpha')
@@ -187,9 +201,21 @@
                                                 @break
 
                                                 @case('cuti')
-                                                    <span class="badge badge-primary">Cuti</span>
+                                                    @if($attendance->approval_status == 'pending')
+                                                        <span class="badge badge-primary">Cuti (Pending)</span>
+                                                    @elseif($attendance->approval_status == 'rejected')
+                                                        <span class="badge badge-danger">Cuti (Ditolak)</span>
+                                                    @else
+                                                        <span class="badge badge-primary">Cuti</span>
+                                                    @endif
                                                 @break
                                             @endswitch
+                                            @if($attendance->note)
+                                                <br><small class="text-muted" title="{{ $attendance->note }}"><i>"{{ Str::limit($attendance->note, 25) }}"</i></small>
+                                            @endif
+                                            @if($attendance->rejection_reason)
+                                                <br><small class="text-danger" title="{{ $attendance->rejection_reason }}"><b>Ditolak:</b> <i>{{ Str::limit($attendance->rejection_reason, 25) }}</i></small>
+                                            @endif
                                         @else
                                             <span class="badge badge-secondary">Belum Absen</span>
                                         @endif
@@ -213,6 +239,21 @@
                                         @endif
                                     </td>
                                     <td>
+                                        @if ($attendance && in_array($attendance->status, ['izin', 'sakit', 'cuti']) && $attendance->approval_status !== 'rejected')
+                                            <div class="btn-group-vertical mb-1 w-100">
+                                                <button class="btn btn-xs btn-danger"
+                                                    onclick="showRejectLeaveModal({{ $attendance->id }}, '{{ addslashes($employee->name) }}')">
+                                                    <i class="fas fa-times-circle"></i> Tolak Izin
+                                                </button>
+                                                @if($attendance->approval_status === 'pending')
+                                                <button class="btn btn-xs btn-success mt-1"
+                                                    onclick="approveLeave({{ $attendance->id }})">
+                                                    <i class="fas fa-check-circle"></i> Setujui
+                                                </button>
+                                                @endif
+                                            </div>
+                                        @endif
+
                                         @if ($employee->is_outside_office)
                                             @php
                                                 $currentLog = App\Models\OutsideOfficeLog::where(
@@ -476,7 +517,71 @@
     </div>
 </div>
 
+<!-- Modal Reject Leave -->
+<div class="modal fade" id="modalRejectLeave">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h4 class="modal-title"><i class="fas fa-times-circle"></i> Tolak Permohonan Izin</h4>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form action="{{ route('admin.attendance.reject-leave') }}" method="POST">
+                @csrf
+                <input type="hidden" name="attendance_id" id="reject_attendance_id">
+                <div class="modal-body">
+                    <p>Anda akan menolak pengajuan izin untuk <strong id="reject_employee_name"></strong>.</p>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> Setelah izin ditolak, karyawan dapat melakukan absensi check-in kembali (keterlambatan akan dihitung jika terlambat dari jadwal).
+                    </div>
+                    <div class="form-group">
+                        <label>Alasan Penolakan <span class="text-danger">*</span></label>
+                        <textarea name="reason" class="form-control" required rows="3"
+                            placeholder="Contoh: Toko sedang ramai, harap tetap masuk kerja / Keterlambatan bukan alasan izin"></textarea>
+                        <small class="form-text text-muted">Alasan ini akan dikirimkan via notifikasi ke karyawan.</small>
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-danger"><i class="fas fa-times"></i> Tolak Izin</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
+    function showRejectLeaveModal(attendanceId, employeeName) {
+        $('#reject_attendance_id').val(attendanceId);
+        $('#reject_employee_name').text(employeeName);
+        $('#modalRejectLeave').modal('show');
+    }
+
+    function approveLeave(attendanceId) {
+        if (confirm('Apakah Anda yakin ingin menyetujui permohonan izin ini?')) {
+            $.ajax({
+                url: "{{ route('admin.attendance.approve-leave') }}",
+                method: 'POST',
+                data: {
+                    _token: "{{ csrf_token() }}",
+                    attendance_id: attendanceId
+                },
+                success: function(response) {
+                    if (response.success) {
+                        alert(response.message);
+                        location.reload();
+                    } else {
+                        alert('Error: ' + response.message);
+                    }
+                },
+                error: function(xhr) {
+                    alert('Terjadi kesalahan: ' + (xhr.responseJSON?.message || 'Unknown error'));
+                }
+            });
+        }
+    }
+
     function showCheckInModal(userId) {
         $('#user_id_check_in').val(userId);
         $('#modalCheckIn').modal('show');
@@ -520,7 +625,7 @@
                     }
                 },
                 error: function(xhr) {
-                    alert('Terjadi kesalahan: ' + xhr.responseJSON?.message || 'Unknown error');
+                    alert('Terjadi kesalahan: ' + (xhr.responseJSON?.message || 'Unknown error'));
                 }
             });
         }
@@ -609,12 +714,6 @@
             });
         } else {
             alert("Geolocation is not supported by this browser.");
-        }
-    }
-
-    function resetOutsideOffice(userId) {
-        if (confirm('Apakah Anda yakin ingin mereset status keluar kantor?')) {
-            window.location.href = "{{ url('admin/attendance/reset-outside') }}/" + userId;
         }
     }
 </script>

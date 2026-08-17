@@ -19,84 +19,82 @@ class ProductSearchService
      * @return LengthAwarePaginator
      */
     public function search(
-    ?string $searchTerm,
-    ?int $categoryId,
-    bool $inStockOnly,
-    int $limit,
-    int $ownerId
-): LengthAwarePaginator
-{
-    $query = ProductVariant::query()
-        // Eager loading Anda sudah sangat baik dan efisien.
-        ->with([
-            'sparepart:id,nama_sparepart,kode_kategori,harga_jual,harga_ecer,harga_pasang,kode_owner,stok_sparepart',
-            'sparepart.kategori:id,nama_kategori',
-            'attributeValues:id,value,attribute_id',
-            'attributeValues.attribute:id,name'
-        ])
-        ->whereHas('sparepart', function ($q) use ($ownerId) {
-            $q->where('kode_owner', $ownerId);
-        });
-
-    if ($inStockOnly) {
-        $query->where('stock', '>', 0);
-    }
-
-    if ($categoryId) {
-        $query->whereHas('sparepart', function ($q) use ($categoryId) {
-            $q->where('kode_kategori', $categoryId);
-        });
-    }
-
-    if ($searchTerm) {
-        // 1. Pecah search term menjadi beberapa kata kunci (keywords)
-        $normalizedInput = str_replace(',', '.', $searchTerm);
-        $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
-
-        // =================================================================
-        // ✅ LOGIKA PENCARIAN BARU YANG LEBIH AKURAT
-        // =================================================================
-        $query->where(function ($q) use ($keywords) {
-            // Klausa ini mencari varian yang cocok dengan SEMUA keyword
-            // di salah satu dari tiga tempat: nama sparepart, nilai atribut, atau SKU.
-
-            // KONDISI 1 (ATAU): Semua keyword ada di NAMA SPAREPART
-            $q->orWhere(function ($nameQuery) use ($keywords) {
-                foreach ($keywords as $keyword) {
-                    $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
-                    $nameQuery->whereHas('sparepart', function ($subQ) use ($pattern) {
-                        $subQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'REGEXP', $pattern);
-                    });
-                }
+        ?string $searchTerm,
+        ?int $categoryId,
+        bool $inStockOnly,
+        int $limit,
+        int $ownerId
+    ): LengthAwarePaginator {
+        $query = ProductVariant::query()
+            ->with([
+                'sparepart:id,nama_sparepart,kode_sparepart,kode_kategori,harga_jual,harga_ecer,harga_pasang,kode_owner,stok_sparepart',
+                'sparepart.kategori:id,nama_kategori',
+                'attributeValues:id,value,attribute_id',
+                'attributeValues.attribute:id,name'
+            ])
+            ->whereHas('sparepart', function ($q) use ($ownerId) {
+                $q->where('kode_owner', $ownerId);
             });
 
-            // KONDISI 2 (ATAU): Semua keyword ada di NILAI ATRIBUT
-            $q->orWhere(function ($attributeQuery) use ($keywords) {
-                foreach ($keywords as $keyword) {
-                    $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
-                    $attributeQuery->whereHas('attributeValues', function ($subQ) use ($pattern) {
-                        $subQ->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
-                    });
-                }
-            });
+        if ($inStockOnly) {
+            $query->where('stock', '>', 0);
+        }
 
-            // KONDISI 3 (ATAU): Semua keyword ada di SKU
-            $q->orWhere(function ($skuQuery) use ($keywords) {
-                foreach ($keywords as $keyword) {
-                    $skuQuery->where(DB::raw('LOWER(sku)'), 'LIKE', '%' . $keyword . '%');
-                }
+        if ($categoryId) {
+            $query->whereHas('sparepart', function ($q) use ($categoryId) {
+                $q->where('kode_kategori', $categoryId);
             });
-        });
-        // =================================================================
+        }
+
+        if ($searchTerm) {
+            // 1. Pecah search term menjadi beberapa kata kunci (keywords)
+            $normalizedInput = str_replace(',', '.', $searchTerm);
+            $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
+
+            // =================================================================
+            // ✅ LOGIKA PENCARIAN BARU YANG LEBIH AKURAT
+            // =================================================================
+            $query->where(function ($q) use ($keywords) {
+                // Klausa ini mencari varian yang cocok dengan SEMUA keyword
+                // di salah satu dari tiga tempat: nama sparepart, nilai atribut, atau SKU.
+
+                // KONDISI 1 (ATAU): Semua keyword ada di NAMA SPAREPART
+                $q->orWhere(function ($nameQuery) use ($keywords) {
+                    foreach ($keywords as $keyword) {
+                        $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
+                        $nameQuery->whereHas('sparepart', function ($subQ) use ($pattern) {
+                            $subQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'REGEXP', $pattern);
+                        });
+                    }
+                });
+
+                // KONDISI 2 (ATAU): Semua keyword ada di NILAI ATRIBUT
+                $q->orWhere(function ($attributeQuery) use ($keywords) {
+                    foreach ($keywords as $keyword) {
+                        $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
+                        $attributeQuery->whereHas('attributeValues', function ($subQ) use ($pattern) {
+                            $subQ->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
+                        });
+                    }
+                });
+
+                // KONDISI 3 (ATAU): Semua keyword ada di SKU
+                $q->orWhere(function ($skuQuery) use ($keywords) {
+                    foreach ($keywords as $keyword) {
+                        $skuQuery->where(DB::raw('LOWER(sku)'), 'LIKE', '%' . $keyword . '%');
+                    }
+                });
+            });
+            // =================================================================
+        }
+
+        $paginatedVariants = $query->paginate($limit);
+
+        // Langsung format hasilnya di sini
+        $paginatedVariants->getCollection()->transform(fn ($variant) => $this->formatVariant($variant));
+
+        return $paginatedVariants;
     }
-
-    $paginatedVariants = $query->paginate($limit);
-
-    // Langsung format hasilnya di sini (tidak diubah)
-    $paginatedVariants->getCollection()->transform(fn ($variant) => $this->formatVariant($variant));
-
-    return $paginatedVariants;
-}
 
     /**
      * Helper untuk memformat satu objek varian.
@@ -124,32 +122,38 @@ class ProductSearchService
 
         $finalWarranty = 0;
 
-         if ($general) {
+        if ($general) {
             $finalWarranty = (!empty($specific->warranty_percentage) && $specific->warranty_percentage > 0)
                 ? $specific->warranty_percentage
                 : $general->warranty_percentage;
         }
 
-        // ✅ Ambil garansi dari price_settings
-        // $warranty = \DB::table('price_settings')
-        //     ->where('kategori_sparepart_id', $variant->sparepart->kode_kategori)
-        //     ->where(function ($q) use ($variant) {
-        //         $attributeValueId = optional($variant->attributeValues->first())->id;
-        //         $q->where('attribute_value_id', $attributeValueId)
-        //         ->orWhereNull('attribute_value_id'); // fallback jika null
-        //     })
-        //     ->where('kode_owner', $variant->sparepart->kode_owner ?? 0)
-        //     ->value('warranty_percentage');
+        $varStock = (int)($variant->stock > 0 ? $variant->stock : $variant->sparepart->stok_sparepart);
+        $retailPrice = (int)($variant->retail_price > 0 ? $variant->retail_price : $variant->sparepart->harga_jual);
+        $wholesalePrice = (int)($variant->wholesale_price > 0 ? $variant->wholesale_price : $variant->sparepart->harga_ecer);
 
         return [
+            'id' => $variant->sparepart->id,
             'variant_id' => $variant->id,
             'sparepart_id' => $variant->sparepart->id,
+            'nama_sparepart' => $variant->sparepart->nama_sparepart,
+            'nama_part' => $variant->sparepart->nama_sparepart,
+            'name' => $displayName,
             'display_name' => $displayName,
-            'harga_internal' => (int)$variant->internal_price,
-            'harga_glosir' => (int)$variant->sparepart->harga_ecer,
-            'jasa' => (int)$variant->sparepart->harga_pasang,
+            'kode_sparepart' => $variant->sku ?: ($variant->sparepart->kode_sparepart ?? ''),
+            'code' => $variant->sku ?: ($variant->sparepart->kode_sparepart ?? ''),
             'sku' => $variant->sku,
-            'stock' => (int)$variant->sparepart->stok_sparepart,
+            'harga_internal' => (int)$variant->internal_price,
+            'harga_jual' => $retailPrice,
+            'harga_ecer' => $retailPrice,
+            'harga_glosir' => $wholesalePrice,
+            'harga_grosir' => $wholesalePrice,
+            'harga_beli' => (int)$variant->purchase_price,
+            'jasa' => (int)$variant->sparepart->harga_pasang,
+            'harga_pasang' => (int)$variant->sparepart->harga_pasang,
+            'stock' => $varStock,
+            'stok_sparepart' => $varStock,
+            'total_stock' => $varStock,
             'prices' => [
                 'purchase' => $variant->purchase_price,
                 'wholesale' => $variant->wholesale_price,
@@ -161,7 +165,8 @@ class ProductSearchService
                 'id' => $variant->sparepart->id,
                 'name' => $variant->sparepart->nama_sparepart,
             ],
-            'category' => optional($variant->sparepart->kategori)->only(['id', 'name']),
+            'category' => optional($variant->sparepart->kategori)->only(['id', 'nama_kategori']),
+            'kategori_sparepart' => optional($variant->sparepart->kategori)->nama_kategori,
             'attributes' => $variant->attributeValues->map(fn ($av) => [
                 'name' => $av->attribute->name,
                 'value' => $av->value,

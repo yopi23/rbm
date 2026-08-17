@@ -61,55 +61,119 @@ class FinancialService
         $calculatedJumlahHariPeriode = $startRange->diffInDays($endRange) + 1;
         $calculatedDaysInMonth = $startRange->daysInMonth;
 
-        // Query Jurnal Harian Cabang
-        $query = JurnalHarianCabang::whereBetween('tanggal', [$startRange->toDateString(), $endRange->toDateString()]);
-
+        // 1. REVENUE & HPP DARI SERVICE
+        $servicesQuery = \App\Models\Sevices::where('kode_owner', $ownerId)
+            ->where('status_services', 'Diambil')
+            ->whereBetween('updated_at', [$startRange->toDateTimeString(), $endRange->toDateTimeString()]);
+        
         if ($cabangId) {
-            $query->where('cabang_id', $cabangId);
-        } else {
-            $query->whereHas('cabang', function ($q) use ($ownerId) {
-                $q->where('kode_owner', $ownerId);
+            $servicesQuery->whereHas('shift', function ($q) use ($cabangId) {
+                $q->where('cabang_id', $cabangId);
             });
         }
+        
+        $services = $servicesQuery->get();
+        $serviceIds = $services->pluck('id');
+        $revenueService = $services->sum(function($s) { return $s->total_biaya - $s->dp; });
 
-        $jurnalSummary = $query->selectRaw('
-            SUM(omset_tunai) as total_omset_tunai,
-            SUM(omset_non_tunai) as total_omset_non_tunai,
-            SUM(hpp_terjual) as total_hpp,
-            SUM(biaya_operasional_lokal) as total_biaya_operasional_lokal,
-            SUM(komisi_teknisi) as total_komisi_teknisi
-        ')->first();
-
-        // Query PemasukkanLain to exclude titipan and include modal_pemasukan
-        $pemasukanQuery = PemasukkanLain::where('kode_owner', $ownerId)
-            ->whereBetween('created_at', [$startRange->toDateTimeString(), $endRange->toDateTimeString()])
-            ->whereHas('shift', function ($q) {
-                $q->where('status', 'closed');
+        // DP Service
+        $dpQuery = \App\Models\Sevices::where('kode_owner', $ownerId)
+            ->whereBetween('created_at', [$startRange->toDateTimeString(), $endRange->toDateTimeString()]);
+        if ($cabangId) {
+            $dpQuery->whereHas('shift', function ($q) use ($cabangId) {
+                $q->where('cabang_id', $cabangId);
             });
+        }
+        $revenueDp = $dpQuery->sum('dp');
+
+        // HPP Service
+        $partTokoHPP = 0;
+        $partLuarHPP = 0;
+        if ($serviceIds->isNotEmpty()) {
+            $partTokoHPP = \App\Models\DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+                ->whereIn('detail_part_services.kode_services', $serviceIds)
+                ->sum(\Illuminate\Support\Facades\DB::raw('CASE 
+                    WHEN detail_part_services.detail_modal_part_service > 0 THEN detail_part_services.detail_modal_part_service 
+                    ELSE spareparts.harga_beli 
+                END * detail_part_services.qty_part'));
+
+            $partLuarHPP = \App\Models\DetailPartLuarService::whereIn('kode_services', $serviceIds)
+                ->sum(\Illuminate\Support\Facades\DB::raw('CASE WHEN harga_beli > 0 THEN harga_beli ELSE harga_part END * qty_part'));
+        }
+
+        // 2. REVENUE & HPP DARI PENJUALAN
+        $penjualanQuery = \App\Models\Penjualan::where('kode_owner', $ownerId)
+            ->where('status_penjualan', '1')
+            ->whereBetween('created_at', [$startRange->toDateTimeString(), $endRange->toDateTimeString()]);
+        
+        if ($cabangId) {
+            $penjualanQuery->whereHas('shift', function ($q) use ($cabangId) {
+                $q->where('cabang_id', $cabangId);
+            });
+        }
+        
+        $penjualans = $penjualanQuery->get();
+        $penjualanIds = $penjualans->pluck('id');
+        $revenuePenjualan = $penjualans->sum('total_penjualan');
+
+        // HPP Penjualan
+        $barangHPP = 0;
+        $sparepartHPP = 0;
+        if ($penjualanIds->isNotEmpty()) {
+            $barangHPP = \App\Models\DetailBarangPenjualan::whereIn('kode_penjualan', $penjualanIds)
+                ->sum(\Illuminate\Support\Facades\DB::raw('detail_harga_modal * qty_barang'));
+
+            $sparepartHPP = \App\Models\DetailSparepartPenjualan::whereIn('kode_penjualan', $penjualanIds)
+                ->sum(\Illuminate\Support\Facades\DB::raw('detail_harga_modal * qty_sparepart'));
+        }
+
+        // 3. PEMASUKAN LAIN (termasuk modal pemasukan untuk HPP)
+        $pemasukanQuery = \App\Models\PemasukkanLain::where('kode_owner', $ownerId)
+            ->whereBetween('created_at', [$startRange->toDateTimeString(), $endRange->toDateTimeString()]);
         if ($cabangId) {
             $pemasukanQuery->whereHas('shift', function ($q) use ($cabangId) {
                 $q->where('cabang_id', $cabangId);
             });
         }
-        $pemasukanData = $pemasukanQuery->selectRaw('
-            SUM(CASE WHEN sifat_pemasukan = "titipan" THEN jumlah_pemasukkan ELSE 0 END) as total_titipan,
-            SUM(CASE WHEN sifat_pemasukan = "pendapatan" THEN modal_pemasukan ELSE 0 END) as total_modal_pendapatan
-        ')->first();
+        
+        // Pendapatan Lain (hanya yang sifatnya laba/pendapatan, bukan titipan)
+        $revenuePemasukanLain = (clone $pemasukanQuery)
+            ->whereIn('sifat_pemasukan', ['laba', 'pendapatan'])
+            ->sum('jumlah_pemasukkan');
+            
+        $totalModalPendapatan = (clone $pemasukanQuery)
+            ->where('sifat_pemasukan', 'pendapatan')
+            ->sum('modal_pemasukan');
 
-        $totalTitipan = $pemasukanData->total_titipan ?? 0;
-        $totalModalPendapatan = $pemasukanData->total_modal_pendapatan ?? 0;
-
-        $revenue = ($jurnalSummary->total_omset_tunai ?? 0) + ($jurnalSummary->total_omset_non_tunai ?? 0);
-        $revenue -= $totalTitipan;
-
-        $hpp = ($jurnalSummary->total_hpp ?? 0) + $totalModalPendapatan;
+        // SUM REVENUE & HPP
+        $revenue = $revenueService + $revenueDp + $revenuePenjualan + $revenuePemasukanLain;
+        $hpp = $partTokoHPP + $partLuarHPP + $barangHPP + $sparepartHPP + $totalModalPendapatan;
         
         // LABA KOTOR
         $grossProfit = $revenue - $hpp;
 
-        // EXPENSES (Beban-beban)
-        $biayaOperasionalLokal = $jurnalSummary->total_biaya_operasional_lokal ?? 0;
-        $biayaKomisi = $jurnalSummary->total_komisi_teknisi ?? 0;
+        // 4. BIAYA OPERASIONAL LOKAL & KOMISI
+        $pengeluaranTokoQuery = \App\Models\PengeluaranToko::where('kode_owner', $ownerId)
+            ->whereBetween('created_at', [$startRange->toDateTimeString(), $endRange->toDateTimeString()]);
+        $pengeluaranOpsQuery = \App\Models\PengeluaranOperasional::where('kode_owner', $ownerId)
+            ->whereNull('beban_operasional_id')
+            ->whereBetween('created_at', [$startRange->toDateTimeString(), $endRange->toDateTimeString()]);
+            
+        if ($cabangId) {
+            $pengeluaranTokoQuery->whereHas('shift', function ($q) use ($cabangId) {
+                $q->where('cabang_id', $cabangId);
+            });
+            $pengeluaranOpsQuery->whereHas('shift', function ($q) use ($cabangId) {
+                $q->where('cabang_id', $cabangId);
+            });
+        }
+        
+        $biayaOperasionalLokal = $pengeluaranTokoQuery->sum('jumlah_pengeluaran') + $pengeluaranOpsQuery->sum('jml_pengeluaran');
+
+        $biayaKomisi = 0;
+        if ($serviceIds->isNotEmpty()) {
+            $biayaKomisi = \App\Models\ProfitPresentase::whereIn('kode_service', $serviceIds)->sum('profit');
+        }
 
         // C. Beban Penyusutan Aset (Depreciation) - Dihitung berdasarkan alokasi Cabang jika cabangId dispesifikasikan
         $queryAset = Aset::where('kode_owner', $ownerId)

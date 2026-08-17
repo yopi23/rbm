@@ -47,6 +47,16 @@
                 @endif
             </div>
             <div class="btn-group">
+                @if (in_array($attendance->status, ['izin', 'sakit', 'cuti']) && $attendance->approval_status !== 'rejected')
+                    <button type="button" class="btn btn-danger mr-1" data-toggle="modal" data-target="#modalRejectLeaveDetail">
+                        <i class="fas fa-times-circle"></i> Tolak Izin
+                    </button>
+                    @if($attendance->approval_status === 'pending')
+                    <button type="button" class="btn btn-success mr-1" onclick="approveLeaveDetail({{ $attendance->id }})">
+                        <i class="fas fa-check-circle"></i> Setujui Izin
+                    </button>
+                    @endif
+                @endif
                 <button type="button" class="btn btn-warning" data-toggle="modal" data-target="#modalEditAttendance">
                     <i class="fas fa-edit"></i> Edit Record
                 </button>
@@ -138,15 +148,23 @@
                                         @break
 
                                         @case('izin')
-                                            <span class="badge badge-warning badge-lg">
-                                                <i class="fas fa-exclamation"></i> Izin
-                                            </span>
+                                            @if($attendance->approval_status == 'pending')
+                                                <span class="badge badge-warning badge-lg"><i class="fas fa-clock"></i> Izin (Menunggu Persetujuan)</span>
+                                            @elseif($attendance->approval_status == 'rejected')
+                                                <span class="badge badge-danger badge-lg"><i class="fas fa-times-circle"></i> Izin (Ditolak)</span>
+                                            @else
+                                                <span class="badge badge-warning badge-lg"><i class="fas fa-exclamation"></i> Izin</span>
+                                            @endif
                                         @break
 
                                         @case('sakit')
-                                            <span class="badge badge-info badge-lg">
-                                                <i class="fas fa-thermometer"></i> Sakit
-                                            </span>
+                                            @if($attendance->approval_status == 'pending')
+                                                <span class="badge badge-info badge-lg"><i class="fas fa-clock"></i> Sakit (Menunggu Persetujuan)</span>
+                                            @elseif($attendance->approval_status == 'rejected')
+                                                <span class="badge badge-danger badge-lg"><i class="fas fa-times-circle"></i> Sakit (Ditolak)</span>
+                                            @else
+                                                <span class="badge badge-info badge-lg"><i class="fas fa-thermometer"></i> Sakit</span>
+                                            @endif
                                         @break
 
                                         @case('alpha')
@@ -162,11 +180,22 @@
                                         @break
 
                                         @case('cuti')
-                                            <span class="badge badge-primary badge-lg">
-                                                <i class="fas fa-plane"></i> Cuti
-                                            </span>
+                                            @if($attendance->approval_status == 'pending')
+                                                <span class="badge badge-primary badge-lg"><i class="fas fa-clock"></i> Cuti (Menunggu Persetujuan)</span>
+                                            @elseif($attendance->approval_status == 'rejected')
+                                                <span class="badge badge-danger badge-lg"><i class="fas fa-times-circle"></i> Cuti (Ditolak)</span>
+                                            @else
+                                                <span class="badge badge-primary badge-lg"><i class="fas fa-plane"></i> Cuti</span>
+                                            @endif
                                         @break
                                     @endswitch
+
+                                    @if($attendance->rejection_reason)
+                                        <div class="mt-2 text-danger">
+                                            <strong>Alasan Penolakan:</strong><br>
+                                            <span class="badge badge-outline-danger p-1">{{ $attendance->rejection_reason }}</span>
+                                        </div>
+                                    @endif
                                 </td>
                             </tr>
                         </table>
@@ -944,6 +973,66 @@
         </div>
     </div>
 </div>
+
+<!-- Modal Reject Leave Detail -->
+<div class="modal fade" id="modalRejectLeaveDetail">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h4 class="modal-title"><i class="fas fa-times-circle"></i> Tolak Permohonan Izin</h4>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form action="{{ route('admin.attendance.reject-leave') }}" method="POST">
+                @csrf
+                <input type="hidden" name="attendance_id" value="{{ $attendance->id }}">
+                <div class="modal-body">
+                    <p>Anda akan menolak pengajuan izin untuk <strong>{{ $attendance->user->name }}</strong>.</p>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> Setelah izin ditolak, karyawan dapat melakukan absensi check-in kembali (keterlambatan akan dihitung jika terlambat dari jadwal).
+                    </div>
+                    <div class="form-group">
+                        <label>Alasan Penolakan <span class="text-danger">*</span></label>
+                        <textarea name="reason" class="form-control" required rows="3"
+                            placeholder="Contoh: Toko sedang ramai, harap tetap masuk kerja / Keterlambatan bukan alasan izin"></textarea>
+                        <small class="form-text text-muted">Alasan ini akan dikirimkan via notifikasi ke karyawan.</small>
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-danger"><i class="fas fa-times"></i> Tolak Izin</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function approveLeaveDetail(attendanceId) {
+        if (confirm('Apakah Anda yakin ingin menyetujui permohonan izin ini?')) {
+            $.ajax({
+                url: "{{ route('admin.attendance.approve-leave') }}",
+                method: 'POST',
+                data: {
+                    _token: "{{ csrf_token() }}",
+                    attendance_id: attendanceId
+                },
+                success: function(response) {
+                    if (response.success) {
+                        alert(response.message);
+                        location.reload();
+                    } else {
+                        alert('Error: ' + response.message);
+                    }
+                },
+                error: function(xhr) {
+                    alert('Terjadi kesalahan: ' + (xhr.responseJSON?.message || 'Unknown error'));
+                }
+            });
+        }
+    }
+</script>
 
 <style>
     .table-borderless td {

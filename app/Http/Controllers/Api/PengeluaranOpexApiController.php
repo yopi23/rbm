@@ -719,8 +719,24 @@ class PengeluaranOpexApiController extends Controller
                                ['user_details.status_user', '=', '1'],
                                ['user_details.id_upline', '=', $this->getThisUser()->id_upline]
                            ])
-                           ->select('users.id', 'users.name')
-                           ->get();
+                           ->select('users.id', 'users.name', 'user_details.fullname', 'user_details.jabatan', 'user_details.saldo')
+                           ->get()
+                           ->map(function($emp) {
+                               $roleName = $emp->jabatan == 2 ? 'Kasir' : ($emp->jabatan == 3 ? 'Teknisi' : 'Karyawan');
+                               return [
+                                   'id' => (int) $emp->id,
+                                   'kode_user' => (int) $emp->id,
+                                   'name' => $emp->name ?: $emp->fullname,
+                                   'fullname' => $emp->fullname ?: $emp->name,
+                                   'nama' => $emp->fullname ?: $emp->name,
+                                   'jabatan' => $roleName,
+                                   'role' => $roleName,
+                                   'jabatan_name' => $roleName,
+                                   'jabatan_code' => (int) $emp->jabatan,
+                                   'saldo' => (float) ($emp->saldo ?? 0),
+                                   'is_active' => true,
+                               ];
+                           });
 
             return response()->json([
                 'success' => true,

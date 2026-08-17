@@ -659,6 +659,8 @@ Route::group(['middleware' => 'checkRole:0,1'], function () {
             Route::post('/update', [EmployeeManagementController::class, 'updateAttendance'])->name('admin.attendance.update');
             Route::delete('/delete', [EmployeeManagementController::class, 'deleteAttendance'])->name('admin.attendance.delete');
             Route::post('/request-leave', [EmployeeManagementController::class, 'requestLeave'])->name('admin.attendance.request-leave');
+            Route::post('/reject-leave', [EmployeeManagementController::class, 'rejectLeave'])->name('admin.attendance.reject-leave');
+            Route::post('/approve-leave', [EmployeeManagementController::class, 'approveLeave'])->name('admin.attendance.approve-leave');
             Route::post('/set-outside', [EmployeeManagementController::class, 'setOutsideOffice'])->name('admin.attendance.set-outside');
             Route::get('/reset-outside/{userId}', [EmployeeManagementController::class, 'resetOutsideOffice'])->name('admin.attendance.reset-outside');
 

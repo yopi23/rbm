@@ -85,14 +85,21 @@ class UserDataController extends Controller
                                 ->select('fullname','saldo','kode_user as id','jabatan','id_upline')
                                 ->get();
 
-            // PERBAIKAN: Cast saldo ke float untuk memastikan tipe data konsisten
+            // PERBAIKAN: Cast saldo ke float dan sediakan alias field lengkap
             $karyawan = $karyawan->map(function($item) {
+                $roleName = $item->jabatan == 3 ? 'Teknisi' : ($item->jabatan == 2 ? 'Kasir' : 'Karyawan');
                 return [
                     'id' => (int) $item->id,
+                    'kode_user' => (int) $item->id,
                     'fullname' => $item->fullname,
+                    'name' => $item->fullname,
+                    'nama' => $item->fullname,
                     'saldo' => (float) $item->saldo,
                     'jabatan' => $item->jabatan,
+                    'role' => $roleName,
+                    'jabatan_name' => $roleName,
                     'id_upline' => (int) $item->id_upline,
+                    'is_active' => true,
                 ];
             });
 
@@ -322,7 +329,11 @@ class UserDataController extends Controller
             );
 
             DB::commit();
-            return response()->json(['success' => true, 'data' => $create], 201);
+            return response()->json([
+                'success' => true,
+                'message' => 'Penarikan saldo berhasil diproses',
+                'data' => $create
+            ], 200);
         }
         DB::rollBack();
         return response()->json(['success' => false, 'message' => 'Gagal menyimpan.'], 500);

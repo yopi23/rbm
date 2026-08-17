@@ -896,10 +896,17 @@ class DashboardController extends Controller
             // --- 5. Proses Spare Part (jika ada) ---
             if ($request->has('items') && is_array($request->items)) {
                 foreach ($request->items as $item) {
-                    $variant = \App\Models\ProductVariant::findOrFail($item['product_variant_id']);
+                    $variant = \App\Models\ProductVariant::where('id', $item['product_variant_id'])
+                        ->lockForUpdate()
+                        ->firstOrFail();
 
                     if ($variant->stock < $item['qty']) {
                         throw new \Exception("Stok tidak cukup untuk: " . $variant->display_name);
+                    }
+
+                    $sparepart = $variant->sparepart ? \App\Models\Sparepart::where('id', $variant->sparepart_id)->lockForUpdate()->first() : null;
+                    if ($sparepart && $sparepart->stok_sparepart < $item['qty']) {
+                        throw new \Exception("Stok tidak cukup untuk: " . $sparepart->nama_sparepart);
                     }
 
                     $partJobName = $item['nama_pekerjaan'] ?? ("Pasang " . $variant->display_name);
@@ -932,8 +939,8 @@ class DashboardController extends Controller
                     ]);
 
                     $variant->decrement('stock', $item['qty']);
-                    if ($variant->sparepart) {
-                        $variant->sparepart->decrement('stok_sparepart', $item['qty']);
+                    if ($sparepart) {
+                        $sparepart->decrement('stok_sparepart', $item['qty']);
                     }
                     $hasJobs = true;
                 }
@@ -968,6 +975,7 @@ class DashboardController extends Controller
 
             return response()->json([
                 'success' => true,
+                'status' => 'success',
                 'message' => 'Service baru berhasil dibuat',
                 'data' => $service
             ], 200);
@@ -975,30 +983,38 @@ class DashboardController extends Controller
         }
         catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
-            return response()->json(['status' => 'error', 'message' => 'Data tidak valid', 'errors' => $e->errors()], 422);
+            return response()->json(['success' => false, 'status' => 'error', 'message' => 'Data tidak valid', 'errors' => $e->errors()], 422);
         }
         catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'status' => 'error', 'message' => $e->getMessage()], 500);
         }
     }
 
 
     private function generateKodeService()
     {
-        // Format tanggal hari ini
         $date = date('Ymd'); // YYYYMMDD
+        
+        // Find last service code for today with locking
+        $lastService = modelServices::where('kode_service', 'like', 'SV' . $date . '%')
+            ->orderBy('id', 'desc')
+            ->lockForUpdate()
+            ->first();
 
-        // Generate nomor acak dalam rentang 000 hingga 999
-        $randomNumber = str_pad(rand(0, 999), 3, '0', STR_PAD_LEFT);
-
-        // Pastikan nomor acak tersebut belum ada dalam database untuk hari yang sama
-        while (modelServices::where('kode_service', 'like', $date . $randomNumber . '%')->exists()) {
-            $randomNumber = str_pad(rand(0, 999), 3, '0', STR_PAD_LEFT);
+        if ($lastService && preg_match('/^SV' . $date . '(\d{3,})$/', $lastService->kode_service, $matches)) {
+            $nextSeq = ((int) $matches[1]) + 1;
+        } else {
+            $nextSeq = 1;
         }
 
-        // Format kode service
-        return 'SV' . $date . $randomNumber;
+        $code = 'SV' . $date . str_pad($nextSeq, 3, '0', STR_PAD_LEFT);
+        while (modelServices::where('kode_service', $code)->exists()) {
+            $nextSeq++;
+            $code = 'SV' . $date . str_pad($nextSeq, 3, '0', STR_PAD_LEFT);
+        }
+
+        return $code;
     }
 
     private function generateKodeToko($kodeOwner)
@@ -1045,26 +1061,45 @@ class DashboardController extends Controller
     // API
     public function get_pending_services(Request $request)
     {
-        // Ambil data service dengan status 'Antri'
-        $services = modelServices::with('customer')->where('kode_owner', $this->getThisUser()->id_upline)
-            ->whereIn('status_services', ['Antri', 'Proses'])
-            ->latest()
-            ->get();
+        try {
+            $perPage = (int) $request->query('per_page', 0);
+            $query = modelServices::with('customer')
+                ->where('kode_owner', $this->getThisUser()->id_upline)
+                ->whereIn('status_services', ['Antri', 'Proses'])
+                ->latest();
 
+            if ($perPage > 0) {
+                $paginated = $query->paginate($perPage);
+                return response()->json([
+                    'success' => true,
+                    'status' => 'success',
+                    'message' => 'Data service yang antri berhasil diambil.',
+                    'data' => $paginated->items(),
+                    'pagination' => [
+                        'current_page' => $paginated->currentPage(),
+                        'last_page' => $paginated->lastPage(),
+                        'total' => $paginated->total(),
+                        'per_page' => $paginated->perPage(),
+                    ]
+                ], 200);
+            }
 
-        // Cek apakah ada data
-        if ($services->isEmpty()) {
+            $services = $query->get();
+
             return response()->json([
+                'success' => true,
                 'status' => 'success',
-                'message' => 'Tidak ada data service yang antri.',
-                'data' => [],
+                'message' => $services->isEmpty() ? 'Tidak ada data service yang antri.' : 'Data service yang antri berhasil diambil.',
+                'data' => $services,
             ], 200);
+        } catch (\Exception $e) {
+            \Log::error('get_pending_services error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'status' => 'error',
+                'message' => 'Gagal mengambil data service antri: ' . $e->getMessage(),
+                'data' => [],
+            ], 500);
         }
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Data service yang antri berhasil diambil.',
-            'data' => $services,
-        ], 200);
     }
 }

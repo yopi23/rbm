@@ -713,8 +713,11 @@ class SparepartApiController extends Controller
                 }
                 $oldLaciId = $service->id_kategorilaci;
 
+                $oldTechnicianId = $service->id_teknisi;
+
                 $validatedData = $request->validate([
                     'nama_pelanggan' => 'nullable|string|max:255',
+                    'id_teknisi'     => 'nullable|exists:users,id',
                     'dp'             => 'nullable|numeric|min:0',
                     'dp_metode'      => 'nullable|string|in:cash,transfer,split',
                     'dp_cash'        => 'nullable|numeric|min:0',
@@ -831,8 +834,9 @@ class SparepartApiController extends Controller
                     }
                 }
 
-                // 3.1. Recalculate Commission if total_biaya or jobs changed and service is completed
-                if (($request->has('total_biaya') || $request->has('jobs')) && in_array(strtolower($service->status_services), ['selesai', 'diambil'])) {
+                // 3.1. Recalculate Commission if total_biaya, jobs, or technician changed and service is completed
+                $isTechChanged = $request->has('id_teknisi') && ($oldTechnicianId != $service->id_teknisi);
+                if (($request->has('total_biaya') || $request->has('jobs') || $isTechChanged) && in_array(strtolower($service->status_services), ['selesai', 'diambil'])) {
                     $this->performCommissionRecalculation($service->id);
                 }
 
@@ -1165,11 +1169,12 @@ class SparepartApiController extends Controller
                 'detail_part_services.harga_garansi',
                 'detail_part_services.is_tanggungan_teknisi',
                 'detail_part_services.user_input',
+                'detail_part_services.service_job_id',
                 'spareparts.harga_jual as harga_jual_master'
             ]);
 
         $part_luar_toko_service = DetailPartLuarService::where('kode_services', $serviceId)
-            ->get(['harga_part', 'qty_part', 'is_tanggungan_teknisi', 'user_input']);
+            ->get(['harga_part', 'qty_part', 'is_tanggungan_teknisi', 'user_input', 'service_job_id']);
 
         // Recalculate total_part (harga_sp) dan total_garansi
         $total_part_for_service = 0; // Harga jual part (untuk customer/harga_sp)
@@ -1204,15 +1209,20 @@ class SparepartApiController extends Controller
         }
 
         $jobsSum = DB::table('service_jobs')->where('service_id', $serviceId)->sum('biaya_jasa') ?? 0;
-        $newTotalBiaya = $jobsSum;
-
-        // Update the service's harga_sp and total_biaya
-        $service->update([
-            'harga_sp' => $total_part_for_service,
-            'total_biaya' => $newTotalBiaya,
-        ]);
+        if ($jobsSum > 0 || (float)($service->total_biaya ?? 0) == 0) {
+            $newTotalBiaya = $jobsSum;
+            $service->update([
+                'harga_sp' => $total_part_for_service,
+                'total_biaya' => $newTotalBiaya,
+            ]);
+        } else {
+            $newTotalBiaya = (float)($service->total_biaya ?? 0);
+            $service->update([
+                'harga_sp' => $total_part_for_service,
+            ]);
+        }
         $total_penalty_cost = array_sum($penalties_per_teknisi);
-        Log::info("Internal: Service Harga SP updated to: $total_part_for_service, Total Biaya updated to: $newTotalBiaya, Total Garansi: $total_garansi, Penalty: $total_penalty_cost for Service ID: $serviceId");
+        Log::info("Internal: Service Harga SP updated to: $total_part_for_service, Total Biaya: $newTotalBiaya, Total Garansi: $total_garansi, Penalty: $total_penalty_cost for Service ID: $serviceId");
 
         // Initialize variables yang akan di-return
         $fix_profit_teknisi = 0;
@@ -1227,9 +1237,9 @@ class SparepartApiController extends Controller
             // Hapus semua komisi/penalti lama untuk revert saldo
             $oldRecords = ProfitPresentase::where('kode_service', $serviceId)->get();
             foreach ($oldRecords as $old) {
-                $old_user = UserDetail::where('kode_user', $old->kode_user)->first();
+                $old_user = UserDetail::where('kode_user', $old->kode_user)->lockForUpdate()->first();
                 if ($old_user) {
-                    if ($old->is_cair) {
+                    if ($old->is_cair && $old->profit > 0) {
                         $old_user->decrement('saldo', $old->profit);
                     }
                 }
@@ -1239,7 +1249,7 @@ class SparepartApiController extends Controller
             // Apply Penalties (karena klaim garansi, teknisi pembuat salah tetap kena penalti)
             foreach ($penalties_per_teknisi as $penalized_user_id => $penalty_amount) {
                 if ($penalty_amount > 0) {
-                    $penalized_user = UserDetail::where('kode_user', $penalized_user_id)->first();
+                    $penalized_user = UserDetail::where('kode_user', $penalized_user_id)->lockForUpdate()->first();
                     $penalized_setting = SalarySetting::where('user_id', $penalized_user_id)->first();
                     if ($penalized_user) {
                         $penalized_user->decrement('saldo', $penalty_amount);
@@ -1281,12 +1291,12 @@ class SparepartApiController extends Controller
                         ->where('is_cair', 1)
                         ->exists();
 
-                    // 1. Revert ALL old profits/penalties for this service
+                    // 1. Revert ALL old profits/penalties for this service with row-level lock
                     $oldProfitRecords = ProfitPresentase::where('kode_service', $serviceId)->get();
                     foreach ($oldProfitRecords as $old) {
-                        $old_user = UserDetail::where('kode_user', $old->kode_user)->first();
+                        $old_user = UserDetail::where('kode_user', $old->kode_user)->lockForUpdate()->first();
                         if ($old_user) {
-                            if ($old->is_cair) {
+                            if ($old->is_cair && $old->profit > 0) {
                                 $old_user->decrement('saldo', $old->profit);
                             }
                         }
@@ -1295,28 +1305,34 @@ class SparepartApiController extends Controller
 
                     // 2. Calculate and apply Commission for the service technician
                     $presentaseSetting = SalarySetting::where('user_id', $id_teknisi)->first();
-                    $teknisi = UserDetail::where('kode_user', $id_teknisi)->first();
+                    $teknisi = UserDetail::where('kode_user', $id_teknisi)->lockForUpdate()->first();
 
                     if ($teknisi && $presentaseSetting) {
                         $total_service_profit = $service->total_biaya - ($total_part_for_profit + $total_garansi);
 
                         Log::info("Internal: Profit calculation - Total Biaya: {$service->total_biaya}, Part (Shared): {$total_part_for_profit}, Total Garansi: {$total_garansi}, Service Profit: {$total_service_profit}");
 
-                        // Fetch sum of processed violation percentages for this technician in the month of the service
+                        // Fetch sum of processed violation percentages (attendance/disciplinary) for this technician in the active period
                         $serviceDate = Carbon::parse($service->tgl_service ?: $service->updated_at);
+                        $startMonth = (clone $serviceDate)->startOfMonth()->toDateString();
+                        $sub14Days = (clone $serviceDate)->subDays(14)->toDateString();
+                        $startPeriod = $startMonth < $sub14Days ? $startMonth : $sub14Days;
+                        $endPeriod = $serviceDate->toDateString();
+
                         $violationPercentage = DB::table('violations')
                             ->where('user_id', $id_teknisi)
                             ->where('status', 'processed')
-                            ->whereBetween('violation_date', [
-                                (clone $serviceDate)->subDays(14)->toDateString(),
-                                $serviceDate->toDateString()
-                            ])
+                            ->whereBetween('violation_date', [$startPeriod, $endPeriod])
                             ->sum('penalty_percentage') ?? 0;
 
-                        Log::info("Internal: Violation percentage for technician {$id_teknisi} in the period of {$serviceDate->toDateString()} is {$violationPercentage}%");
+                        Log::info("Internal: Violation percentage for technician {$id_teknisi} in the period ({$startPeriod} to {$endPeriod}) is {$violationPercentage}%");
 
                         $base_commission = 0;
-                        if ($presentaseSetting->compensation_type === 'percentage') {
+                        if ($presentaseSetting->compensation_type === 'fixed') {
+                            // Fixed salary: 0 commission from services (100% profit to store)
+                            $base_commission = 0;
+                            Log::info("Internal (Fixed Salary): Technician {$id_teknisi} is on fixed salary. Commission is 0.");
+                        } elseif ($presentaseSetting->compensation_type === 'percentage') {
                             // Flat percentage commission
                             if ($total_service_profit < 0) {
                                 $base_commission = $total_service_profit * ($presentaseSetting->max_percentage ?: $presentaseSetting->percentage_value) / 100;
@@ -1326,7 +1342,7 @@ class SparepartApiController extends Controller
                                 Log::info("Internal (Flat): Base percentage: {$presentaseSetting->percentage_value}%, Adjusted: {$adjustedPercentage}% due to {$violationPercentage}% violation");
                             }
                         } elseif ($presentaseSetting->compensation_type === 'tiered') {
-                            // Tiered category calculation
+                            // Tiered category calculation per ServiceJob
                             $jobs = ServiceJob::with('category')->where('service_id', $serviceId)->get();
 
                             if ($jobs->isEmpty()) {
@@ -1338,6 +1354,30 @@ class SparepartApiController extends Controller
                                     $base_commission = $total_service_profit * $adjustedPercentage / 100;
                                 }
                             } else {
+                                // Calculate unassigned parts & warranty (parts without a specific service_job_id)
+                                $unassignedPartsTokoCost = DetailPartServices::where('kode_services', $serviceId)
+                                    ->whereNull('service_job_id')
+                                    ->where('is_tanggungan_teknisi', 0)
+                                    ->get()
+                                    ->sum(function ($pt) {
+                                        return ($pt->detail_harga_part_service ?? $pt->harga_jual ?? 0) * $pt->qty_part;
+                                    });
+
+                                $unassignedPartsLuarCost = DetailPartLuarService::where('kode_services', $serviceId)
+                                    ->whereNull('service_job_id')
+                                    ->where('is_tanggungan_teknisi', 0)
+                                    ->get()
+                                    ->sum(function ($pl) {
+                                        return ($pl->harga_part ?? 0) * $pl->qty_part;
+                                    });
+
+                                $unassignedWarranty = DetailPartServices::where('kode_services', $serviceId)
+                                    ->whereNull('service_job_id')
+                                    ->sum('harga_garansi') ?? 0;
+
+                                $totalUnassignedDeduction = $unassignedPartsTokoCost + $unassignedPartsLuarCost + $unassignedWarranty;
+                                $totalJobsBiaya = $jobs->sum('biaya_jasa') ?: 0;
+
                                 foreach ($jobs as $job) {
                                     // Calculate parts warranty for this job
                                     $jobWarranty = DetailPartServices::where('service_job_id', $job->id)->sum('harga_garansi') ?? 0;
@@ -1358,7 +1398,13 @@ class SparepartApiController extends Controller
                                             return ($pl->harga_part ?? 0) * $pl->qty_part;
                                         });
 
-                                    $jobProfit = (double)($job->biaya_jasa ?? 0) - $jobWarranty - $jobPartsTokoCost - $jobPartsLuarCost;
+                                    // Proportional share of unassigned parts & warranty
+                                    $jobBiaya = (double)($job->biaya_jasa ?? 0);
+                                    $proportionalUnassigned = ($totalJobsBiaya > 0) 
+                                        ? ($jobBiaya / $totalJobsBiaya) * $totalUnassignedDeduction 
+                                        : 0;
+
+                                    $jobProfit = $jobBiaya - $jobWarranty - $jobPartsTokoCost - $jobPartsLuarCost - $proportionalUnassigned;
 
                                     // Use category percentage, or fallback to technician's default
                                     $basePercentage = $job->category ? $job->category->persentase : $presentaseSetting->percentage_value;
@@ -1368,7 +1414,7 @@ class SparepartApiController extends Controller
                                     } else {
                                         $adjustedPercentage = max(0, $basePercentage - $violationPercentage);
                                         $jobCommission = $jobProfit * $adjustedPercentage / 100;
-                                        Log::info("Internal (Tiered): Job ID {$job->id} - Base: {$basePercentage}%, Adjusted: {$adjustedPercentage}% due to {$violationPercentage}% violation");
+                                        Log::info("Internal (Tiered): Job ID {$job->id} - Profit: {$jobProfit}, Base: {$basePercentage}%, Adjusted: {$adjustedPercentage}%, Comm: {$jobCommission}");
                                     }
 
                                     $base_commission += $jobCommission;
@@ -1394,7 +1440,7 @@ class SparepartApiController extends Controller
                             'is_cair'         => $isCair,
                         ]);
 
-                        if ($isCair) {
+                        if ($isCair && $fix_profit_teknisi > 0) {
                             $teknisi->increment('saldo', $fix_profit_teknisi);
                         }
                         $komisi->update(['saldo' => $teknisi->fresh()->saldo]);
@@ -1403,10 +1449,10 @@ class SparepartApiController extends Controller
                         Log::warning("Internal: Technician or SalarySetting not found for ID: {$id_teknisi}. Commission not updated.");
                     }
 
-                    // 3. Apply Penalties ke teknisi yang bersangkutan
+                    // 3. Apply Penalties ke teknisi yang bersangkutan (tanggungan kerusakan)
                     foreach ($penalties_per_teknisi as $penalized_user_id => $penalty_amount) {
                         if ($penalty_amount > 0) {
-                            $penalized_user = UserDetail::where('kode_user', $penalized_user_id)->first();
+                            $penalized_user = UserDetail::where('kode_user', $penalized_user_id)->lockForUpdate()->first();
                             $penalized_setting = SalarySetting::where('user_id', $penalized_user_id)->first();
                             if ($penalized_user) {
                                 $penalized_user->decrement('saldo', $penalty_amount);
@@ -1487,7 +1533,7 @@ class SparepartApiController extends Controller
                 // This check is implied if this function is strictly for "completed" services.
                 // If it can be used for any status, adjust accordingly.
 
-                $sparepart = Sparepart::findOrFail($sparepartId);
+                $sparepart = Sparepart::where('id', $sparepartId)->lockForUpdate()->firstOrFail();
 
                 $existingPart = DetailPartServices::where('kode_services', $serviceId)
                     ->where('kode_sparepart', $sparepartId)
@@ -2048,16 +2094,17 @@ class SparepartApiController extends Controller
                 ], 422);
             }
 
-            $sparepart = Sparepart::find($request->kode_sparepart);
-            if (!$sparepart) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Sparepart not found'
-                ], 404);
-            }
-
             DB::beginTransaction();
             try {
+                $sparepart = Sparepart::where('id', $request->kode_sparepart)->lockForUpdate()->first();
+                if (!$sparepart) {
+                    DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Sparepart not found'
+                    ], 404);
+                }
+
                 // Ambil data service untuk cek status klaim
                 $service = modelServices::findOrFail($request->kode_services);
                 $isWarrantyClaim = $service->claimed_from_service_id !== null;
@@ -2547,17 +2594,74 @@ class SparepartApiController extends Controller
                     if ($profitPresentase->profit < 0) {
                         continue; // Tanggungan kerusakan tetap berlaku
                     }
-                    $teknisi = UserDetail::where('kode_user', $profitPresentase->kode_user)->first();
+                    $teknisi = UserDetail::where('kode_user', $profitPresentase->kode_user)->lockForUpdate()->first();
                     if ($teknisi) {
-                        if ($profitPresentase->is_cair) {
-                            $teknisi->update([
-                                'saldo' => $teknisi->saldo - $profitPresentase->profit
-                            ]);
+                        if ($profitPresentase->is_cair && $profitPresentase->profit > 0) {
+                            $teknisi->decrement('saldo', $profitPresentase->profit);
                         }
                     }
                     $profitPresentase->delete();
                 }
-                Log::info("Semua komisi/penalti dibatalkan untuk Service ID: $id karena status berubah dari completed.");
+                Log::info("Semua komisi dibatalkan untuk Service ID: $id karena status berubah dari completed.");
+
+                // Rollback Pengambilan details if previous status was 'Diambil'
+                if (strtolower($oldStatus) === 'diambil' && $service->kode_pengambilan) {
+                    $pengambilan = Pengambilan::find($service->kode_pengambilan);
+                    if ($pengambilan) {
+                        if ($pengambilan->jumlah_cash > 0) {
+                            $this->catatKas(
+                                $pengambilan,
+                                0,
+                                $pengambilan->jumlah_cash,
+                                "Rollback Pelunasan Service (Batal Diambil) #" . $pengambilan->kode_pengambilan,
+                                now(),
+                                true
+                            );
+                        }
+                        if ($pengambilan->jumlah_transfer > 0) {
+                            $this->catatKas(
+                                $pengambilan,
+                                0,
+                                $pengambilan->jumlah_transfer,
+                                "Rollback Pelunasan Service (Batal Diambil) #" . $pengambilan->kode_pengambilan,
+                                now(),
+                                false
+                            );
+                        }
+
+                        $oldHistory = HistoryLaci::where('reference_id', $pengambilan->id)
+                            ->where('reference_type', 'Pengambilan')
+                            ->where('masuk', '>', 0)
+                            ->first();
+                        if ($oldHistory && $pengambilan->jumlah_cash > 0) {
+                            $this->recordLaciHistory(
+                                $oldHistory->id_kategori,
+                                null,
+                                $pengambilan->jumlah_cash,
+                                "Rollback Pelunasan Service (Batal Diambil): " . $service->kode_service,
+                                'Pengambilan',
+                                $pengambilan->id,
+                                $pengambilan->kode_pengambilan
+                            );
+                        }
+
+                        $otherServicesCount = modelServices::where('kode_pengambilan', $pengambilan->id)
+                            ->where('id', '!=', $id)
+                            ->count();
+                        if ($otherServicesCount === 0) {
+                            $pengambilan->delete();
+                        } else {
+                            $pengambilan->update([
+                                'total_bayar' => max(0, $pengambilan->total_bayar - ($service->total_biaya - $service->dp)),
+                                'total_services' => max(0, $pengambilan->total_services - $service->total_biaya),
+                                'dp' => max(0, $pengambilan->dp - $service->dp),
+                                'jumlah_cash' => max(0, $pengambilan->jumlah_cash - ($pengambilan->metode_bayar === 'cash' ? ($service->total_biaya - $service->dp) : 0)),
+                                'jumlah_transfer' => max(0, $pengambilan->jumlah_transfer - ($pengambilan->metode_bayar === 'transfer' ? ($service->total_biaya - $service->dp) : 0)),
+                            ]);
+                        }
+                    }
+                    $service->update(['kode_pengambilan' => null]);
+                }
             }
 
             // Kirim WhatsApp jika selesai
@@ -2639,15 +2743,15 @@ class SparepartApiController extends Controller
                 if ($profitPresentase->profit < 0) {
                     continue; // Tanggungan kerusakan tetap berlaku
                 }
-                $teknisi = UserDetail::where('kode_user', $profitPresentase->kode_user)->first();
+                $teknisi = UserDetail::where('kode_user', $profitPresentase->kode_user)->lockForUpdate()->first();
                 if ($teknisi) {
                     $amount = $profitPresentase->profit;
                     $commissionAmount += $amount;
-                    if ($profitPresentase->is_cair) {
-                        $teknisi->update(['saldo' => $teknisi->saldo - $amount]);
+                    if ($profitPresentase->is_cair && $amount > 0) {
+                        $teknisi->decrement('saldo', $amount);
                     }
                     $commissionReverted = true;
-                    Log::info("Commission of {$amount} reverted for Service ID: {$id}. Technician ID: {$teknisi->kode_user}. New Saldo: {$teknisi->saldo}");
+                    Log::info("Commission of {$amount} reverted for Service ID: {$id}. Technician ID: {$teknisi->kode_user}. New Saldo: {$teknisi->fresh()->saldo}");
                 }
                 $profitPresentase->delete();
             }

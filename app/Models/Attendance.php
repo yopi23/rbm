@@ -15,18 +15,23 @@ class Attendance extends Model
         'check_in',
         'check_out',
         'status',
+        'approval_status',
         'note',
+        'rejection_reason',
         'photo_in',
         'photo_out',
         'location',
         'late_minutes',
-        'created_by'
+        'created_by',
+        'approved_by',
+        'approved_at'
     ];
 
     protected $casts = [
         'attendance_date' => 'date',
         'check_in' => 'datetime:H:i:s',
         'check_out' => 'datetime:H:i:s',
+        'approved_at' => 'datetime',
     ];
 
     public function user()
@@ -37,6 +42,11 @@ class Attendance extends Model
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function approvedBy()
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     // Calculate late minutes based on schedule

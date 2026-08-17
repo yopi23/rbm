@@ -238,6 +238,8 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
             Route::post('/scan-employee-qr', [EmployeeManagementController::class , 'scanEmployeeQrCode']);
             Route::post('/scan/{token}', [EmployeeManagementController::class , 'scanQrCode']);
             Route::post('/request-leave', [EmployeeManagementController::class , 'requestLeave']);
+            Route::post('/reject-leave', [EmployeeManagementController::class , 'rejectLeave']);
+            Route::post('/approve-leave', [EmployeeManagementController::class , 'approveLeave']);
             Route::get('/history/{userId}', [EmployeeManagementController::class , 'getAttendanceHistory']);
             Route::get('/status/{userId}', [EmployeeManagementController::class , 'getCurrentAttendanceStatus']);
         }

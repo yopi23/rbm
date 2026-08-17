@@ -127,7 +127,7 @@ class ProductApiController extends Controller
 
         // 2. Validate request
         $validator = Validator::make($request->all(), [
-            'nama_sparepart' => 'required|string|max:255',
+            'nama_sparepart' => 'required|string|max:8000',
             'kode_kategori' => 'required|integer|exists:kategori_spareparts,id',
             'desc_sparepart' => 'nullable|string',
             'stok_sparepart' => 'required|integer|min:0',
@@ -143,9 +143,10 @@ class ProductApiController extends Controller
         ]);
 
         if ($validator->fails()) {
+            $errorString = implode(', ', $validator->errors()->all());
             return response()->json([
                 'success' => false,
-                'message' => 'Validasi gagal.',
+                'message' => 'Validasi gagal: ' . $errorString,
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -294,7 +295,7 @@ class ProductApiController extends Controller
 
         // 2. Validate request
         $validator = Validator::make($request->all(), [
-            'nama_sparepart' => 'sometimes|required|string|max:255',
+            'nama_sparepart' => 'sometimes|required|string|max:8000',
             'kode_kategori' => 'sometimes|required|integer|exists:kategori_spareparts,id',
             'desc_sparepart' => 'nullable|string',
             'stok_sparepart' => 'sometimes|required|integer|min:0',
@@ -312,9 +313,10 @@ class ProductApiController extends Controller
         ]);
 
         if ($validator->fails()) {
+            $errorString = implode(', ', $validator->errors()->all());
             return response()->json([
                 'success' => false,
-                'message' => 'Validasi gagal.',
+                'message' => 'Validasi gagal: ' . $errorString,
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -386,9 +388,19 @@ class ProductApiController extends Controller
                     'foto_sparepart' => !empty($remainingPhotos) ? $remainingPhotos : '-'
                 ]);
 
-                // Also update the variant stock/prices
+                // Also update or create the variant stock/prices and sync attributes
                 $variant = $product->variants->first();
-                if ($variant) {
+                if (!$variant) {
+                    $variant = ProductVariant::create([
+                        'sparepart_id' => $product->id,
+                        'sku' => $product->kode_sparepart,
+                        'purchase_price' => $product->harga_beli,
+                        'wholesale_price' => $product->harga_ecer ?? $product->harga_jual,
+                        'retail_price' => $product->harga_jual,
+                        'internal_price' => $product->harga_jual,
+                        'stock' => $product->stok_sparepart,
+                    ]);
+                } else {
                     $variant->update([
                         'purchase_price' => $product->harga_beli,
                         'wholesale_price' => $product->harga_ecer ?? $product->harga_jual,
@@ -396,8 +408,8 @@ class ProductApiController extends Controller
                         'internal_price' => $product->harga_jual,
                         'stock' => $product->stok_sparepart,
                     ]);
-                    $this->syncVariantAttributes($request, $variant);
                 }
+                $this->syncVariantAttributes($request, $variant);
 
                 $freshProduct = Sparepart::withoutGlobalScope(\App\Scopes\ActiveScope::class)
                     ->with(['kategori', 'supplier', 'variants.attributeValues.attribute'])
@@ -537,6 +549,10 @@ class ProductApiController extends Controller
             ];
         });
 
+        $firstVariant = $variants->first();
+        $rootAttributeValues = $firstVariant ? ($firstVariant['attribute_values'] ?? []) : [];
+        $rootAttributes = $firstVariant ? ($firstVariant['attributes'] ?? []) : [];
+
         return [
             'id' => $product->id,
             'kode_sparepart' => $product->kode_sparepart,
@@ -552,6 +568,8 @@ class ProductApiController extends Controller
             'main_photo' => $mainPhoto,
             'main_photo_url' => $mainPhotoUrl,
             'photos' => $photos,
+            'attribute_values' => $rootAttributeValues,
+            'attributes' => $rootAttributes,
             'variants' => $variants,
             'kategori' => $product->kategori ? [
                 'id' => $product->kategori->id,

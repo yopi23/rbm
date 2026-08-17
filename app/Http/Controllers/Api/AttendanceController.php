@@ -63,11 +63,11 @@ class AttendanceController extends Controller
                     ], 400);
                 }
 
-                // 2. Cek jika statusnya adalah izin, sakit, atau cuti. Jika ya, gagalkan check-in.
-                if (in_array($existingAttendance->status, ['izin', 'sakit', 'cuti'])) {
+                // 2. Cek jika statusnya adalah izin, sakit, atau cuti. Jika ya dan belum ditolak, gagalkan check-in.
+                if (in_array($existingAttendance->status, ['izin', 'sakit', 'cuti']) && $existingAttendance->approval_status !== 'rejected') {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Gagal check-in. Status Anda hari ini adalah ' . $existingAttendance->status . '.'
+                        'message' => 'Gagal check-in. Status Anda hari ini adalah ' . $existingAttendance->status . ' (' . ($existingAttendance->approval_status ?? 'pending') . ').'
                     ], 400);
                 }
             }
@@ -101,6 +101,7 @@ class AttendanceController extends Controller
             [
                 'check_in' => Carbon::now(),
                 'status' => 'hadir',
+                'approval_status' => 'approved',
                 'location' => $request->location ?? 'Mobile App Scan',
                 'late_minutes' => $lateMinutes,
                 'created_by' => $userId,
@@ -240,6 +241,26 @@ class AttendanceController extends Controller
         $userId = auth()->id();
         $date = Carbon::parse($request->date);
 
+        // Batasi izin maksimal 1x per minggu
+        if ($request->type === 'izin') {
+            $startOfWeek = $date->copy()->startOfWeek();
+            $endOfWeek = $date->copy()->endOfWeek();
+
+            $existingWeeklyLeave = Attendance::where('user_id', $userId)
+                ->whereBetween('attendance_date', [$startOfWeek, $endOfWeek])
+                ->where('status', 'izin')
+                ->where('approval_status', '!=', 'rejected')
+                ->whereDate('attendance_date', '!=', $date->toDateString())
+                ->first();
+
+            if ($existingWeeklyLeave) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Batas pengajuan izin maksimal 1x dalam 1 minggu. Anda sudah memiliki izin pada minggu ini (tanggal ' . Carbon::parse($existingWeeklyLeave->attendance_date)->format('d/m/Y') . ').'
+                ], 400);
+            }
+        }
+
         // Create attendance with status leave
         $attendance = Attendance::updateOrCreate(
         [
@@ -248,7 +269,9 @@ class AttendanceController extends Controller
         ],
         [
             'status' => $request->type,
+            'approval_status' => 'pending',
             'note' => $request->note,
+            'rejection_reason' => null,
             'created_by' => $userId,
         ]
         );
@@ -594,10 +617,10 @@ class AttendanceController extends Controller
                     ], 400);
                 }
 
-                if ($attendance && in_array($attendance->status, ['izin', 'sakit', 'cuti'])) {
+                if ($attendance && in_array($attendance->status, ['izin', 'sakit', 'cuti']) && $attendance->approval_status !== 'rejected') {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Status hari ini: ' . $attendance->status
+                        'message' => 'Status hari ini: ' . $attendance->status . ' (' . ($attendance->approval_status ?? 'pending') . ')'
                     ], 400);
                 }
 
@@ -617,6 +640,7 @@ class AttendanceController extends Controller
                     $attendance->update([
                         'check_in' => $checkInTime,
                         'status' => 'hadir',
+                        'approval_status' => 'approved',
                         'is_late' => $isLate,
                         'late_minutes' => $lateMinutes,
                         'location' => "Face Recognition",
@@ -628,6 +652,7 @@ class AttendanceController extends Controller
                         'attendance_date' => $today,
                         'check_in' => $checkInTime,
                         'status' => 'hadir',
+                        'approval_status' => 'approved',
                         'is_late' => $isLate,
                         'late_minutes' => $lateMinutes,
                         'location' => "Face Recognition",
