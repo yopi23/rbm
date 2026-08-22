@@ -26,10 +26,14 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
+use App\Traits\KategoriLaciTrait;
+use App\Traits\ManajemenKasTrait;
+use App\Models\HistoryLaci;
 use PDO;
 
 class ServiceApiController extends Controller
 {
+    use KategoriLaciTrait, ManajemenKasTrait;
     /**
      * Get completed services for today with caching
      */
@@ -2288,6 +2292,7 @@ class ServiceApiController extends Controller
             ]);
 
             // =====================================================================
+            // =====================================================================
             // PENARIKAN KOMISI TEKNISI (TRANSPARAN DENGAN REVERSAL ENTRY) & STATUS GARANSI
             // =====================================================================
             $komisis = \App\Models\ProfitPresentase::where('kode_service', $originalService->id)->get();
@@ -2298,7 +2303,7 @@ class ServiceApiController extends Controller
                 
                 if ($komisi->is_cair) {
                     // Jika komisi sudah cair, tarik kembali saldo utama teknisi
-                    $pegawais = \App\Models\UserDetail::where('kode_user', $komisi->kode_user)->first();
+                    $pegawais = \App\Models\UserDetail::where('kode_user', $komisi->kode_user)->lockForUpdate()->first();
                     if ($pegawais) {
                         // 1. Kurangi saldo utama teknisi
                         $pegawais->decrement('saldo', $komisi->profit);
@@ -2342,6 +2347,212 @@ class ServiceApiController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal membuat service klaim garansi.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Memproses Klaim Garansi Pengembalian Uang (Refund).
+     * 
+     * - Mengeluarkan kas pengembalian dari Laci Toko (jika cash) dan Buku Kas Perusahaan.
+     * - Menarik kembali komisi teknisi yang mengerjakan servis asli jika bersistem Bagi Hasil (percentage/tiered).
+     * - Menandai status garansi menjadi 'refunded'.
+     * - Menambahkan catatan servis resmi ke DetailCatatanService.
+     */
+    public function refundWarrantyClaim(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'alasan_refund' => 'required|string|max:500',
+            'metode_refund' => 'required|in:cash,transfer',
+            'id_kategorilaci' => 'nullable|integer',
+            'refund_amount' => 'nullable|numeric|min:0',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal: ' . $validator->errors()->first(),
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Cek shift aktif
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
+        DB::beginTransaction();
+        try {
+            $service = modelServices::findOrFail($id);
+            $serviceId = $service->id;
+
+            // Validasi status service
+            if (!in_array($service->status_services, ['Selesai', 'Diambil'])) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Klaim garansi refund hanya dapat diproses untuk service berstatus Selesai atau Diambil.'
+                ], 400);
+            }
+
+            // Validasi keberadaan garansi
+            $warranty = Garansi::where('kode_garansi', $service->kode_service)
+                ->where('type_garansi', 'service')
+                ->first();
+
+            if (!$warranty) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data garansi untuk service ini tidak ditemukan.'
+                ], 404);
+            }
+
+            if ($warranty->status_garansi === '1' || $warranty->status_garansi === 'refunded') {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Garansi untuk service ini sudah pernah diproses/diklaim sebelumnya.'
+                ], 400);
+            }
+
+            // Nominal pengembalian dana (default ke total_biaya service)
+            $refundAmount = $request->has('refund_amount') && $request->refund_amount !== null
+                ? (float)$request->refund_amount
+                : (float)$service->total_biaya;
+
+            $metodeRefund = $request->metode_refund;
+            $alasanRefund = $request->alasan_refund;
+            $laciId = $request->id_kategorilaci;
+
+            // 1. Pengeluaran Uang Kas / Laci
+            if ($refundAmount > 0) {
+                if ($metodeRefund === 'cash') {
+                    if (!$laciId) {
+                        DB::rollBack();
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Pilih laci kas toko untuk pengeluaran refund tunai.'
+                        ], 422);
+                    }
+
+                    // Catat mutasi keluar di History Laci
+                    $this->recordLaciHistory(
+                        $laciId,
+                        null,
+                        $refundAmount,
+                        "Pengembalian Uang Garansi (Refund): {$service->kode_service} a/n {$service->nama_pelanggan} - {$alasanRefund}",
+                        'service_warranty_refund',
+                        $service->id,
+                        $service->kode_service
+                    );
+
+                    // Catat pengeluaran di Buku Kas Perusahaan
+                    $this->catatKas(
+                        $service,
+                        0,
+                        $refundAmount,
+                        "Refund Garansi Service (Tunai) #{$service->kode_service} - {$service->nama_pelanggan}",
+                        now(),
+                        true
+                    );
+                } else {
+                    // Transfer
+                    $this->catatKas(
+                        $service,
+                        0,
+                        $refundAmount,
+                        "Refund Garansi Service (Transfer) #{$service->kode_service} - {$service->nama_pelanggan}",
+                        now(),
+                        false
+                    );
+                }
+            }
+
+            // 2. PENARIKAN KOMISI TEKNISI (JIKA BAGI HASIL)
+            $commissionDeducted = 0;
+            $technicianName = null;
+            $komisis = ProfitPresentase::where('kode_service', $serviceId)->get();
+
+            foreach ($komisis as $komisi) {
+                if ($komisi->profit < 0) {
+                    continue; // Biarkan penalti kerusakan tetap memotong saldo
+                }
+
+                $teknisi = UserDetail::where('kode_user', $komisi->kode_user)->lockForUpdate()->first();
+                if ($teknisi) {
+                    $technicianName = $teknisi->fullname ?? User::where('id', $komisi->kode_user)->value('name');
+                    $amount = (float) $komisi->profit;
+
+                    if ($komisi->is_cair && $amount > 0) {
+                        // Kurangi saldo teknisi
+                        $teknisi->decrement('saldo', $amount);
+                        $commissionDeducted += $amount;
+
+                        // Catat reversal entry agar riwayat saldo transparan
+                        ProfitPresentase::create([
+                            'tgl_profit' => date('Y-m-d'),
+                            'kode_service' => $serviceId,
+                            'kode_presentase' => $komisi->kode_presentase,
+                            'kode_user' => $komisi->kode_user,
+                            'profit' => -$amount, // Komisi negatif
+                            'profit_toko' => -$komisi->profit_toko ?? 0,
+                            'saldo' => $teknisi->fresh()->saldo,
+                            'is_cair' => 1,
+                            'created_at' => now(),
+                            'updated_at' => now()
+                        ]);
+                    } elseif (!$komisi->is_cair) {
+                        $komisi->delete();
+                    }
+                }
+            }
+
+            // 3. Update status garansi
+            $warranty->update([
+                'status_garansi' => 'refunded',
+                'updated_at' => now()
+            ]);
+
+            // 4. Tambahkan catatan riwayat servis
+            $infoKomisi = ($commissionDeducted > 0)
+                ? " Komisi teknisi ({$technicianName}) sebesar Rp" . number_format($commissionDeducted, 0, ',', '.') . " telah ditarik dari saldo."
+                : "";
+
+            DetailCatatanService::create([
+                'tgl_catatan_service' => now(),
+                'kode_services' => $serviceId,
+                'kode_user' => auth()->id(),
+                'catatan_service' => "[ADMIN KLAIM REFUND] Garansi diklaim dengan Pengembalian Dana (Refund) sebesar Rp" . number_format($refundAmount, 0, ',', '.') . " via {$metodeRefund}. Alasan: {$alasanRefund}.{$infoKomisi}",
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Klaim garansi kembali uang (refund) berhasil diproses. Pengeluaran kas dan koreksi komisi telah dicatat.',
+                'data' => [
+                    'service_id' => $serviceId,
+                    'kode_service' => $service->kode_service,
+                    'refund_amount' => $refundAmount,
+                    'metode_refund' => $metodeRefund,
+                    'commission_deducted' => $commissionDeducted,
+                    'technician_name' => $technicianName,
+                    'warranty_status' => 'refunded',
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Warranty Refund Error for Service ID {$id}: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memproses klaim garansi refund: ' . $e->getMessage(),
                 'error' => $e->getMessage()
             ], 500);
         }

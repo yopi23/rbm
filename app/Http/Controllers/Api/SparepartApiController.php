@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Validator;
 use App\Models\SubKategoriSparepart;
 use App\Models\KategoriSparepart;
 use App\Models\Shift;
+use App\Models\Pengambilan;
 use Carbon\Carbon; // Added for date handling
 use Illuminate\Validation\Rule;
 use App\Traits\ManajemenKasTrait;
@@ -86,7 +87,16 @@ class SparepartApiController extends Controller
                 // Filtering berdasarkan kata kunci
                 foreach ($keywords as $keyword) {
                     $queryBuilder->where(function ($q) use ($keyword) {
-                        $q->where(DB::raw('LOWER(spareparts.nama_sparepart)'), 'LIKE', '%' . $keyword . '%');
+                        $q->where(DB::raw('LOWER(spareparts.nama_sparepart)'), 'LIKE', '%' . $keyword . '%')
+                          ->orWhere(DB::raw('LOWER(spareparts.kode_sparepart)'), 'LIKE', '%' . $keyword . '%')
+                          ->orWhereExists(function ($query) use ($keyword) {
+                              $query->select(DB::raw(1))
+                                    ->from('product_variants')
+                                    ->join('attribute_value_product_variant', 'product_variants.id', '=', 'attribute_value_product_variant.product_variant_id')
+                                    ->join('attribute_values', 'attribute_value_product_variant.attribute_value_id', '=', 'attribute_values.id')
+                                    ->whereColumn('product_variants.sparepart_id', 'spareparts.id')
+                                    ->where(DB::raw('LOWER(attribute_values.value)'), 'LIKE', '%' . $keyword . '%');
+                          });
                     });
                 }
 
@@ -437,7 +447,11 @@ class SparepartApiController extends Controller
 
             foreach ($keywords as $keyword) {
                 $queryBuilder->where(function ($q) use ($keyword) {
-                    $q->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', '%' . $keyword . '%');
+                    $q->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', '%' . $keyword . '%')
+                      ->orWhere(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%')
+                      ->orWhereHas('variants.attributeValues', function ($attrQuery) use ($keyword) {
+                          $attrQuery->where(DB::raw('LOWER(value)'), 'LIKE', '%' . $keyword . '%');
+                      });
                 });
             }
 
@@ -927,43 +941,188 @@ class SparepartApiController extends Controller
      */
     public function delete_service($id)
     {
-        $service = modelServices::findOrFail($id);
-        $serviceId = $service->id;
+        // Check Active Shift
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
 
         DB::beginTransaction();
         try {
-            // Delete related parts, notes, warranty
-            DetailPartServices::where('kode_services', $serviceId)->delete();
-            DetailPartLuarService::where('kode_services', $serviceId)->delete();
-            DetailCatatanService::where('kode_services', $serviceId)->delete();
-            Garansi::where('kode_garansi', $service->kode_service)->where('type_garansi', 'service')->delete();
+            $service = modelServices::findOrFail($id);
+            $serviceId = $service->id;
+            $oldStatus = $service->status_services;
 
-            // Handle commission rollback if it exists
+            // 1. Kembalikan stok sparepart toko ke inventory via logStockChange
+            $partTokoList = DetailPartServices::where('kode_services', $serviceId)->get();
+            foreach ($partTokoList as $partToko) {
+                $sparepart = Sparepart::find($partToko->kode_sparepart);
+                if ($sparepart && $partToko->qty_part > 0) {
+                    $sparepart->logStockChange(
+                        (int) $partToko->qty_part,
+                        'service_delete_restore',
+                        $serviceId,
+                        "Pengembalian stok dari penghapusan service {$service->kode_service} (#{$serviceId})",
+                        auth()->user()->id
+                    );
+                }
+            }
+            DetailPartServices::where('kode_services', $serviceId)->delete();
+
+            // 2. Kembalikan kas pengeluaran part luar jika ada yang memotong kas
+            $partLuarList = DetailPartLuarService::where('kode_services', $serviceId)->get();
+            foreach ($partLuarList as $partLuar) {
+                if ($partLuar->is_potong_kas) {
+                    $totalCost = $partLuar->harga_part * $partLuar->qty_part;
+                    if ($totalCost > 0) {
+                        $this->catatKas(
+                            $service,
+                            $totalCost,
+                            0,
+                            "Refund Biaya Part Luar (Hapus Service): {$partLuar->nama_part} untuk Service {$service->kode_service}"
+                        );
+                    }
+                }
+            }
+            DetailPartLuarService::where('kode_services', $serviceId)->delete();
+
+            // 3. Rollback DP & Pengambilan jika ada
+            $dp = (float) ($service->dp ?? 0);
+            $dpMetode = $service->dp_metode ?? 'cash';
+            $dpCash = ($service->dp_cash !== null) ? (float)$service->dp_cash : ($dpMetode === 'transfer' ? 0 : $dp);
+            $dpTransfer = ($service->dp_transfer !== null) ? (float)$service->dp_transfer : ($dpMetode === 'transfer' ? $dp : 0);
+            $laciId = $service->id_kategorilaci;
+
+            if ($dpCash > 0) {
+                if ($laciId) {
+                    $this->recordLaciHistory(
+                        $laciId,
+                        null,
+                        $dpCash,
+                        "Rollback DP Cash (Hapus Service): {$service->nama_pelanggan} - {$service->kode_service}",
+                        'service',
+                        $service->id,
+                        $service->kode_service
+                    );
+                }
+                $this->catatKas(
+                    $service,
+                    0,
+                    $dpCash,
+                    "Rollback DP Service (Cash - Hapus Service) #{$service->kode_service}",
+                    now(),
+                    true
+                );
+            }
+            if ($dpTransfer > 0) {
+                $this->catatKas(
+                    $service,
+                    0,
+                    $dpTransfer,
+                    "Rollback DP Service (Transfer - Hapus Service) #{$service->kode_service}",
+                    now(),
+                    false
+                );
+            }
+
+            if (strtolower($oldStatus) === 'diambil' && $service->kode_pengambilan) {
+                $pengambilan = Pengambilan::find($service->kode_pengambilan);
+                if ($pengambilan) {
+                    if ($pengambilan->jumlah_cash > 0) {
+                        $this->catatKas(
+                            $pengambilan,
+                            0,
+                            $pengambilan->jumlah_cash,
+                            "Rollback Pelunasan Service (Hapus Service) #{$pengambilan->kode_pengambilan}",
+                            now(),
+                            true
+                        );
+                        $oldHistory = HistoryLaci::where('reference_id', $pengambilan->id)
+                            ->where('reference_type', 'Pengambilan')
+                            ->where('masuk', '>', 0)
+                            ->first();
+                        if ($oldHistory) {
+                            $this->recordLaciHistory(
+                                $oldHistory->id_kategori,
+                                null,
+                                $pengambilan->jumlah_cash,
+                                "Rollback Pelunasan Service (Hapus Service): {$service->kode_service}",
+                                'Pengambilan',
+                                $pengambilan->id,
+                                $pengambilan->kode_pengambilan
+                            );
+                        }
+                    }
+                    if ($pengambilan->jumlah_transfer > 0) {
+                        $this->catatKas(
+                            $pengambilan,
+                            0,
+                            $pengambilan->jumlah_transfer,
+                            "Rollback Pelunasan Service (Hapus Service) #{$pengambilan->kode_pengambilan}",
+                            now(),
+                            false
+                        );
+                    }
+                    $otherServicesCount = modelServices::where('kode_pengambilan', $pengambilan->id)
+                        ->where('id', '!=', $serviceId)
+                        ->count();
+                    if ($otherServicesCount === 0) {
+                        $pengambilan->delete();
+                    } else {
+                        $pengambilan->update([
+                            'total_bayar' => max(0, $pengambilan->total_bayar - ($service->total_biaya - $service->dp)),
+                            'total_services' => max(0, $pengambilan->total_services - $service->total_biaya),
+                            'dp' => max(0, $pengambilan->dp - $service->dp),
+                            'jumlah_cash' => max(0, $pengambilan->jumlah_cash - ($pengambilan->metode_bayar === 'cash' ? ($service->total_biaya - $service->dp) : 0)),
+                            'jumlah_transfer' => max(0, $pengambilan->jumlah_transfer - ($pengambilan->metode_bayar === 'transfer' ? ($service->total_biaya - $service->dp) : 0)),
+                        ]);
+                    }
+                }
+            }
+
+            // 4. Tarik komisi teknisi (jika bagi hasil dan sudah cair)
             $profitPresentases = ProfitPresentase::where('kode_service', $serviceId)->get();
+            $commissionReverted = 0;
             foreach ($profitPresentases as $profitPresentase) {
                 if ($profitPresentase->profit < 0) {
-                    continue; // Tanggungan kerusakan tetap berlaku, tidak di-refund
+                    continue; // Tanggungan kerusakan tetap berlaku
                 }
-                $teknisi = UserDetail::where('kode_user', $profitPresentase->kode_user)->first();
+                $teknisi = UserDetail::where('kode_user', $profitPresentase->kode_user)->lockForUpdate()->first();
                 if ($teknisi) {
-                    // Restore technician's balance by deducting the profit
-                    if ($profitPresentase->is_cair) {
-                        $teknisi->update(['saldo' => $teknisi->saldo - $profitPresentase->profit]);
+                    if ($profitPresentase->is_cair && $profitPresentase->profit > 0) {
+                        $teknisi->decrement('saldo', $profitPresentase->profit);
+                        $commissionReverted += $profitPresentase->profit;
                     }
                 }
                 $profitPresentase->delete();
             }
 
-            // Finally, delete the service
+            // 5. Hapus jobs, catatan, garansi
+            ServiceJob::where('service_id', $serviceId)->delete();
+            DetailCatatanService::where('kode_services', $serviceId)->delete();
+            Garansi::where('kode_garansi', $service->kode_service)->where('type_garansi', 'service')->delete();
+
+            // 6. Hapus service
             $service->delete();
 
             DB::commit();
 
-            return response()->json(['message' => 'Service and all related data deleted successfully.'], 200);
+            return response()->json([
+                'success' => true,
+                'message' => 'Service dan seluruh data terkait berhasil dihapus permanen. Stok dan komisi telah disesuaikan.',
+                'commission_reverted' => $commissionReverted,
+            ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error("Error deleting service {$id} and related data: " . $e->getMessage());
-            return response()->json(['message' => 'Failed to delete service and related data.', 'error' => $e->getMessage()], 500);
+            Log::error("Error deleting service {$id}: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menghapus service: ' . $e->getMessage(),
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 
@@ -1285,10 +1444,10 @@ class SparepartApiController extends Controller
 
                 DB::transaction(function () use ($service, $serviceId, $id_teknisi, $total_part_for_profit, $penalties_per_teknisi, $total_garansi, &$fix_profit_teknisi, &$profit_untuk_toko) {
                     
-                    // Check if the old profit record for this technician was already liquidated (is_cair == 1)
+                    // Check if any old positive profit record for this service was already liquidated (is_cair == 1)
                     $wasCair = ProfitPresentase::where('kode_service', $serviceId)
-                        ->where('kode_user', $id_teknisi)
                         ->where('is_cair', 1)
+                        ->where('profit', '>', 0)
                         ->exists();
 
                     // 1. Revert ALL old profits/penalties for this service with row-level lock
@@ -2737,6 +2896,8 @@ class SparepartApiController extends Controller
             $commissionReverted = false;
             $commissionAmount = 0;
 
+            $technicianName = null;
+
             // Handle commission rollback if it exists
             $profitPresentases = ProfitPresentase::where('kode_service', $id)->get();
             foreach ($profitPresentases as $profitPresentase) {
@@ -2745,13 +2906,16 @@ class SparepartApiController extends Controller
                 }
                 $teknisi = UserDetail::where('kode_user', $profitPresentase->kode_user)->lockForUpdate()->first();
                 if ($teknisi) {
-                    $amount = $profitPresentase->profit;
-                    $commissionAmount += $amount;
-                    if ($profitPresentase->is_cair && $amount > 0) {
-                        $teknisi->decrement('saldo', $amount);
+                    $amount = (float) $profitPresentase->profit;
+                    $technicianName = $teknisi->fullname ?? User::where('id', $profitPresentase->kode_user)->value('name');
+                    if ($amount > 0) {
+                        $commissionAmount += $amount;
+                        if ($profitPresentase->is_cair) {
+                            $teknisi->decrement('saldo', $amount);
+                        }
+                        $commissionReverted = true;
+                        Log::info("Commission of {$amount} reverted for Service ID: {$id}. Technician ID: {$teknisi->kode_user}. New Saldo: {$teknisi->fresh()->saldo}");
                     }
-                    $commissionReverted = true;
-                    Log::info("Commission of {$amount} reverted for Service ID: {$id}. Technician ID: {$teknisi->kode_user}. New Saldo: {$teknisi->fresh()->saldo}");
                 }
                 $profitPresentase->delete();
             }
@@ -2819,6 +2983,14 @@ class SparepartApiController extends Controller
                 }
             }
 
+            // Add service note recording this action
+            DetailCatatanService::create([
+                'tgl_catatan_service' => now(),
+                'kode_services' => $id,
+                'kode_user' => auth()->id(),
+                'catatan_service' => "[ADMIN] Service dikembalikan ke antrian dari status '{$oldStatus}'." . ($commissionReverted ? " Komisi Rp" . number_format($commissionAmount, 0, ',', '.') . " telah ditarik dari saldo teknisi ({$technicianName})." : ""),
+            ]);
+
             // Update service status and clear technician/pengambilan
             $service->update([
                 'status_services' => 'Antri',
@@ -2831,12 +3003,13 @@ class SparepartApiController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Service successfully reverted to "Antri" status. Technician commission and payments corrected.',
+                'message' => 'Service berhasil dikembalikan ke antrian. Komisi teknisi dan keuangan telah disesuaikan.',
                 'data' => [
                     'service_id' => $id,
                     'new_status' => 'Antri',
                     'commission_reverted' => $commissionReverted,
                     'commission_amount' => $commissionAmount,
+                    'technician_name' => $technicianName,
                 ]
             ], 200);
 
@@ -3629,6 +3802,85 @@ class SparepartApiController extends Controller
         }
     }
 
+    /**
+     * Update SOP Checklist for a service ticket
+     */
+    public function updateSopChecklist(Request $request, $serviceId)
+    {
+        try {
+            $request->validate([
+                'checklist' => 'required|array',
+                'is_rework' => 'nullable|boolean',
+            ]);
+
+            $service = modelServices::findOrFail($serviceId);
+
+            $existingChecklist = is_array($service->sop_checklist) ? $service->sop_checklist : [];
+            $mergedChecklist = array_merge($existingChecklist, $request->checklist);
+            $mergedChecklist['updated_at'] = now()->toISOString();
+            $mergedChecklist['updated_by'] = auth()->id();
+            $mergedChecklist['updated_by_name'] = auth()->user()->name ?? 'User';
+
+            $updateData = [
+                'sop_checklist' => $mergedChecklist,
+            ];
+
+            if ($request->has('is_rework')) {
+                $updateData['is_rework'] = (bool) $request->is_rework;
+            }
+
+            $service->update($updateData);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Checklist SOP berhasil diperbarui',
+                'data' => [
+                    'service_id' => $service->id,
+                    'kode_service' => $service->kode_service,
+                    'sop_checklist' => $service->fresh()->sop_checklist,
+                    'is_rework' => $service->is_rework,
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Error update SOP checklist: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memperbarui checklist SOP: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get SOP Checklist for a service ticket
+     */
+    public function getSopChecklist($serviceId)
+    {
+        try {
+            $service = modelServices::findOrFail($serviceId);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'service_id' => $service->id,
+                    'kode_service' => $service->kode_service,
+                    'sop_checklist' => $service->sop_checklist ?? [
+                        'penerimaan' => false,
+                        'pengerjaan' => false,
+                        'selesai' => false,
+                        'notes' => '',
+                    ],
+                    'is_rework' => (bool) $service->is_rework,
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil data checklist: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
 
 

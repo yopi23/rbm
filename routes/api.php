@@ -151,6 +151,16 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::post('/karyawan-manage/violations/update-status', [\App\Http\Controllers\Api\EmployeeApiController::class, 'violationsUpdateStatus']);
     Route::post('/karyawan-manage/violations/reverse-penalty', [\App\Http\Controllers\Api\EmployeeApiController::class, 'reversePenalty']);
 
+    // KPI & Bonus System API Routes
+    Route::get('/kpi-settings', [\App\Http\Controllers\Api\KpiSettingApiController::class, 'index']);
+    Route::post('/kpi-settings', [\App\Http\Controllers\Api\KpiSettingApiController::class, 'store']);
+    Route::get('/employee/kpi-summary/{userId?}', [\App\Http\Controllers\Api\KpiSettingApiController::class, 'getEmployeeKpiSummary']);
+    Route::get('/owner/kpi-leaderboard', [\App\Http\Controllers\Api\KpiSettingApiController::class, 'getOwnerKpiLeaderboard']);
+
+    // SOP Checklist API Routes
+    Route::put('/services/{serviceId}/sop-checklist', [\App\Http\Controllers\Api\SparepartApiController::class, 'updateSopChecklist']);
+    Route::get('/services/{serviceId}/sop-checklist', [\App\Http\Controllers\Api\SparepartApiController::class, 'getSopChecklist']);
+
     //pembeliaan
     // Helper routes
     Route::get('/pembelian/search-variants', [PembelianApiController::class , 'searchVariants']);
@@ -384,6 +394,7 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
 
         // claim garansi
         Route::post('/services/{originalServiceId}/claim-warranty', [ServiceApiController::class , 'initiateWarrantyClaim']);
+        Route::post('/services/{id}/refund-warranty', [ServiceApiController::class , 'refundWarrantyClaim']);
 
         // Service Notes routes
         Route::post('/service-notes/store', [SparepartApiController::class , 'storeCatatanService']);

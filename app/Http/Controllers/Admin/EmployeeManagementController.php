@@ -1260,43 +1260,121 @@ public function reversePenalty(Request $request)
     // ===================================================================
 
     public function generateMonthlyReport(Request $request)
-{
-    // Mengambil tahun dan bulan dari data form POST dengan aman.
-    $year = $request->input('year', date('Y'));
-    $month = $request->input('month', date('m'));
+    {
+        $year = $request->input('year', date('Y'));
+        $month = $request->input('month', date('m'));
 
-    // UPDATED: Gunakan owner scope (sama dengan logic original)
-    $employees = $this->getCurrentOwnerEmployees();
+        $employees = $this->getCurrentOwnerEmployees();
 
-    if ($employees->isEmpty()) {
-        // Redirect kembali ke halaman laporan dengan pesan error
-        return redirect()->route('admin.employee.monthly-report')
-                         ->with('error', 'Tidak ada karyawan yang ditemukan untuk digenerate laporannya.');
+        if ($employees->isEmpty()) {
+            return redirect()->route('admin.employee.monthly-report')
+                             ->with('error', 'Tidak ada karyawan yang ditemukan untuk digenerate laporannya.');
+        }
+
+        // 1. Generate laporan bulanan individu beserta skor KPI
+        foreach ($employees as $employee) {
+            $this->generateEmployeeMonthlyReport($employee->id_user, $year, $month);
+        }
+
+        // 2. Kalkulasi Ranking dan Pembagian Pool Bonus untuk Teknisi
+        $this->distributePoolBonusAndRankings($employees->pluck('id_user')->toArray(), $year, $month);
+
+        return redirect()->route('admin.employee.monthly-report', ['year' => $year, 'month' => $month])
+                         ->with('success', 'Laporan bulanan & KPI berhasil digenerate untuk ' . $employees->count() . ' karyawan.');
     }
 
-    foreach ($employees as $employee) {
-        $this->generateEmployeeMonthlyReport($employee->id_user, $year, $month);
-    }
+    /**
+     * Hitung Ranking dan Distribusi Pool Bonus untuk seluruh teknisi owner
+     */
+    private function distributePoolBonusAndRankings(array $employeeIds, $year, $month)
+    {
+        try {
+            $ownerCode = $this->getCurrentOwnerCode();
+            $kpiSetting = \App\Models\KpiSetting::getEffectiveSettings($ownerCode);
 
-    // Redirect kembali ke halaman laporan dengan bulan dan tahun yang dipilih
-    return redirect()->route('admin.employee.monthly-report', ['year' => $year, 'month' => $month])
-                     ->with('success', 'Laporan bulanan berhasil digenerate untuk ' . $employees->count() . ' karyawan.');
-}
+            // Ambil semua laporan teknisi bulan ini
+            $reports = EmployeeMonthlyReport::with('user.userDetail')
+                ->whereIn('user_id', $employeeIds)
+                ->where('year', $year)
+                ->where('month', $month)
+                ->get();
+
+            $technicianReports = $reports->filter(function ($r) {
+                return $r->user && $r->user->userDetail && $r->user->userDetail->jabatan == 3;
+            })->sortByDesc('final_kpi_score');
+
+            // 1. Update ranking
+            $rank = 1;
+            foreach ($technicianReports as $report) {
+                $report->update(['kpi_rank' => $rank++]);
+            }
+
+            // 2. Hitung total profit toko dari semua teknisi bulan ini
+            $totalShopProfitAll = (float) $technicianReports->sum('total_shop_profit');
+            $poolBonusPercentage = (float) $kpiSetting->pool_percentage;
+            $totalPoolBonus = ($totalShopProfitAll * $poolBonusPercentage) / 100;
+
+            // Teknisi yang memenuhi syarat minimal KPI (default 70%)
+            $minKpi = (float) $kpiSetting->min_kpi_bonus;
+            $eligibleReports = $technicianReports->filter(function ($r) use ($minKpi) {
+                return (float) $r->final_kpi_score >= $minKpi;
+            });
+
+            $totalEligibleKpi = (float) $eligibleReports->sum('final_kpi_score');
+
+            foreach ($technicianReports as $report) {
+                $kpiScore = (float) $report->final_kpi_score;
+                $tierBonus = (float) $kpiSetting->calculateTierBonus($kpiScore);
+
+                // Hitung porsi pool bonus proporsional
+                $poolShare = 0;
+                if ($totalEligibleKpi > 0 && $kpiScore >= $minKpi) {
+                    $poolShare = ($kpiScore / $totalEligibleKpi) * $totalPoolBonus;
+                }
+
+                // Tentukan bonus final berdasarkan skema yang dipilih
+                $finalBonus = $report->total_bonus; // default existing
+
+                if ($kpiSetting->bonus_scheme === 'pool') {
+                    $finalBonus = $poolShare;
+                } elseif ($kpiSetting->bonus_scheme === 'tiered') {
+                    $finalBonus = $tierBonus;
+                } elseif ($kpiSetting->bonus_scheme === 'hybrid') {
+                    // Hybrid: Nilai tier bonus dicap maksimal sebesar pool share (atau jika pool share > 0)
+                    $finalBonus = $poolShare > 0 ? min($tierBonus, $poolShare) : 0;
+                    if ($finalBonus == 0 && $tierBonus > 0 && $totalShopProfitAll == 0) {
+                        $finalBonus = $tierBonus; // fallback jika profit toko belum tercatat
+                    }
+                }
+
+                $newFinalSalary = (float)$report->basic_salary + (float)$report->total_commission + $finalBonus - (float)$report->total_penalties;
+
+                $report->update([
+                    'total_bonus' => round($finalBonus, 2),
+                    'pool_bonus_share' => round($poolShare, 2),
+                    'final_salary' => round($newFinalSalary, 2),
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error distributing pool bonus & rankings: ' . $e->getMessage());
+        }
+    }
 
     private function generateEmployeeMonthlyReport($userId, $year, $month)
     {
-        $ownerCode=$this->getThisUser()->id_upline;
+        $ownerCode = $this->getCurrentOwnerCode();
         $startDate = Carbon::create($year, $month, 1)->startOfMonth();
         $endDate = Carbon::create($year, $month, 1)->endOfMonth();
 
         $salarySetting = SalarySetting::where('user_id', $userId)->first();
         if (!$salarySetting) {
             \Log::warning("Tidak ada pengaturan kompensasi untuk user: $userId, laporan dilewati.");
-            return; // Hentikan fungsi jika tidak ada pengaturan gaji
+            return;
         }
 
+        $kpiSetting = \App\Models\KpiSetting::getEffectiveSettings($ownerCode);
         $userDetail = \App\Models\UserDetail::where('kode_user', $userId)->first();
-        $jabatan = $userDetail->jabatan;
+        $jabatan = $userDetail ? $userDetail->jabatan : 3;
 
         // Hitung hari kerja berdasarkan schedule
         $daysInMonth = $endDate->day;
@@ -1318,23 +1396,17 @@ public function reversePenalty(Request $request)
             ->whereBetween('attendance_date', [$startDate, $endDate])
             ->get();
         $totalPresentDays = $attendances->where('status', 'hadir')->count();
-        $totalAbsentDays = $totalWorkingDays - $totalPresentDays;
+        $totalAbsentDays = $attendances->where('status', 'alpha')->count();
+        $totalLeaveDays = $attendances->whereIn('status', ['izin', 'sakit', 'cuti'])->count();
         $totalLateMinutes = $attendances->sum('late_minutes');
 
-        // ========================================================================
-        // === PERUBAHAN LOGIKA QUERY PENGAMBILAN DATA SERVICE (LEBIH AKURAT) ===
-        // ========================================================================
-
-        // 1. Ambil semua service yang relevan untuk bulan ini
+        // 1. Ambil data service yang relevan untuk bulan ini
         $allCompletedServices = modelServices::where('id_teknisi', $userId)
             ->where(function ($query) use ($startDate, $endDate) {
-                // Kondisi 1: Servis yang DI AMBIL pada rentang tanggal ini
                 $query->where(function ($q) use ($startDate, $endDate) {
                     $q->where('status_services', 'Diambil')
                     ->whereBetween('updated_at', [$startDate, $endDate]);
                 })
-                // ATAU
-                // Kondisi 2: Servis yang SELESAI pada rentang tanggal ini
                 ->orWhere(function ($q) use ($startDate, $endDate) {
                     $q->where('status_services', 'Selesai')
                     ->whereBetween('tgl_service', [$startDate, $endDate]);
@@ -1342,24 +1414,19 @@ public function reversePenalty(Request $request)
             })
             ->get();
 
-        // 2. Pisahkan service berdasarkan statusnya (logika ini tetap sama)
         $takenServices = $allCompletedServices->where('status_services', 'Diambil');
         $notTakenServices = $allCompletedServices->where('status_services', 'Selesai');
 
-        // 3. Hitung jumlah unit
         $totalServiceUnits = $allCompletedServices->count();
         $takenUnits = $takenServices->count();
         $completedUnitsNotTaken = $notTakenServices->count();
 
-        // 4. Dapatkan ID dari masing-masing koleksi service
         $allCompletedServiceIds = $allCompletedServices->pluck('id');
         $takenServiceIds = $takenServices->pluck('id');
         $notTakenServiceIds = $notTakenServices->pluck('id');
 
-        // 5. Hitung total nominal service
         $totalServiceAmount = $allCompletedServices->sum('total_biaya');
 
-        // 6. Hitung komisi dan profit
         $totalCommission = \App\Models\ProfitPresentase::whereIn('kode_service', $allCompletedServiceIds)
             ->where('kode_user', $userId)->sum('profit');
 
@@ -1370,15 +1437,14 @@ public function reversePenalty(Request $request)
             ->where('kode_user', $userId)->sum('profit_toko');
 
         $totalShopProfit = $realShopProfit;
-
         $totalPartCost = $totalServiceAmount - ($totalCommission + $realShopProfit + $potentialShopProfit);
 
-
-        // Hitung metrik klaim garansi
+        // Klaim garansi & rework
         $totalClaimsHandled = \App\Models\Sevices::where('id_teknisi', $userId)
             ->whereNotNull('claimed_from_service_id')
             ->whereBetween('updated_at', [$startDate, $endDate])
             ->count();
+
         $claimsFromOwnWork = \App\Models\Sevices::query()
             ->from('sevices as claims')
             ->join('sevices as originals', 'claims.claimed_from_service_id', '=', 'originals.id')
@@ -1387,85 +1453,94 @@ public function reversePenalty(Request $request)
             ->whereBetween('claims.created_at', [$startDate, $endDate])
             ->count();
 
-         $basicSalary = 0; // Inisialisasi Gaji Pokok
-        // Hitung gaji pokok atau sesuaikan komisi berdasarkan kehadiran
+        // Gaji Pokok
+        $basicSalary = 0;
         if ($salarySetting->compensation_type == 'fixed') {
             $basicSalary = $salarySetting->basic_salary * $totalPresentDays;
-        } else { // percentage
-            // $attendanceRate = $totalWorkingDays > 0 ? ($totalPresentDays / $totalWorkingDays) : 1;
-            // $totalCommission = $totalCommission * $attendanceRate;
-        }
-
-        // Hitung kompensasi berdasarkan tipe
-        $totalBonus = 0;
-        $target1_achieved = false;
-        $target2_achieved = false;
-
-        // Pastikan ada pengaturan bonus sebelum melakukan pengecekan
-        if ($salarySetting && $salarySetting->target_bonus > 0) {
-
-            if ($jabatan == 3) { // Logika Bonus untuk Teknisi (Tetap sama)
-                if ($salarySetting->monthly_target > 0 && $totalServiceUnits >= $salarySetting->monthly_target) {
-                    $target1_achieved = true;
-                }
-                if ($salarySetting->target_shop_profit > 0 && $realShopProfit >= $salarySetting->target_shop_profit) {
-                    $target2_achieved = true;
-                }
-
-            } elseif ($jabatan == 2) { // Logika Bonus untuk Kasir (INI YANG DIPERBAIKI)
-
-                // 1. Hitung Jumlah Transaksi Aktual
-                // Menghitung jumlah penjualan yang diselesaikan oleh kasir pada bulan laporan
-                $actualTransactionCount = \App\Models\Penjualan::where('user_input', $userId)
-                    ->where('status_penjualan', '1') // Hanya yang sudah lunas
-                    ->whereBetween('updated_at', [$startDate, $endDate]) // Berdasarkan tanggal lunas
-                    ->count();
-
-                // 2. Hitung Omzet Penjualan Aktual
-                // Menjumlahkan total penjualan yang diselesaikan oleh kasir pada bulan laporan
-                $actualSalesRevenue = \App\Models\Penjualan::where('user_input', $userId)
-                    ->where('status_penjualan', '1') // Hanya yang sudah lunas
-                    ->whereBetween('updated_at', [$startDate, $endDate]) // Berdasarkan tanggal lunas
-                    ->sum('total_penjualan');
-
-                // Cek pencapaian Target 1 (Jumlah Transaksi)
-                if ($salarySetting->target_transaction_count > 0 && $actualTransactionCount >= $salarySetting->target_transaction_count) {
-                    $target1_achieved = true;
-                }
-
-                // Cek pencapaian Target 2 (Omzet Penjualan)
-                if ($salarySetting->target_sales_revenue > 0 && $actualSalesRevenue >= $salarySetting->target_sales_revenue) {
-                    $target2_achieved = true;
-                }
-            }
-
-            // Berikan bonus jika kedua target untuk peran tersebut tercapai
-            if ($target1_achieved && $target2_achieved) {
-                $totalBonus = $salarySetting->target_bonus;
-            }
         }
 
         // ========================================================================
-        // === PERHITUNGAN DENDA (PENALTIES) - TIDAK ADA PERUBAHAN ===
+        // === PERHITUNGAN 5 INDIKATOR KPI TERBOBOT ===
         // ========================================================================
+        // A. Produktivitas (30%)
+        $monthlyTarget = (int) ($salarySetting->monthly_target ?? 0);
+        if ($monthlyTarget > 0) {
+            $scoreProductivity = min(120.0, ($totalServiceUnits / $monthlyTarget) * 100);
+        } else {
+            $scoreProductivity = $totalServiceUnits > 0 ? 100.0 : 0.0;
+        }
+
+        // B. Kualitas (30%) - Dihitung dari minimnya komplain pelanggan
+        $complaintsCount = Violation::where('user_id', $userId)
+            ->where('type', 'komplain')
+            ->where('status', 'processed')
+            ->whereBetween('violation_date', [$startDate, $endDate])
+            ->count();
+        $scoreQuality = max(0.0, 100.0 - ($complaintsCount * 15.0));
+
+        // C. Rework Rate (20%) - Dihitung dari minimnya klaim garansi dari kerjaan sendiri
+        $reworkRate = $totalServiceUnits > 0 ? ($claimsFromOwnWork / $totalServiceUnits) * 100 : 0;
+        $scoreRework = max(0.0, 100.0 - ($reworkRate * 5.0));
+
+        // D. Disiplin (10%) - Absensi, Keterlambatan, dan Alpha
+        $scoreDiscipline = max(0.0, 100.0 - ($totalLateMinutes / 10.0) - ($totalAbsentDays * 25.0) - ($totalLeaveDays * 5.0));
+
+        // E. SOP Checklist & Administrasi (10%)
+        $sopCompleteCount = 0;
+        foreach ($allCompletedServices as $srv) {
+            $checklist = $srv->sop_checklist;
+            if (!empty($checklist) && is_array($checklist)) {
+                $penerimaan = $checklist['penerimaan'] ?? false;
+                $pengerjaan = $checklist['pengerjaan'] ?? false;
+                $selesai = $checklist['selesai'] ?? false;
+                if ($penerimaan && $pengerjaan && $selesai) {
+                    $sopCompleteCount++;
+                }
+            }
+        }
+        $scoreSop = $totalServiceUnits > 0 ? ($sopCompleteCount / $totalServiceUnits) * 100 : 0.0;
+
+        if ($totalServiceUnits == 0) {
+            $scoreQuality = 0.0;
+            $scoreRework = 0.0;
+        }
+
+        // Rasio pembuktian produktivitas (Volume scaling)
+        $volumeRatio = ($monthlyTarget > 0) ? min(1.0, $totalServiceUnits / $monthlyTarget) : ($totalServiceUnits > 0 ? 1.0 : 0.0);
+
+        $effectiveQuality = $scoreQuality * $volumeRatio;
+        $effectiveRework = $scoreRework * $volumeRatio;
+        $effectiveSop = $scoreSop * $volumeRatio;
+        $effectiveDiscipline = $scoreDiscipline;
+
+        // Total Skor KPI Final yang Adil & Proporsional
+        $finalKpiScore = round(
+            ($scoreProductivity * (float) $kpiSetting->weight_productivity / 100) +
+            ($effectiveQuality * (float) $kpiSetting->weight_quality / 100) +
+            ($effectiveRework * (float) $kpiSetting->weight_rework / 100) +
+            ($effectiveDiscipline * (float) $kpiSetting->weight_discipline / 100) +
+            ($effectiveSop * (float) $kpiSetting->weight_sop / 100),
+            2
+        );
+
+        // Estimasi bonus awal dari tiering KPI (Wajib capai min 70% target unit & min KPI)
+        $isEligibleBonus = ($scoreProductivity >= 70.0) && ($finalKpiScore >= (float) $kpiSetting->min_kpi_bonus);
+        $totalBonus = $isEligibleBonus ? (float) $kpiSetting->calculateTierBonus($finalKpiScore) : 0.0;
+
+        // Denda & Pelanggaran
         $violations = Violation::where('user_id', $userId)
             ->where('status', 'processed')
             ->whereBetween('violation_date', [$startDate, $endDate])
             ->get();
 
         $totalPenalties = 0;
-
         foreach ($violations as $violation) {
-            if ($salarySetting->compensation_type == 'fixed') {
-                if ($violation->penalty_amount > 0) {
-                    $totalPenalties += $violation->penalty_amount;
-                } elseif ($violation->penalty_percentage > 0) {
-                    $totalPenalties += ($salarySetting->basic_salary * $violation->penalty_percentage) / 100;
-                }
-            } elseif ($salarySetting->compensation_type == 'percentage' || $salarySetting->compensation_type == 'tiered') {
-                if ($violation->penalty_amount > 0) {
-                    $totalPenalties += $violation->penalty_amount;
-                }
+            if ($violation->applied_penalty_amount > 0) {
+                $totalPenalties += (float) $violation->applied_penalty_amount;
+            } elseif ($salarySetting->compensation_type == 'fixed' && $violation->penalty_percentage > 0) {
+                $totalPenalties += ($salarySetting->basic_salary * $violation->penalty_percentage) / 100;
+            } elseif ($violation->penalty_amount > 0) {
+                $totalPenalties += (float) $violation->penalty_amount;
             }
         }
 
@@ -1503,10 +1578,8 @@ public function reversePenalty(Request $request)
         }
         $totalPenalties += $outsideOfficePenalties;
 
-        // === HITUNG GAJI FINAL ===
         $finalSalary = $basicSalary + $totalCommission + $totalBonus - $totalPenalties;
 
-        // === SIMPAN LAPORAN ===
         EmployeeMonthlyReport::updateOrCreate(
             [
                 'user_id' => $userId,
@@ -1527,6 +1600,12 @@ public function reversePenalty(Request $request)
                 'real_shop_profit' => $realShopProfit,
                 'total_claims_handled' => $totalClaimsHandled,
                 'claims_from_own_work' => $claimsFromOwnWork,
+                'score_productivity' => $scoreProductivity,
+                'score_quality' => $scoreQuality,
+                'score_rework' => $scoreRework,
+                'score_discipline' => $scoreDiscipline,
+                'score_sop' => $scoreSop,
+                'final_kpi_score' => $finalKpiScore,
                 'total_bonus' => $totalBonus,
                 'total_penalties' => $totalPenalties,
                 'final_salary' => $finalSalary,
@@ -1542,6 +1621,17 @@ public function reversePenalty(Request $request)
                 'percentage_used' => ($salarySetting->compensation_type == 'percentage')
                                         ? $salarySetting->percentage_value
                                         : (($salarySetting->compensation_type == 'tiered') ? 0 : ($salarySetting->service_percentage ?? 0)),
+                'kpi_metadata' => [
+                    'weights' => [
+                        'productivity' => (float)$kpiSetting->weight_productivity,
+                        'quality' => (float)$kpiSetting->weight_quality,
+                        'rework' => (float)$kpiSetting->weight_rework,
+                        'discipline' => (float)$kpiSetting->weight_discipline,
+                        'sop' => (float)$kpiSetting->weight_sop,
+                    ],
+                    'bonus_scheme' => $kpiSetting->bonus_scheme,
+                    'calculated_at' => now()->toISOString(),
+                ],
                 'metadata' => json_encode([
                     'penalty_rules_version' => 'database_driven',
                     'calculated_at' => now()->toISOString(),

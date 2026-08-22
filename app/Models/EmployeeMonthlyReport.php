@@ -23,7 +23,15 @@ class EmployeeMonthlyReport extends Model
         'real_shop_profit',
         'total_claims_handled',
         'claims_from_own_work',
+        'score_productivity',
+        'score_quality',
+        'score_rework',
+        'score_discipline',
+        'score_sop',
+        'final_kpi_score',
+        'kpi_rank',
         'total_bonus',
+        'pool_bonus_share',
         'total_penalties',
         'final_salary',
         'total_working_days',
@@ -32,15 +40,25 @@ class EmployeeMonthlyReport extends Model
         'total_late_minutes',
         'status',
         'processed_by',
-        'paid_at'
+        'paid_at',
+        'kpi_metadata',
     ];
 
     protected $casts = [
         'total_service_amount' => 'decimal:2',
         'total_commission' => 'decimal:2',
         'total_bonus' => 'decimal:2',
+        'pool_bonus_share' => 'decimal:2',
         'total_penalties' => 'decimal:2',
         'final_salary' => 'decimal:2',
+        'score_productivity' => 'decimal:2',
+        'score_quality' => 'decimal:2',
+        'score_rework' => 'decimal:2',
+        'score_discipline' => 'decimal:2',
+        'score_sop' => 'decimal:2',
+        'final_kpi_score' => 'decimal:2',
+        'kpi_rank' => 'integer',
+        'kpi_metadata' => 'array',
         'paid_at' => 'datetime',
     ];
 

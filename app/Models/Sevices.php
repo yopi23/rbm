@@ -33,10 +33,17 @@ class Sevices extends Model
         'id_teknisi',
         'kode_pengambilan',
         'claimed_from_service_id',
+        'is_rework',
         'status_services',
+        'sop_checklist',
         'kode_owner',
         'cabang_id',
         'shift_id',
+    ];
+
+    protected $casts = [
+        'sop_checklist' => 'array',
+        'is_rework' => 'boolean',
     ];
 
     protected $appends = [

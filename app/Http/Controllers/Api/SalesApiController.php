@@ -118,13 +118,10 @@ class SalesApiController extends Controller
                 // Buat ekspresi kolom yang dinormalisasi untuk digunakan kembali
                 $normalizedNameColumn = DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')");
 
-                // KONDISI 1: SEMUA keyword harus ada sebagai KATA UTUH di `nama_sparepart`
+                // KONDISI 1: SEMUA keyword harus ada di `nama_sparepart`
                 $q->where(function ($nameQuery) use ($keywords, $normalizedNameColumn) {
                         foreach ($keywords as $keyword) {
-                            // [[:<:]] dan [[:>:]] adalah penanda batas kata (whole word) di MySQL
-                            // FIX: MySQL 8.0.4+ uses \\b
-                            $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
-                            $nameQuery->where($normalizedNameColumn, 'REGEXP', $pattern);
+                            $nameQuery->where($normalizedNameColumn, 'LIKE', '%' . $keyword . '%');
                         }
                     }
                     );
@@ -132,8 +129,7 @@ class SalesApiController extends Controller
                     // KONDISI 2 (ATAU): SEMUA keyword ada di `attribute value`
                     $q->orWhereHas('variants.attributeValues', function ($attrQuery) use ($keywords) {
                         foreach ($keywords as $keyword) {
-                            $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
-                            $attrQuery->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
+                            $attrQuery->where(DB::raw('LOWER(value)'), 'LIKE', '%' . $keyword . '%');
                         }
                     }
                     );
@@ -387,28 +383,24 @@ class SalesApiController extends Controller
             }
 
             // =================================================================
-            // ✅ LOGIKA PENCARIAN BARU DENGAN WHOLE WORD MATCHING
+            // ✅ LOGIKA PENCARIAN BARU DENGAN LIKE MATCHING
             // =================================================================
             $query->where(function ($q) use ($keywords) {
                 // Buat ekspresi kolom yang dinormalisasi untuk digunakan kembali
                 $normalizedNameColumn = DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')");
 
-                // KONDISI 1: SEMUA keyword harus ada sebagai KATA UTUH di `nama_sparepart`
+                // KONDISI 1: SEMUA keyword harus ada di `nama_sparepart`
                 $q->where(function ($nameQuery) use ($keywords, $normalizedNameColumn) {
                         foreach ($keywords as $keyword) {
-                            // [[:<:]] dan [[:>:]] adalah penanda batas kata di MySQL REGEXP
-                            // FIX: MySQL 8.0.4+ uses \\b
-                            $pattern = '\\b' . $keyword . '\\b';
-                            $nameQuery->where($normalizedNameColumn, 'REGEXP', $pattern);
+                            $nameQuery->where($normalizedNameColumn, 'LIKE', '%' . $keyword . '%');
                         }
                     }
                     );
 
-                    // KONDISI 2 (ATAU): SEMUA keyword harus ada sebagai KATA UTUH di `attribute value`
+                    // KONDISI 2 (ATAU): SEMUA keyword harus ada di `attribute value`
                     $q->orWhereHas('variants.attributeValues', function ($attrQuery) use ($keywords) {
                         foreach ($keywords as $keyword) {
-                            $pattern = '\\b' . $keyword . '\\b';
-                            $attrQuery->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
+                            $attrQuery->where(DB::raw('LOWER(value)'), 'LIKE', '%' . $keyword . '%');
                         }
                     }
                     );
