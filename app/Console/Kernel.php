@@ -26,9 +26,12 @@ class Kernel extends ConsoleKernel
         // Backup otomatis database MySQL ke storage/app/backups/ jam 02:00 pagi
         $schedule->command('app:backup-database')->dailyAt('02:00');
 
-        // === LANGGANAN & SHIFT ===
+        // === LANGGANAN, SHIFT & PELANGGARAN ===
         // Pengecekan langganan kedaluwarsa
         $schedule->command('subscriptions:expire')->daily();
+        
+        // Pengecekan pelanggaran kedaluwarsa (lebih dari 14 hari)
+        $schedule->command('violations:expire')->dailyAt('00:00');
         
         // Auto Close Shifts jam 03:00 pagi untuk menutup shift yang lupa ditutup kemarin
         $schedule->command('shift:auto-close')->dailyAt('03:00');

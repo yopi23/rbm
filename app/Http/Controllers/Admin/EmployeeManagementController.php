@@ -980,7 +980,7 @@ class EmployeeManagementController extends Controller
 {
     $request->validate([
         'violation_id' => 'required|exists:violations,id',
-        'status' => 'required|in:processed,forgiven',
+        'status' => 'required|in:processed,forgiven,expired',
     ]);
 
     try {

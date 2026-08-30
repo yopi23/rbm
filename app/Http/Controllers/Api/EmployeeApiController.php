@@ -439,7 +439,7 @@ class EmployeeApiController extends Controller
 
             $validator = Validator::make($request->all(), [
                 'violation_id' => 'required|exists:violations,id',
-                'status' => 'required|in:processed,forgiven',
+                'status' => 'required|in:processed,forgiven,expired',
             ]);
 
             if ($validator->fails()) {

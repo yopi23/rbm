@@ -1475,7 +1475,7 @@ class SparepartApiController extends Controller
                         $serviceDate = Carbon::parse($service->tgl_service ?: $service->updated_at);
                         $startMonth = (clone $serviceDate)->startOfMonth()->toDateString();
                         $sub14Days = (clone $serviceDate)->subDays(14)->toDateString();
-                        $startPeriod = $startMonth < $sub14Days ? $startMonth : $sub14Days;
+                        $startPeriod = $startMonth > $sub14Days ? $startMonth : $sub14Days;
                         $endPeriod = $serviceDate->toDateString();
 
                         $violationPercentage = DB::table('violations')
