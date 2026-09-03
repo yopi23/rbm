@@ -103,6 +103,36 @@ services:
                 limits:
                     memory: 512M    # Limit RAM MariaDB di STB (agar tidak OOM)
 
+    # ---- Auto Backup Database ke GDrive ----
+    rbm-db-backup:
+        image: alpine:latest
+        container_name: rbm-db-backup
+        restart: unless-stopped
+        depends_on:
+            - rbm-db
+        volumes:
+            - ./docker/backup/rclone.conf:/root/.config/rclone/rclone.conf:ro
+            - ./docker/backup/backup.sh:/backup.sh:ro
+        environment:
+            - DB_HOST=rbm-db
+            - DB_USER=root
+            - DB_PASSWORD=${DB_ROOT_PASSWORD:-dockerrbm}
+            - DB_NAME=${DB_DATABASE:-rbm}
+        command: >
+            /bin/sh -c "
+            apk add --no-cache mysql-client rclone tzdata ca-certificates &&
+            cp /usr/share/zoneinfo/Asia/Jakarta /etc/localtime &&
+            echo '0 * * * * sh /backup.sh' > /etc/crontabs/root &&
+            echo 'Menjalankan Cronjob Backup...' &&
+            crond -f -l 2
+            "
+        networks:
+            - rbm-internal
+        deploy:
+            resources:
+                limits:
+                    memory: 64M
+
     # ---- phpMyAdmin (Opsional) ----
     rbm-pma:
         image: phpmyadmin
