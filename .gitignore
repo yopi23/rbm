@@ -18,3 +18,5 @@ yarn-error.log
 /.vscode
 
 docker/backup/rclone.conf
+.env.docker
+storage/app.conf.docker
