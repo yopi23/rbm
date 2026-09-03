@@ -8,7 +8,7 @@ REMOTE_PATH="googledrive:RbmBackups"
 echo "[$(date)] Memulai proses backup RBM..."
 
 # Dump database dan compress
-mysqldump -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" | gzip > "/tmp/$FILENAME"
+mariadb-dump -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" --skip-ssl "$DB_NAME" | gzip > "/tmp/$FILENAME"
 
 if [ $? -eq 0 ]; then
   echo "[$(date)] Berhasil dump database ke /tmp/$FILENAME"

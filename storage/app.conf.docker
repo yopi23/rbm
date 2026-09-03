@@ -1,0 +1,41 @@
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=5r/s;
+
+server {
+    listen 80;
+    server_name _;
+    root /www/wwwroot/rbm/public;
+    index index.php index.html;
+
+    charset utf-8;
+    client_max_body_size 40M;
+
+    # Gzip compression
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript image/svg+xml;
+    gzip_min_length 256;
+
+    location / {
+        limit_req zone=api_limit burst=10 nodelay;
+        try_files $uri $uri/ /index.php?$query_string;
+        gzip_static on;
+    }
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { access_log off; log_not_found off; }
+
+    error_page 404 /index.php;
+
+    location ~ \.php$ {
+        try_files $uri =404;
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_pass rbm-app:9000;
+        fastcgi_index index.php;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param PATH_INFO $fastcgi_path_info;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+}

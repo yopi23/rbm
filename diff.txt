@@ -1,0 +1,1786 @@
+﻿diff --git a/app/Http/Controllers/Admin/DashboardController.php b/app/Http/Controllers/Admin/DashboardController.php
+index e478bf2..f4f4088 100644
+--- a/app/Http/Controllers/Admin/DashboardController.php
++++ b/app/Http/Controllers/Admin/DashboardController.php
+@@ -320,6 +320,9 @@ public function create_service(Request $request)
+         $validate = $request->validate([
+             'kode_service' => ['required'],
+             'tgl_service' => ['required'],
++            'tipe_sandi' => ['nullable', 'string', \Illuminate\Validation\Rule::in(['pola', 'pin', 'teks'])],
++            'isi_sandi' => ['nullable', 'string', 'required_with:tipe_sandi'],
++            'data_unit' => ['nullable', 'json'],
+         ]);
+         if ($validate) {
+             // Cek apakah kode service sudah ada dalam database
+@@ -347,6 +350,9 @@ public function create_service(Request $request)
+                 'no_telp' => $request->no_telp,
+                 'type_unit' => $request->type_unit,
+                 'keterangan' => $request->ket,
++                'tipe_sandi' => $request->tipe_sandi,
++                'isi_sandi' => $request->isi_sandi,
++                'data_unit' => $request->data_unit,
+                 'total_biaya' => $request->biaya_servis,
+                 'dp' => $request->dp,
+                 'dp_metode' => $dpMetode,
+@@ -402,10 +408,11 @@ public function create_service(Request $request)
+                             $update_sparepart = Sparepart::findOrFail($request['kode_sparepart'][$i]);
+                             DetailPartServices::create([
+                                 'kode_services' => $data_service->id,
+-                                'kode_sparepart' => $request['kode_sparepart'][$i],
++                                'kode_sparepart' => $request->kode_sparepart[$i],
+                                 'detail_modal_part_service' => $update_sparepart->harga_beli,
+                                 'detail_harga_part_service' => $update_sparepart->harga_jual,
+-                                'qty_part' => $request['qty_kode_sparepart'][$i],
++                                'qty_part' => $request->qty_kode_sparepart[$i],
++                                'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi[$i] ?? 0,
+                                 'user_input' => auth()->user()->id,
+                             ]);
+                             $stok_awal = $update_sparepart->stok_sparepart;
+@@ -899,7 +906,7 @@ public function getDetail($id)
+     public function get_pending_services(Request $request)
+     {
+         // Ambil data service dengan status 'Antri'
+-        $services = modelServices::where('kode_owner', $this->getThisUser()->id_upline)
++        $services = modelServices::with('customer')->where('kode_owner', $this->getThisUser()->id_upline)
+             ->whereIn('status_services', ['Antri', 'Proses'])
+             ->latest()
+             ->get();
+diff --git a/app/Http/Controllers/Admin/ServiceController.php b/app/Http/Controllers/Admin/ServiceController.php
+index 465e640..f446232 100644
+--- a/app/Http/Controllers/Admin/ServiceController.php
++++ b/app/Http/Controllers/Admin/ServiceController.php
+@@ -140,6 +140,9 @@ public function update_detail_service(Request $request, $id)
+             'no_telp' => $request->no_telp,
+             'type_unit' => $request->type_unit,
+             'keterangan' => $request->keterangan,
++            'tipe_sandi' => $request->tipe_sandi,
++            'isi_sandi' => $request->isi_sandi,
++            'data_unit' => $request->data_unit,
+             'total_biaya' => $request->total_biaya,
+             // 'created_at' => Carbon::now(),
+         ]);
+@@ -169,6 +172,9 @@ public function update_service(Request $request, $id)
+             'no_telp' => $request->no_telp,
+             'type_unit' => $request->type_unit,
+             'keterangan' => $request->keterangan,
++            'tipe_sandi' => $request->tipe_sandi,
++            'isi_sandi' => $request->isi_sandi,
++            'data_unit' => $request->data_unit,
+             'dp' => $request->dp,
+             'total_biaya' => $request->total_biaya,
+             // 'created_at' => Carbon::now(),
+@@ -304,12 +310,18 @@ public function store_sparepart_toko(Request $request)
+             ]);
+         }
+ 
+-        $cek = DetailPartServices::where([['kode_services', '=', $request->kode_services], ['kode_sparepart', '=', $request->kode_sparepart]])->get()->first();
++        $cek = DetailPartServices::where([
++            ['kode_services', '=', $request->kode_services],
++            ['kode_sparepart', '=', $request->kode_sparepart],
++            ['is_tanggungan_teknisi', '=', $request->is_tanggungan_teknisi ?? 0]
++        ])->get()->first();
++
+         if ($cek) {
+             $update = DetailPartServices::findOrFail($cek->id);
+             $qty_baru = $cek->qty_part + $request->qty_part;
+             $update->update([
+                 'qty_part' => $qty_baru,
++                'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
+                 'user_input' => auth()->user()->id,
+             ]);
+             if ($update) {
+@@ -344,6 +356,7 @@ public function store_sparepart_toko(Request $request)
+                 'detail_modal_part_service' => $update_sparepart->harga_beli,
+                 'detail_harga_part_service' => $update_sparepart->harga_jual,
+                 'qty_part' => $request->qty_part,
++                'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
+                 'user_input' => auth()->user()->id,
+             ]);
+             if ($create) {
+@@ -411,6 +424,7 @@ public function store_sparepart_luar(Request $request)
+             'nama_part' => $request->nama_part,
+             'harga_part' => $request->harga_part,
+             'qty_part' => $request->qty_part,
++            'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
+             'user_input' => auth()->user()->id,
+         ]);
+         if ($create) {
+@@ -430,6 +444,7 @@ public function update_sparepart_luar(Request $request, $id)
+             'nama_part' => $request->nama_part,
+             'harga_part' => $request->harga_part,
+             'qty_part' => $request->qty_part,
++            'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
+             'user_input' => auth()->user()->id,
+         ]);
+         if ($update) {
+@@ -623,45 +638,77 @@ public function proses_service(Request $request, $id)
+             }
+ 
+             if ($request->status_services == 'Selesai') {
+-                // if ($this->getThisUser()->jabatan != '1') {
+-                $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')->where([['kode_services', '=', $id]])->get(['detail_part_services.id as id_detail_part', 'detail_part_services.*', 'spareparts.*']);
+-                $part_luar_toko_service = DetailPartLuarService::where([['kode_services', '=', $id]])->get();
+-                $presentase = SalarySetting::where([['user_id', '=', $id_teknisi]])->get()->first();
++                $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
++                    ->where('kode_services', $id)
++                    ->get(['detail_part_services.*', 'spareparts.harga_beli as current_harga_beli']);
++                $part_luar_toko_service = DetailPartLuarService::where('kode_services', $id)->get();
++                $presentase = SalarySetting::where('user_id', $id_teknisi)->first();
++
++                $total_part_harga_jual = 0; // Untuk ditagihkan ke customer
++                $total_part_modal_toko = 0; // Untuk hitung profit toko
++                $total_penalty_cost = 0; // Untuk potong saldo teknisi
+ 
+-                $total_part = 0;
+                 foreach ($part_toko_service as $a) {
+-                    $total_part += $a->harga_jual * $a->qty_part;
++                    $item_harga_jual = $a->detail_harga_part_service * $a->qty_part;
++                    $item_modal = $a->detail_modal_part_service * $a->qty_part;
++
++                    $total_part_harga_jual += $item_harga_jual;
++
++                    if ($a->is_tanggungan_teknisi) {
++                        // Jika ditanggung teknisi, modal part tersebut menjadi penalti bagi teknisi
++                        $total_penalty_cost += $item_modal;
++                    }
++                    else {
++                        // Jika part normal, modal part mengurangi profit toko
++                        $total_part_modal_toko += $item_modal;
++                    }
+                 }
++
+                 foreach ($part_luar_toko_service as $b) {
+-                    $total_part += $b->harga_part * $b->qty_part;
++                    $item_harga = $b->harga_part * $b->qty_part;
++                    $total_part_harga_jual += $item_harga;
++
++                    if ($b->is_tanggungan_teknisi) {
++                        // Part luar biasanya harga jual = harga modal bagi toko. 
++                        // Jika dirusak teknisi, teknisi ganti seharga "harga beli/jual" part tersebut.
++                        $total_penalty_cost += $item_harga;
++                    }
++                    else {
++                        $total_part_modal_toko += $item_harga;
++                    }
+                 }
+-                // **Menambahkan total part ke kolom `part` di tabel `sevices`**
++
++                // Update total sparepart yang ditagihkan ke customer
+                 $update->update([
+-                    'harga_sp' => $total_part // Menambahkan total_part ke kolom 'part'
++                    'harga_sp' => $total_part_harga_jual
+                 ]);
+ 
+-                if ($presentase->compensation_type == 'percentage') {
++                if ($presentase && $presentase->compensation_type == 'percentage') {
++                    // Profit toko = (Biaya Service - Total Part Jual) + (Total Part Jual - Total Part Modal Normal)
++                    // Ringkasnya: Profit = Total Biaya - Total Part Modal Normal (yang tidak ganti rugi)
++                    $profit_servis = $update->total_biaya - $total_part_harga_jual; // Ini adalah Jasa
+ 
+-                    $profit = $update->total_biaya - $total_part;
+-                    $fix_profit = $profit * $presentase->percentage_value / 100;
++                    // Hitung komisi teknisi (biasanya dari Jasa)
++                    $base_commission = $profit_servis * $presentase->percentage_value / 100;
+ 
+-                    //
+-                    $pegawais = UserDetail::where([['kode_user', '=', $id_teknisi, ]])->get()->first();
++                    // Komisi Akhir = Komisi Dasar - Penalti Kerusakan
++                    $fix_profit = $base_commission - $total_penalty_cost;
+ 
++                    $pegawais = UserDetail::where('kode_user', $id_teknisi)->first();
+ 
+-                    $komisi = ProfitPresentase::create([
+-                        'tgl_profit' => date('Y-m-d'),
+-                        'kode_service' => $id,
+-                        'kode_presentase' => $presentase->id,
+-                        'kode_user' => $id_teknisi,
+-                        'profit' => $fix_profit,
+-                        'saldo' => $pegawais->saldo,
+-                    ]);
+-                    if ($komisi) {
+-                        $new_saldo = $pegawais->saldo + $fix_profit;
+-                        $pegawais->update([
+-                            'saldo' => $new_saldo
++                    if ($pegawais) {
++                        $komisi = ProfitPresentase::create([
++                            'tgl_profit' => date('Y-m-d'),
++                            'kode_service' => $id,
++                            'kode_presentase' => $presentase->id,
++                            'kode_user' => $id_teknisi,
++                            'profit' => $fix_profit,
++                            'saldo' => $pegawais->saldo + $fix_profit,
+                         ]);
++
++                        if ($komisi) {
++                            $pegawais->increment('saldo', $fix_profit);
++                        }
+                     }
+                 }
+ 
+diff --git a/app/Http/Controllers/Admin/UserController.php b/app/Http/Controllers/Admin/UserController.php
+index 518f9a6..b6cc080 100644
+--- a/app/Http/Controllers/Admin/UserController.php
++++ b/app/Http/Controllers/Admin/UserController.php
+@@ -81,7 +81,7 @@ public function update_profile(Request $request, $id)
+             $update->update([
+                 'name' => $request->name,
+                 'email' => $request->email,
+-                'password' => $request->password != null ? Hash::make($request->password) : $update->password,
++                'password' => $request->password != null ?Hash::make($request->password) : $update->password,
+             ]);
+             if ($update) {
+                 $update1 = UserDetail::where([['kode_user', '=', $id]])->get()->first();
+@@ -107,8 +107,8 @@ public function update_profile(Request $request, $id)
+                 if ($update1) {
+                     return redirect()->back()
+                         ->with([
+-                            'success' => 'Pengguna Berhasil DiUpdate'
+-                        ]);
++                        'success' => 'Pengguna Berhasil DiUpdate'
++                    ]);
+                 }
+                 return redirect()->back()->with('error', "Oops, Something Went Wrong");
+             }
+@@ -153,7 +153,7 @@ public function store_penarikan(Request $request)
+             'dari_saldo' => $user->saldo,
+             'shift_id' => Shift::getActiveShift(auth()->user()->id)->id ?? null,
+         ]);
+-        
++
+         // Tentukan status berdasarkan jabatan (Admin=1/Sukses, Karyawan=0/Pending)
+         $statusPenarikan = ($user->jabatan == '1') ? '1' : '0';
+         $create->update(['status_penarikan' => $statusPenarikan]);
+@@ -175,76 +175,76 @@ public function store_penarikan(Request $request)
+             // HANYA Catat Kas jika Status Disetujui (Admin)
+             if ($statusPenarikan == '1') {
+                 $this->catatKas(
+-                    $create,                                     // Model sumber
+-                    0,                                           // Debit
+-                    $jumlahPenarikan,                            // Kredit (uang keluar dari kas perusahaan)
++                    $create, // Model sumber
++                    0, // Debit
++                    $jumlahPenarikan, // Kredit (uang keluar dari kas perusahaan)
+                     'Penarikan Saldo Teknisi: ' . $pegawais->fullname, // Deskripsi
+-                    now()                                        // Tanggal
++                    now(), // Tanggal
++                    true, // isCash
++                    false // attachShift
+                 );
+             }
+ 
+             DB::commit();
+ 
+             // Status WhatsApp notification
+-$whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
+-
+-// Dapatkan admin dari upline
+-$admin = UserDetail::where([['kode_user', '=', $pegawais->id_upline]])->get()->first();
+-
+-// Array untuk menyimpan nomor telepon valid
+-$validPhoneNumbers = [];
+-
+-// Inject WhatsAppService
+-$whatsAppService = app(WhatsAppService::class);
+-
+-// Cek nomor admin
+-if (!empty($admin->no_telp) && $whatsAppService->isValidPhoneNumber($admin->no_telp)) {
+-    $validPhoneNumbers[] = $admin->no_telp;
+-}
+-
+-// Cek nomor owner/recipient kedua
+-if (!empty($pegawais->no_telp) && $whatsAppService->isValidPhoneNumber($pegawais->no_telp)) {
+-    $validPhoneNumbers[] = $pegawais->no_telp;
+-}
+-
+-// Kirim notifikasi WhatsApp jika ada nomor telepon valid
+-if (count($validPhoneNumbers) > 0) {
+-    try {
+-        // Kirim notifikasi ke semua nomor valid sekaligus
+-        $waResult = $whatsAppService->penarikanNotification([
+-            'teknisi' => $pegawais->fullname,
+-            'jumlah' => 'Rp ' . number_format($jumlahPenarikan, 0, ',', '.'),
+-            'catatan' => $request->catatan_penarikan != null ? $request->catatan_penarikan : '-',
+-            'no_hp' => $validPhoneNumbers,
+-        ]);
+-
+-        if ($waResult['status']) {
+-            $whatsappStatus = 'Pesan WhatsApp berhasil dikirim ke semua penerima';
+-        } else {
+-            // Cek apakah sebagian berhasil
+-            $successCount = count(array_filter($waResult['details'], function($detail) {
+-                return $detail['status'] === true;
+-            }));
+-
+-            if ($successCount > 0) {
+-                $whatsappStatus = "Pesan WhatsApp berhasil dikirim ke {$successCount} dari " . count($validPhoneNumbers) . " penerima";
+-            } else {
+-                $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
++            $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Nomor telepon tidak tersedia';
++            // Dapatkan admin dari upline
++            $admin = UserDetail::where([['kode_user', '=', $pegawais->id_upline]])->get()->first();
++            // Array untuk menyimpan nomor telepon valid
++            $validPhoneNumbers = [];
++            // Inject WhatsAppService
++            $whatsAppService = app(WhatsAppService::class);
++            // Cek nomor admin
++            if (!empty($admin->no_telp) && $whatsAppService->isValidPhoneNumber($admin->no_telp)) {
++                $validPhoneNumbers[] = $admin->no_telp;
++            }
++            // Cek nomor owner/recipient kedua
++            if (!empty($pegawais->no_telp) && $whatsAppService->isValidPhoneNumber($pegawais->no_telp)) {
++                $validPhoneNumbers[] = $pegawais->no_telp;
++            }
++            // Kirim notifikasi WhatsApp jika ada nomor telepon valid
++            if (count($validPhoneNumbers) > 0) {
++                try {
++                    // Kirim notifikasi ke semua nomor valid sekaligus
++                    $waResult = $whatsAppService->penarikanNotification([
++                        'teknisi' => $pegawais->fullname,
++                        'jumlah' => 'Rp ' . number_format($jumlahPenarikan, 0, ',', '.'),
++                        'catatan' => $request->catatan_penarikan != null ? $request->catatan_penarikan : '-',
++                        'no_hp' => $validPhoneNumbers,
++                    ]);
++
++                    if ($waResult['status']) {
++                        $whatsappStatus = 'Pesan WhatsApp berhasil dikirim ke semua penerima';
++                    }
++                    else {
++                        // Cek apakah sebagian berhasil
++                        $successCount = count(array_filter($waResult['details'], function ($detail) {
++                            return $detail['status'] === true;
++                        }));
++
++                        if ($successCount > 0) {
++                            $whatsappStatus = "Pesan WhatsApp berhasil dikirim ke {$successCount} dari " . count($validPhoneNumbers) . " penerima";
++                        }
++                        else {
++                            $whatsappStatus = 'Pesan WhatsApp gagal dikirim: ' . $waResult['message'];
++                        }
++                    }
++                }
++                catch (\Exception $waException) {
++                    // Log error tapi jangan batalkan transaksi utama
++                    \Log::error("Failed to send WhatsApp notification: " . $waException->getMessage(), [
++                        'penarikan' => $pegawais->fullname,
++                        'recipients' => $validPhoneNumbers,
++                        'exception' => $waException
++                    ]);
++
++                    $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
++                }
++            }
++            else {
++                $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Tidak ada nomor telepon valid';
+             }
+-        }
+-    } catch (\Exception $waException) {
+-        // Log error tapi jangan batalkan transaksi utama
+-        \Log::error("Failed to send WhatsApp notification: " . $waException->getMessage(), [
+-            'penarikan' => $pegawais->fullname,
+-            'recipients' => $validPhoneNumbers,
+-            'exception' => $waException
+-        ]);
+-
+-        $whatsappStatus = 'Pesan WhatsApp gagal dikirim: Terjadi kesalahan sistem';
+-    }
+-} else {
+-    $whatsappStatus = 'Pesan WhatsApp tidak dikirim: Tidak ada nomor telepon valid';
+-}
+ 
+             return redirect()->route('profile')->with([
+                 'success' => 'Penarikan Berhasil Di Buat'
+@@ -290,24 +290,26 @@ public function update_penarikan(Request $request, $id)
+ 
+         $data = Penarikan::findOrFail($id);
+         $oldStatus = $data->status_penarikan;
+-        
++
+         $data->update([
+             'jumlah_penarikan' => $request->jumlah_penarikan,
+             'catatan_penarikan' => $request->catatan_penarikan != null ? $request->catatan_penarikan : '-',
+             'status_penarikan' => $request->status_penarikan,
+         ]);
+-        
++
+         if ($data) {
+             $pegawais = UserDetail::where([['kode_user', '=', $data->kode_user]])->get()->first();
+ 
+             // 1. Pending -> Approved (0 -> 1)
+             if ($oldStatus == '0' && $request->status_penarikan == '1') {
+-                 $this->catatKas(
++                $this->catatKas(
+                     $data,
+                     0,
+                     $data->jumlah_penarikan,
+                     'Penarikan Saldo Teknisi: ' . $pegawais->fullname,
+-                    now()
++                    now(),
++                    true,
++                    false
+                 );
+             }
+             // 2. Rejected (Any -> 2)
+@@ -317,7 +319,7 @@ public function update_penarikan(Request $request, $id)
+                     'saldo' => $new_saldo
+                 ]);
+             }
+-            
++
+             return redirect()->route('profile')->with([
+                 'success' => 'Penarikan Berhasil Di Update'
+             ]);
+diff --git a/app/Http/Controllers/Api/ServiceApiController.php b/app/Http/Controllers/Api/ServiceApiController.php
+index b41a8b8..318d0f6 100644
+--- a/app/Http/Controllers/Api/ServiceApiController.php
++++ b/app/Http/Controllers/Api/ServiceApiController.php
+@@ -241,7 +241,8 @@ public function allservice(Request $request)
+             })
+             ->whereYear('sevices.created_at', $year)
+             ->join('users', 'sevices.id_teknisi', '=', 'users.id')
+-            ->select('sevices.*', 'users.name as teknisi');
++            ->leftJoin('customer_tables', 'sevices.customer_id', '=', 'customer_tables.id')
++            ->select('sevices.*', 'users.name as teknisi', 'customer_tables.alamat as alamat_customer');
+ 
+         if ($status) {
+             $query->where('sevices.status_services', $status);
+@@ -309,7 +310,7 @@ function cekService(Request $request)
+             $cacheKey = "cek_service_{$kodeService}";
+ 
+             $serviceData = Cache::remember($cacheKey, 300, function () use ($kodeService) {
+-                $data = modelServices::where('kode_service', $kodeService)->first();
++                $data = modelServices::with('customer')->where('kode_service', $kodeService)->first();
+ 
+                 if (!$data) {
+                     return null;
+diff --git a/app/Http/Controllers/Api/ShiftApiController.php b/app/Http/Controllers/Api/ShiftApiController.php
+index 5a18069..d6cfc92 100644
+--- a/app/Http/Controllers/Api/ShiftApiController.php
++++ b/app/Http/Controllers/Api/ShiftApiController.php
+@@ -144,12 +144,24 @@ public function close(Request $request)
+         //
+         $cashIn = $shift->kasPerusahaan()
+             ->where('is_cash', true)
+-            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
++            ->whereNotIn('sourceable_type', [
++            'App\Models\Pembelian',
++            'App\Models\Hutang',
++            'App\Models\Penarikan',
++            'App\Models\AlokasiLaba',
++            'App\Models\DistribusiLaba'
++        ])
+             ->sum('debit');
+ 
+         $cashOut = $shift->kasPerusahaan()
+             ->where('is_cash', true)
+-            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
++            ->whereNotIn('sourceable_type', [
++            'App\Models\Pembelian',
++            'App\Models\Hutang',
++            'App\Models\Penarikan',
++            'App\Models\AlokasiLaba',
++            'App\Models\DistribusiLaba'
++        ])
+             ->sum('kredit');
+ 
+         $expectedCash = $shift->modal_awal + $cashIn - $cashOut;
+@@ -217,7 +229,13 @@ public function close(Request $request)
+         }
+ 
+         $mutasiDetails = $shift->kasPerusahaan()
+-            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
++            ->whereNotIn('sourceable_type', [
++            'App\Models\Pembelian',
++            'App\Models\Hutang',
++            'App\Models\Penarikan',
++            'App\Models\AlokasiLaba',
++            'App\Models\DistribusiLaba'
++        ])
+             ->orderBy('tanggal', 'asc')
+             ->get()
+             ->map(function ($kas) {
+@@ -368,12 +386,24 @@ public function show($id)
+ 
+         $cashIn = (clone $baseQuery)
+             ->where('is_cash', true)
+-            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
++            ->whereNotIn('sourceable_type', [
++            'App\Models\Pembelian',
++            'App\Models\Hutang',
++            'App\Models\Penarikan',
++            'App\Models\AlokasiLaba',
++            'App\Models\DistribusiLaba'
++        ])
+             ->sum('debit') ?? 0;
+ 
+         $cashOut = (clone $baseQuery)
+             ->where('is_cash', true)
+-            ->whereNotIn('sourceable_type', ['App\Models\Pembelian', 'App\Models\Hutang'])
++            ->whereNotIn('sourceable_type', [
++            'App\Models\Pembelian',
++            'App\Models\Hutang',
++            'App\Models\Penarikan',
++            'App\Models\AlokasiLaba',
++            'App\Models\DistribusiLaba'
++        ])
+             ->sum('kredit') ?? 0;
+ 
+         $sparepartReport = [];
+diff --git a/app/Http/Controllers/Api/SparepartApiController.php b/app/Http/Controllers/Api/SparepartApiController.php
+index bedb302..577fae9 100644
+--- a/app/Http/Controllers/Api/SparepartApiController.php
++++ b/app/Http/Controllers/Api/SparepartApiController.php
+@@ -307,7 +307,7 @@ public function getServiceDetails($id)
+     {
+         try {
+             // Ambil data service berdasarkan ID
+-            $service = modelServices::findOrFail($id);
++            $service = modelServices::with('customer')->findOrFail($id);
+ 
+             // Ambil detail part toko dengan pengecekan jika data join tidak ditemukan
+             $part_toko_service = DetailPartServices::leftJoin('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+@@ -357,6 +357,7 @@ public function getServiceDetails($id)
+                     'kode_service' => $service->kode_service,
+                     'nama_pelanggan' => $service->nama_pelanggan,
+                     'no_telp' => $service->no_telp, // Added no_telp
++                    'alamat' => $service->customer->alamat ?? null,
+                     'type_unit' => $service->type_unit,
+                     'keterangan' => $service->keterangan, // Added keterangan
+                     'status_services' => $service->status_services,
+@@ -690,10 +691,13 @@ public function updateService(Request $request, $id)
+                     'nama_pelanggan' => 'nullable|string|max:255',
+                     'dp'             => 'nullable|numeric|min:0',
+                     'id_kategorilaci'=> 'nullable|integer', // ID laci baru dari input user
+-                    'no_telp'        => 'nullable|numeric',
++                    'no_telp'        => 'nullable|string|max:25',
+                     'total_biaya'    => 'nullable|numeric|min:0',
+                     'type_unit'      => 'nullable|string|max:255',
+                     'keterangan'     => 'nullable|string',
++                    'tipe_sandi'     => ['nullable', 'string', Rule::in(['pola', 'pin', 'teks'])],
++                    'isi_sandi'      => ['nullable', 'string', 'required_with:tipe_sandi'],
++                    'data_unit'      => ['nullable', 'json'],
+                 ]);
+ 
+                 // 2. LOGIKA ROLLBACK (Penting agar tidak double)
+@@ -1006,27 +1010,51 @@ private function performCommissionRecalculation($serviceId)
+         // Fetch all associated spare parts (toko and luar)
+         $part_toko_service = DetailPartServices::join('spareparts', 'detail_part_services.kode_sparepart', '=', 'spareparts.id')
+             ->where('detail_part_services.kode_services', $serviceId)
+-            ->get(['detail_part_services.detail_harga_part_service', 'detail_part_services.qty_part', 'detail_part_services.harga_garansi']);
++            ->get([
++                'detail_part_services.detail_harga_part_service', 
++                'detail_part_services.detail_modal_part_service',
++                'detail_part_services.qty_part', 
++                'detail_part_services.harga_garansi',
++                'detail_part_services.is_tanggungan_teknisi'
++            ]);
+ 
+-        $part_luar_toko_service = DetailPartLuarService::where('kode_services', $serviceId)->get(['harga_part', 'qty_part']);
++        $part_luar_toko_service = DetailPartLuarService::where('kode_services', $serviceId)
++            ->get(['harga_part', 'qty_part', 'is_tanggungan_teknisi']);
+ 
+         // Recalculate total_part (harga_sp) dan total_garansi
+-        $total_part = 0;
++        $total_part_for_service = 0; // Harga jual part (untuk customer/harga_sp)
++        $total_part_for_profit = 0;  // Harga jual part (yang ditanggung toko, mengurangi laba kotor)
++        $total_penalty_cost = 0;    // Harga modal part (yang ditanggung teknisi, mengurangi komisi)
+         $total_garansi = 0;
+ 
+         foreach ($part_toko_service as $part) {
+-            $total_part += $part->detail_harga_part_service * $part->qty_part;
+-            // Tambahkan pengecekan null untuk harga_garansi
++            $jual = $part->detail_harga_part_service * $part->qty_part;
++            $modal = ($part->detail_modal_part_service ?: 0) * $part->qty_part;
++            
++            $total_part_for_service += $jual;
+             $total_garansi += ($part->harga_garansi ?? 0);
++
++            if ($part->is_tanggungan_teknisi) {
++                $total_penalty_cost += $modal;
++            } else {
++                $total_part_for_profit += $jual;
++            }
+         }
+ 
+         foreach ($part_luar_toko_service as $part) {
+-            $total_part += $part->harga_part * $part->qty_part;
++            $jual = $part->harga_part * $part->qty_part;
++            $total_part_for_service += $jual;
++
++            if ($part->is_tanggungan_teknisi) {
++                $total_penalty_cost += $jual; // Part luar modal = jual
++            } else {
++                $total_part_for_profit += $jual;
++            }
+         }
+ 
+-        // Update the service's harga_sp
+-        $service->update(['harga_sp' => $total_part]);
+-        Log::info("Internal: Service Harga SP updated to: $total_part, Total Garansi: $total_garansi for Service ID: $serviceId");
++        // Update the service's harga_sp (Total harga sparepart yang dipasang)
++        $service->update(['harga_sp' => $total_part_for_service]);
++        Log::info("Internal: Service Harga SP updated to: $total_part_for_service, Total Garansi: $total_garansi, Penalty: $total_penalty_cost for Service ID: $serviceId");
+ 
+         // Initialize variables yang akan di-return
+         $fix_profit_teknisi = 0;
+@@ -1034,34 +1062,44 @@ private function performCommissionRecalculation($serviceId)
+ 
+         if ($service->claimed_from_service_id !== null) {
+             // --- LOGIKA UNTUK SERVICE KLAIM GARANSI ---
+-            Log::info("Internal: Service ID {$serviceId} is a warranty claim. Commission set to 0.");
++            Log::info("Internal: Service ID {$serviceId} is a warranty claim. Commission set to 0. Penalty still apply if any.");
++            
++            $fix_profit_teknisi = -$total_penalty_cost;
+ 
+             // Hapus komisi lama jika ada (untuk mengembalikan saldo teknisi)
+             $records = ProfitPresentase::where('kode_service', $serviceId)->orderBy('id')->get();
+-            if ($records->count() > 0) {
++            if ($records->count() > 0 || $total_penalty_cost > 0) {
+                 $totalOld = $records->sum('profit');
+-                $primary = $records->first();
+-                $teknisi = $primary ? UserDetail::where('kode_user', $primary->kode_user)->first() : null;
+-                if ($teknisi && $totalOld != 0) {
++                
++                $primary = $records->first() ?: new ProfitPresentase(['kode_service' => $serviceId]);
++                
++                $id_teknisi = $service->id_teknisi ?: ($primary->kode_user ?? null);
++                $teknisi = $id_teknisi ? UserDetail::where('kode_user', $id_teknisi)->first() : null;
++                
++                if ($teknisi) {
+                     $teknisi->decrement('saldo', $totalOld);
++                    $teknisi->increment('saldo', $fix_profit_teknisi); 
+                 }
+-                if ($primary) {
+-                    $primary->update([
+-                        'profit' => 0,
+-                        'profit_toko' => 0,
+-                        'saldo' => $teknisi ? $teknisi->fresh()->saldo : $primary->saldo,
+-                        'tgl_profit' => now(),
+-                    ]);
+-                    ProfitPresentase::where('kode_service', $serviceId)->where('id', '!=', $primary->id)->delete();
+-                }
++
++                $primary->fill([
++                    'kode_service' => $serviceId,
++                    'tgl_profit' => now(),
++                    'kode_user' => $id_teknisi,
++                    'profit' => $fix_profit_teknisi,
++                    'profit_toko' => 0,
++                    'saldo' => $teknisi ? $teknisi->fresh()->saldo : ($primary->saldo ?? 0),
++                ])->save();
++                
++                ProfitPresentase::where('kode_service', $serviceId)->where('id', '!=', $primary->id)->delete();
+             }
+ 
+             return [
+                 'service_id' => $service->id,
+                 'new_harga_sp' => $service->harga_sp,
+-                'new_profit' => 0,
++                'new_profit' => $fix_profit_teknisi,
+                 'total_garansi' => $total_garansi,
+-                'info' => 'Warranty claim, no commission awarded.'
++                'penalty_applied' => $total_penalty_cost,
++                'info' => 'Warranty claim. Commission: 0, Penalty: ' . $total_penalty_cost
+             ];
+ 
+         } else {
+@@ -1071,7 +1109,7 @@ private function performCommissionRecalculation($serviceId)
+                 $serviceId = $service->id;
+                 $id_teknisi = $service->id_teknisi;
+ 
+-                DB::transaction(function () use ($service, $serviceId, $id_teknisi, $total_part, $total_garansi, &$fix_profit_teknisi, &$profit_untuk_toko) {
++                DB::transaction(function () use ($service, $serviceId, $id_teknisi, $total_part_for_profit, $total_penalty_cost, $total_garansi, &$fix_profit_teknisi, &$profit_untuk_toko) {
+                     $presentaseSetting = SalarySetting::where('user_id', $id_teknisi)->first();
+                     $teknisi = UserDetail::where('kode_user', $id_teknisi)->first();
+ 
+@@ -1088,30 +1126,62 @@ private function performCommissionRecalculation($serviceId)
+                         Log::info("Internal: Old profits deducted total: {$totalOld} from Technician ID: {$id_teknisi}");
+                     }
+ 
+-                    // Hitung ulang profit dari service (DENGAN GARANSI)
+-                    $total_service_profit = $service->total_biaya - ($total_part + $total_garansi);
++                    // Hitung ulang profit dari service (HANYA part yang tidak ditanggung teknisi)
++                    $total_service_profit = $service->total_biaya - ($total_part_for_profit + $total_garansi);
+ 
+-                    Log::info("Internal: Profit calculation - Total Biaya: {$service->total_biaya}, Total Part: {$total_part}, Total Garansi: {$total_garansi}, Service Profit: {$total_service_profit}");
++                    Log::info("Internal: Profit calculation - Total Biaya: {$service->total_biaya}, Part (Shared): {$total_part_for_profit}, Total Garansi: {$total_garansi}, Service Profit: {$total_service_profit}");
+ 
++                    $base_commission = 0;
+                     if ($presentaseSetting->compensation_type === 'percentage') {
+                         if ($total_service_profit < 0) {
+-                            // Komisi negatif (rugi)
+-                            $fix_profit_teknisi = $total_service_profit * $presentaseSetting->max_percentage / 100;
++                            $base_commission = $total_service_profit * $presentaseSetting->max_percentage / 100;
+                         } else {
+-                            // Untung
+-                            $fix_profit_teknisi = $total_service_profit * $presentaseSetting->percentage_value / 100;
++                            $base_commission = $total_service_profit * $presentaseSetting->percentage_value / 100;
+                         }
+-                        $profit_untuk_toko = $total_service_profit - $fix_profit_teknisi;
+-
+-                        Log::info("Internal (Percentage): New calculated profit: {$fix_profit_teknisi} for Technician ID: {$id_teknisi}");
++                    } 
++                    
++                    // Final commission = Base Commission - Penalty Cost
++                    $fix_profit_teknisi = $base_commission - $total_penalty_cost;
++                    $profit_untuk_toko = $total_service_profit - $base_commission;
++
++                    Log::info("Internal Calculation: Base Commission: {$base_commission}, Penalty: {$total_penalty_cost}, Final: {$fix_profit_teknisi}");
++
++                    $komisi = null;
++                    if ($oldProfitRecords->isEmpty()) {
++                        $komisi = ProfitPresentase::create([
++                            'kode_service'    => $serviceId,
++                            'tgl_profit'      => now(),
++                            'kode_presentase' => $presentaseSetting->id,
++                            'kode_user'       => $id_teknisi,
++                            'profit'          => $fix_profit_teknisi,
++                            'profit_toko'     => $profit_untuk_toko,
++                        ]);
+                     } else {
+-                        // Gaji tetap
+-                        $fix_profit_teknisi = 0;
+-                        $profit_untuk_toko = $total_service_profit;
+-
+-                        Log::info("Internal (Fixed): Profit generated for store: {$profit_untuk_toko} by Technician ID: {$id_teknisi}");
++                        $primary = $oldProfitRecords->first();
++                        $primary->update([
++                            'tgl_profit'      => now(),
++                            'kode_presentase' => $presentaseSetting->id,
++                            'kode_user'       => $id_teknisi,
++                            'profit'          => $fix_profit_teknisi,
++                            'profit_toko'     => $profit_untuk_toko,
++                        ]);
++                        ProfitPresentase::where('kode_service', $serviceId)->where('id', '!=', $primary->id)->delete();
++                        $komisi = $primary;
+                     }
+ 
++                    // Tambahkan profit baru (bisa positif atau negatif) ke saldo teknisi
++                    $teknisi->increment('saldo', $fix_profit_teknisi);
++
++                    // Update saldo final di record komisi
++                    $komisi->update(['saldo' => $teknisi->fresh()->saldo]);
++
++                    Log::info("Internal: Technician new saldo: {$teknisi->fresh()->saldo} for Technician ID: {$id_teknisi}");
++                });
++            
++        
++
++        Log::info("Internal: performCommissionRecalculation finished for Service ID: $serviceId");
++
+                         $komisi = null;
+                         if ($oldProfitRecords->isEmpty()) {
+                             $komisi = ProfitPresentase::create([
+@@ -1142,7 +1212,7 @@ private function performCommissionRecalculation($serviceId)
+                     $komisi->update(['saldo' => $teknisi->fresh()->saldo]);
+ 
+                     Log::info("Internal: Technician new saldo: {$teknisi->fresh()->saldo} for Technician ID: {$id_teknisi}");
+-                });
++                
+             }
+         }
+ 
+@@ -1157,6 +1227,7 @@ private function performCommissionRecalculation($serviceId)
+         ];
+     }
+ 
++
+     /**
+      * Functions for COMPLETED Services - Sparepart Toko (Store Parts)
+      * These specifically handle adding/updating/deleting store parts for services
+@@ -1181,7 +1252,8 @@ public function addPartTokoToCompletedService(Request $request) // Renamed from
+             $validator = Validator::make($request->all(), [
+                 'kode_services' => 'required|exists:sevices,id', // Ensure service exists
+                 'kode_sparepart' => 'required|exists:spareparts,id', // Ensure sparepart exists
+-                'qty_part' => 'required|integer|min:1'
++                'qty_part' => 'required|integer|min:1',
++                'is_tanggungan_teknisi' => 'nullable|boolean'
+             ]);
+ 
+             if ($validator->fails()) {
+@@ -1207,6 +1279,7 @@ public function addPartTokoToCompletedService(Request $request) // Renamed from
+ 
+                 $existingPart = DetailPartServices::where('kode_services', $serviceId)
+                     ->where('kode_sparepart', $sparepartId)
++                    ->where('is_tanggungan_teknisi', $request->is_tanggungan_teknisi ?? 0)
+                     ->first();
+ 
+                 $currentStockInDb = (int) $sparepart->stok_sparepart; // Ensure it's an integer
+@@ -1229,6 +1302,7 @@ public function addPartTokoToCompletedService(Request $request) // Renamed from
+ 
+                     $existingPart->update([
+                         'qty_part' => $newTotalQtyForService,
++                        'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
+                         'user_input' => auth()->user()->id,
+                     ]);
+ 
+@@ -1259,6 +1333,7 @@ public function addPartTokoToCompletedService(Request $request) // Renamed from
+                         'detail_modal_part_service' => $sparepart->harga_beli,
+                         'detail_harga_part_service' => $sparepart->harga_jual,
+                         'qty_part' => $qtyToAdd,
++                        'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
+                         'user_input' => auth()->user()->id,
+                     ]);
+                     
+@@ -1317,7 +1392,8 @@ public function updatePartTokoQuantityForCompletedService(Request $request, $det
+ 
+         try {
+             $validator = Validator::make($request->all(), [
+-                'qty_part' => 'required|integer|min:1'
++                'qty_part' => 'required|integer|min:1',
++                'is_tanggungan_teknisi' => 'nullable|boolean'
+             ]);
+ 
+             if ($validator->fails()) {
+@@ -1356,6 +1432,7 @@ public function updatePartTokoQuantityForCompletedService(Request $request, $det
+ 
+                 $detailPartService->update([
+                     'qty_part' => $newQty,
++                    'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? $detailPartService->is_tanggungan_teknisi,
+                     'user_input' => auth()->user()->id,
+                 ]);
+ 
+@@ -1502,6 +1579,7 @@ public function addPartLuarToCompletedService(Request $request) // Renamed from
+             'nama_part' => 'required|string',
+             'harga_part' => 'required|numeric|min:0',
+             'qty_part' => 'required|integer|min:1',
++            'is_tanggungan_teknisi' => 'nullable|boolean'
+         ]);
+ 
+         if ($validator->fails()) {
+@@ -1523,6 +1601,7 @@ public function addPartLuarToCompletedService(Request $request) // Renamed from
+                 'nama_part' => $request->nama_part,
+                 'harga_part' => $request->harga_part,
+                 'qty_part' => $request->qty_part,
++                'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
+                 'user_input' => auth()->user()->id,
+             ]);
+ 
+@@ -1568,6 +1647,7 @@ public function updatePartLuarForCompletedService(Request $request, $detailPartL
+             'nama_part' => 'required|string',
+             'harga_part' => 'required|numeric|min:0',
+             'qty_part' => 'required|integer|min:1',
++            'is_tanggungan_teknisi' => 'nullable|boolean'
+         ]);
+ 
+         if ($validator->fails()) {
+@@ -1591,6 +1671,7 @@ public function updatePartLuarForCompletedService(Request $request, $detailPartL
+                 'nama_part' => $request->nama_part,
+                 'harga_part' => $request->harga_part,
+                 'qty_part' => $request->qty_part,
++                'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? $update->is_tanggungan_teknisi,
+                 'user_input' => auth()->user()->id,
+             ]);
+ 
+@@ -1710,7 +1791,8 @@ public function storeSparepartToko(Request $request)
+             $validator = Validator::make($request->all(), [
+                 'kode_services' => 'required|exists:sevices,id',
+                 'kode_sparepart' => 'required|exists:spareparts,id',
+-                'qty_part' => 'required|integer|min:1'
++                'qty_part' => 'required|integer|min:1',
++                'is_tanggungan_teknisi' => 'nullable|boolean'
+             ]);
+ 
+             if ($validator->fails()) {
+@@ -1737,7 +1819,8 @@ public function storeSparepartToko(Request $request)
+ 
+                 $cek = DetailPartServices::where([
+                     ['kode_services', '=', $request->kode_services],
+-                    ['kode_sparepart', '=', $request->kode_sparepart]
++                    ['kode_sparepart', '=', $request->kode_sparepart],
++                    ['is_tanggungan_teknisi', '=', $request->is_tanggungan_teknisi ?? 0]
+                 ])->first();
+ 
+                 $currentStockInDb = (int) $sparepart->stok_sparepart;
+@@ -1789,6 +1872,7 @@ public function storeSparepartToko(Request $request)
+                     $cek->update([
+                         'qty_part' => $newTotalQtyForService,
+                         'detail_harga_part_service' => $hargaPartService,
++                        'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
+                         'user_input' => auth()->user()->id,
+                     ]);
+                     $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
+@@ -1810,6 +1894,7 @@ public function storeSparepartToko(Request $request)
+                         'detail_modal_part_service' => $sparepart->harga_beli,
+                         'detail_harga_part_service' => $hargaPartService,
+                         'qty_part' => $request->qty_part,
++                        'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
+                         'user_input' => auth()->user()->id,
+                     ]);
+                     $sparepart->update(['stok_sparepart' => $projectedNewOverallStock]);
+@@ -1951,6 +2036,7 @@ public function storeSparepartLuar(Request $request)
+             'nama_part' => 'required|string',
+             'harga_part' => 'required|numeric|min:0',
+             'qty_part' => 'required|integer|min:1',
++            'is_tanggungan_teknisi' => 'nullable|boolean'
+         ]);
+ 
+         DB::beginTransaction(); // PERUBAHAN: Menggunakan transaksi database untuk keamanan
+@@ -1965,6 +2051,7 @@ public function storeSparepartLuar(Request $request)
+                 'nama_part' => $request->nama_part,
+                 'harga_part' => $request->harga_part,
+                 'qty_part' => $request->qty_part,
++                'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
+                 'user_input' => auth()->user()->id,
+             ]);
+ 
+@@ -2006,6 +2093,7 @@ public function updateSparepartLuar(Request $request, $id)
+             'nama_part' => 'required|string',
+             'harga_part' => 'required|numeric|min:0',
+             'qty_part' => 'required|integer|min:1',
++            'is_tanggungan_teknisi' => 'nullable|boolean'
+         ]);
+ 
+         DB::beginTransaction(); // PERUBAHAN: Menggunakan transaksi database
+@@ -2021,6 +2109,7 @@ public function updateSparepartLuar(Request $request, $id)
+                 'nama_part' => $request->nama_part,
+                 'harga_part' => $request->harga_part,
+                 'qty_part' => $request->qty_part,
++                'is_tanggungan_teknisi' => $request->is_tanggungan_teknisi ?? 0,
+                 'user_input' => auth()->user()->id,
+             ]);
+ 
+diff --git a/app/Http/Controllers/Api/SubscriptionApiController.php b/app/Http/Controllers/Api/SubscriptionApiController.php
+index 29ef146..e1a9304 100644
+--- a/app/Http/Controllers/Api/SubscriptionApiController.php
++++ b/app/Http/Controllers/Api/SubscriptionApiController.php
+@@ -57,7 +57,7 @@ public function showPayment(SubscriptionPlan $plan, QrisGeneratorService $qrisSe
+         }
+ 
+         $qrisString = $qrisService->generate($payment->unique_amount, $payment->reference_code);
+-        $options = new QROptions(['outputType' => QRCode::OUTPUT_MARKUP_SVG, 'eccLevel' => QRCode::ECC_L]);
++        $options = new QROptions(['outputInterface' => \chillerlan\QRCode\Output\QRMarkupSVG::class , 'eccLevel' => \chillerlan\QRCode\Common\EccLevel::L]);
+         $qrCodeImage = (new QRCode($options))->render($qrisString);
+ 
+         return response()->json(['payment' => $payment->load('subscriptionPlan'), 'qr_code_image' => $qrCodeImage]);
+@@ -76,7 +76,8 @@ public function activateWithToken(Request $request)
+ 
+             return response()->json(['message' => 'Langganan berhasil diaktifkan.']);
+ 
+-        } catch (\Exception $e) {
++        }
++        catch (\Exception $e) {
+             // Tangkap error jika token tidak valid dari service
+             return response()->json(['message' => $e->getMessage()], 404);
+         }
+diff --git a/app/Models/DetailPartLuarService.php b/app/Models/DetailPartLuarService.php
+index 90f5427..d703568 100644
+--- a/app/Models/DetailPartLuarService.php
++++ b/app/Models/DetailPartLuarService.php
+@@ -13,6 +13,7 @@ class DetailPartLuarService extends Model
+         'nama_part',
+         'harga_part',
+         'qty_part',
++        'is_tanggungan_teknisi',
+         'user_input',
+     ];
+ }
+diff --git a/app/Models/DetailPartServices.php b/app/Models/DetailPartServices.php
+index 5a5c9ea..83726ff 100644
+--- a/app/Models/DetailPartServices.php
++++ b/app/Models/DetailPartServices.php
+@@ -16,12 +16,12 @@ class DetailPartServices extends Model
+         'harga_garansi',
+         'jasa',
+         'qty_part',
++        'is_tanggungan_teknisi',
+         'user_input',
+-    ];
+-public function service()
++    ];    public function service()
+     {
+         // Parameter kedua adalah nama kolom foreign key di tabel 'detail_part_services'
+-        return $this->belongsTo(Sevices::class, 'kode_services');
++        return $this->belongsTo(Sevices::class , 'kode_services');
+     }
+ 
+     /**
+@@ -32,11 +32,9 @@ public function sparepart()
+     {
+         // Parameter kedua adalah nama kolom foreign key di tabel 'detail_part_services'
+         // Parameter ketiga adalah nama kolom primary key di tabel 'spareparts'
+-        return $this->belongsTo(Sparepart::class, 'kode_sparepart', 'id');
++        return $this->belongsTo(Sparepart::class , 'kode_sparepart', 'id');
+     }
+-    public function variant()
+-{
+-    // Parameter kedua adalah nama kolom di tabel ini yang menyimpan ID variant
+-    return $this->belongsTo(ProductVariant::class, 'kode_sparepart');
+-}
++    public function variant()    {
++        // Parameter kedua adalah nama kolom di tabel ini yang menyimpan ID variant
++        return $this->belongsTo(ProductVariant::class , 'kode_sparepart');    }
+ }
+diff --git a/app/Models/Sevices.php b/app/Models/Sevices.php
+index 10a4afc..496ab2b 100644
+--- a/app/Models/Sevices.php
++++ b/app/Models/Sevices.php
+@@ -89,4 +89,9 @@ public function variants()
+             ->withTimestamps();
+     }
+ 
++    public function customer()
++    {
++        return $this->belongsTo(customer_table::class , 'customer_id');
++    }
++
+ }
+diff --git a/app/Traits/ManajemenKasTrait.php b/app/Traits/ManajemenKasTrait.php
+index 52a20bc..5e53112 100644
+--- a/app/Traits/ManajemenKasTrait.php
++++ b/app/Traits/ManajemenKasTrait.php
+@@ -21,12 +21,12 @@ trait ManajemenKasTrait
+      * @param bool $isCash - true = transaksi cash (masuk/keluar laci), false = transfer/non-cash
+      * @return void
+      */
+-    protected function catatKas(Model $sumberModel, float $debit, float $kredit, string $deskripsi, $tanggal = null, bool $isCash = true)
++    protected function catatKas(Model $sumberModel, float $debit, float $kredit, string $deskripsi, $tanggal = null, bool $isCash = true, bool $attachShift = true)
+     {
+         // Menggunakan DB::transaction untuk memastikan jika ada error,
+         // semua proses di dalamnya akan dibatalkan (rollback).
+         // Ini mencegah data korup (misal: penjualan tercatat tapi kas tidak).
+-        DB::transaction(function () use ($sumberModel, $debit, $kredit, $deskripsi, $tanggal, $isCash) {
++        DB::transaction(function () use ($sumberModel, $debit, $kredit, $deskripsi, $tanggal, $isCash, $attachShift) {
+ 
+             // Ambil ID owner dari model sumber (Penjualan, Service, dll).
+             // Ini memastikan setiap model sumber WAJIB punya kolom 'kode_owner'.
+@@ -46,18 +46,20 @@ protected function catatKas(Model $sumberModel, float $debit, float $kredit, str
+             // Deteksi Shift Aktif
+             // Prioritaskan Shift Aktif dari User yang sedang login/melakukan aksi
+             $shiftId = null;
+-            $currentUser = Auth::id();
++            if ($attachShift) {
++                $currentUser = Auth::id();
+ 
+-            if ($currentUser) {
+-                $activeShift = Shift::getActiveShift($currentUser);
+-                if ($activeShift) {
+-                    $shiftId = $activeShift->id;
++                if ($currentUser) {
++                    $activeShift = Shift::getActiveShift($currentUser);
++                    if ($activeShift) {
++                        $shiftId = $activeShift->id;
++                    }
+                 }
+-            }
+ 
+-            // Jika tidak ada shift aktif (misal sistem/cron), baru gunakan shift dari model sumber
+-            if (!$shiftId) {
+-                $shiftId = $sumberModel->shift_id ?? null;
++                // Jika tidak ada shift aktif (misal sistem/cron), baru gunakan shift dari model sumber
++                if (!$shiftId) {
++                    $shiftId = $sumberModel->shift_id ?? null;
++                }
+             }
+ 
+             // Siapkan data untuk entri kas baru
+diff --git a/composer.json b/composer.json
+index cc9aac2..7b6ac2f 100644
+--- a/composer.json
++++ b/composer.json
+@@ -7,7 +7,9 @@
+     "require": {
+         "php": "^7.2.5|^8.0.2",
+         "barryvdh/laravel-dompdf": "^2.0",
++        "chillerlan/php-qrcode": "^6.0",
+         "doctrine/dbal": "^4.2",
++        "google/apiclient": "^2.19",
+         "guzzlehttp/guzzle": "^7.2",
+         "laravel/framework": "10",
+         "laravel/sanctum": "^3.3",
+diff --git a/composer.lock b/composer.lock
+index f8951c2..78d0939 100644
+--- a/composer.lock
++++ b/composer.lock
+@@ -4,7 +4,7 @@
+         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
+         "This file is @generated automatically"
+     ],
+-    "content-hash": "d11f2870fc6c2179926728fb495d4d9b",
++    "content-hash": "73dddd47551b4d9deb3e91ee1e321e97",
+     "packages": [
+         {
+             "name": "barryvdh/laravel-dompdf",
+@@ -207,6 +207,172 @@
+             ],
+             "time": "2024-02-09T16:56:22+00:00"
+         },
++        {
++            "name": "chillerlan/php-qrcode",
++            "version": "6.0.1",
++            "source": {
++                "type": "git",
++                "url": "https://github.com/chillerlan/php-qrcode.git",
++                "reference": "49006e34bd5328f163e80329e7312f34dceea59b"
++            },
++            "dist": {
++                "type": "zip",
++                "url": "https://api.github.com/repos/chillerlan/php-qrcode/zipball/49006e34bd5328f163e80329e7312f34dceea59b",
++                "reference": "49006e34bd5328f163e80329e7312f34dceea59b",
++                "shasum": ""
++            },
++            "require": {
++                "chillerlan/php-settings-container": "^3.2.1",
++                "ext-mbstring": "*",
++                "php": "^8.2"
++            },
++            "require-dev": {
++                "chillerlan/php-authenticator": "^5.3",
++                "ext-fileinfo": "*",
++                "intervention/image": "^3.11",
++                "phan/phan": "^6.0.1",
++                "phpbench/phpbench": "^1.4",
++                "phpmd/phpmd": "^2.15",
++                "phpstan/phpstan": "^2.1.40",
++                "phpstan/phpstan-deprecation-rules": "^2.0.4",
++                "phpunit/phpunit": "^11.5",
++                "setasign/fpdf": "^1.8.6",
++                "slevomat/coding-standard": "^8.28",
++                "squizlabs/php_codesniffer": "^4.0"
++            },
++            "suggest": {
++                "chillerlan/php-authenticator": "Yet another Google authenticator! Also creates URIs for mobile apps.",
++                "intervention/image": "More advanced GD and ImageMagick output.",
++                "setasign/fpdf": "Required to use the QR FPDF output.",
++                "simple-icons/simple-icons": "SVG icons that you can use to embed as logos in the QR Code"
++            },
++            "type": "library",
++            "autoload": {
++                "psr-4": {
++                    "chillerlan\\QRCode\\": "src"
++                }
++            },
++            "notification-url": "https://packagist.org/downloads/",
++            "license": [
++                "MIT",
++                "Apache-2.0"
++            ],
++            "authors": [
++                {
++                    "name": "Kazuhiko Arase",
++                    "homepage": "https://github.com/kazuhikoarase/qrcode-generator"
++                },
++                {
++                    "name": "ZXing Authors",
++                    "homepage": "https://github.com/zxing/zxing"
++                },
++                {
++                    "name": "Ashot Khanamiryan",
++                    "homepage": "https://github.com/khanamiryan/php-qrcode-detector-decoder"
++                },
++                {
++                    "name": "Smiley",
++                    "email": "smiley@chillerlan.net",
++                    "homepage": "https://github.com/codemasher"
++                },
++                {
++                    "name": "Contributors",
++                    "homepage": "https://github.com/chillerlan/php-qrcode/graphs/contributors"
++                }
++            ],
++            "description": "A QR Code generator and reader with a user-friendly API. PHP 8.2+",
++            "homepage": "https://github.com/chillerlan/php-qrcode",
++            "keywords": [
++                "phpqrcode",
++                "qr",
++                "qr code",
++                "qr-reader",
++                "qrcode",
++                "qrcode-generator",
++                "qrcode-reader"
++            ],
++            "support": {
++                "docs": "https://php-qrcode.readthedocs.io",
++                "issues": "https://github.com/chillerlan/php-qrcode/issues",
++                "source": "https://github.com/chillerlan/php-qrcode"
++            },
++            "funding": [
++                {
++                    "url": "https://ko-fi.com/codemasher",
++                    "type": "Ko-Fi"
++                }
++            ],
++            "time": "2026-03-18T21:21:07+00:00"
++        },
++        {
++            "name": "chillerlan/php-settings-container",
++            "version": "3.3.0",
++            "source": {
++                "type": "git",
++                "url": "https://github.com/chillerlan/php-settings-container.git",
++                "reference": "a0a487cbf5344f721eb504bf0f59bada40c381b7"
++            },
++            "dist": {
++                "type": "zip",
++                "url": "https://api.github.com/repos/chillerlan/php-settings-container/zipball/a0a487cbf5344f721eb504bf0f59bada40c381b7",
++                "reference": "a0a487cbf5344f721eb504bf0f59bada40c381b7",
++                "shasum": ""
++            },
++            "require": {
++                "ext-json": "*",
++                "php": "^8.1"
++            },
++            "require-dev": {
++                "phan/phan": "^5.5.2",
++                "phpmd/phpmd": "^2.15",
++                "phpstan/phpstan": "^2.1.31",
++                "phpstan/phpstan-deprecation-rules": "^2.0.3",
++                "phpunit/phpunit": "^10.5",
++                "slevomat/coding-standard": "^8.22",
++                "squizlabs/php_codesniffer": "^4.0"
++            },
++            "type": "library",
++            "autoload": {
++                "psr-4": {
++                    "chillerlan\\Settings\\": "src"
++                }
++            },
++            "notification-url": "https://packagist.org/downloads/",
++            "license": [
++                "MIT"
++            ],
++            "authors": [
++                {
++                    "name": "Smiley",
++                    "email": "smiley@chillerlan.net",
++                    "homepage": "https://github.com/codemasher"
++                }
++            ],
++            "description": "A container class for immutable settings objects. Not a DI container.",
++            "homepage": "https://github.com/chillerlan/php-settings-container",
++            "keywords": [
++                "Settings",
++                "configuration",
++                "container",
++                "helper",
++                "property hook"
++            ],
++            "support": {
++                "issues": "https://github.com/chillerlan/php-settings-container/issues",
++                "source": "https://github.com/chillerlan/php-settings-container"
++            },
++            "funding": [
++                {
++                    "url": "https://www.paypal.com/donate?hosted_button_id=WLYUNAT9ZTJZ4",
++                    "type": "custom"
++                },
++                {
++                    "url": "https://ko-fi.com/codemasher",
++                    "type": "ko_fi"
++                }
++            ],
++            "time": "2026-03-20T21:10:52+00:00"
++        },
+         {
+             "name": "dflydev/dot-access-data",
+             "version": "v3.0.3",
+@@ -795,6 +961,69 @@
+             ],
+             "time": "2025-03-06T22:45:56+00:00"
+         },
++        {
++            "name": "firebase/php-jwt",
++            "version": "v7.0.3",
++            "source": {
++                "type": "git",
++                "url": "https://github.com/firebase/php-jwt.git",
++                "reference": "28aa0694bcfdfa5e2959c394d5a1ee7a5083629e"
++            },
++            "dist": {
++                "type": "zip",
++                "url": "https://api.github.com/repos/firebase/php-jwt/zipball/28aa0694bcfdfa5e2959c394d5a1ee7a5083629e",
++                "reference": "28aa0694bcfdfa5e2959c394d5a1ee7a5083629e",
++                "shasum": ""
++            },
++            "require": {
++                "php": "^8.0"
++            },
++            "require-dev": {
++                "guzzlehttp/guzzle": "^7.4",
++                "phpspec/prophecy-phpunit": "^2.0",
++                "phpunit/phpunit": "^9.5",
++                "psr/cache": "^2.0||^3.0",
++                "psr/http-client": "^1.0",
++                "psr/http-factory": "^1.0"
++            },
++            "suggest": {
++                "ext-sodium": "Support EdDSA (Ed25519) signatures",
++                "paragonie/sodium_compat": "Support EdDSA (Ed25519) signatures when libsodium is not present"
++            },
++            "type": "library",
++            "autoload": {
++                "psr-4": {
++                    "Firebase\\JWT\\": "src"
++                }
++            },
++            "notification-url": "https://packagist.org/downloads/",
++            "license": [
++                "BSD-3-Clause"
++            ],
++            "authors": [
++                {
++                    "name": "Neuman Vong",
++                    "email": "neuman+pear@twilio.com",
++                    "role": "Developer"
++                },
++                {
++                    "name": "Anant Narayanan",
++                    "email": "anant@php.net",
++                    "role": "Developer"
++                }
++            ],
++            "description": "A simple library to encode and decode JSON Web Tokens (JWT) in PHP. Should conform to the current spec.",
++            "homepage": "https://github.com/firebase/php-jwt",
++            "keywords": [
++                "jwt",
++                "php"
++            ],
++            "support": {
++                "issues": "https://github.com/firebase/php-jwt/issues",
++                "source": "https://github.com/firebase/php-jwt/tree/v7.0.3"
++            },
++            "time": "2026-02-25T22:16:40+00:00"
++        },
+         {
+             "name": "fruitcake/php-cors",
+             "version": "v1.3.0",
+@@ -866,6 +1095,181 @@
+             ],
+             "time": "2023-10-12T05:21:21+00:00"
+         },
++        {
++            "name": "google/apiclient",
++            "version": "v2.19.0",
++            "source": {
++                "type": "git",
++                "url": "https://github.com/googleapis/google-api-php-client.git",
++                "reference": "b18fa8aed7b2b2dd4bcce74e2c7d267e16007ea9"
++            },
++            "dist": {
++                "type": "zip",
++                "url": "https://api.github.com/repos/googleapis/google-api-php-client/zipball/b18fa8aed7b2b2dd4bcce74e2c7d267e16007ea9",
++                "reference": "b18fa8aed7b2b2dd4bcce74e2c7d267e16007ea9",
++                "shasum": ""
++            },
++            "require": {
++                "firebase/php-jwt": "^6.0||^7.0",
++                "google/apiclient-services": "~0.350",
++                "google/auth": "^1.37",
++                "guzzlehttp/guzzle": "^7.4.5",
++                "guzzlehttp/psr7": "^2.6",
++                "monolog/monolog": "^2.9||^3.0",
++                "php": "^8.1",
++                "phpseclib/phpseclib": "^3.0.36"
++            },
++            "require-dev": {
++                "cache/filesystem-adapter": "^1.1",
++                "composer/composer": "^1.10.23",
++                "phpcompatibility/php-compatibility": "^9.2",
++                "phpspec/prophecy-phpunit": "^2.1",
++                "phpunit/phpunit": "^9.6",
++                "squizlabs/php_codesniffer": "^3.8",
++                "symfony/css-selector": "~2.1",
++                "symfony/dom-crawler": "~2.1"
++            },
++            "suggest": {
++                "cache/filesystem-adapter": "For caching certs and tokens (using Google\\Client::setCache)"
++            },
++            "type": "library",
++            "extra": {
++                "branch-alias": {
++                    "dev-main": "2.x-dev"
++                }
++            },
++            "autoload": {
++                "files": [
++                    "src/aliases.php"
++                ],
++                "psr-4": {
++                    "Google\\": "src/"
++                },
++                "classmap": [
++                    "src/aliases.php"
++                ]
++            },
++            "notification-url": "https://packagist.org/downloads/",
++            "license": [
++                "Apache-2.0"
++            ],
++            "description": "Client library for Google APIs",
++            "homepage": "http://developers.google.com/api-client-library/php",
++            "keywords": [
++                "google"
++            ],
++            "support": {
++                "issues": "https://github.com/googleapis/google-api-php-client/issues",
++                "source": "https://github.com/googleapis/google-api-php-client/tree/v2.19.0"
++            },
++            "time": "2026-01-09T19:59:47+00:00"
++        },
++        {
++            "name": "google/apiclient-services",
++            "version": "v0.435.0",
++            "source": {
++                "type": "git",
++                "url": "https://github.com/googleapis/google-api-php-client-services.git",
++                "reference": "1edf0f5f2876945c372366107b4d7a387b17a6b9"
++            },
++            "dist": {
++                "type": "zip",
++                "url": "https://api.github.com/repos/googleapis/google-api-php-client-services/zipball/1edf0f5f2876945c372366107b4d7a387b17a6b9",
++                "reference": "1edf0f5f2876945c372366107b4d7a387b17a6b9",
++                "shasum": ""
++            },
++            "require": {
++                "php": "^8.1"
++            },
++            "require-dev": {
++                "phpunit/phpunit": "^9.6"
++            },
++            "type": "library",
++            "autoload": {
++                "files": [
++                    "autoload.php"
++                ],
++                "psr-4": {
++                    "Google\\Service\\": "src"
++                }
++            },
++            "notification-url": "https://packagist.org/downloads/",
++            "license": [
++                "Apache-2.0"
++            ],
++            "description": "Client library for Google APIs",
++            "homepage": "http://developers.google.com/api-client-library/php",
++            "keywords": [
++                "google"
++            ],
++            "support": {
++                "issues": "https://github.com/googleapis/google-api-php-client-services/issues",
++                "source": "https://github.com/googleapis/google-api-php-client-services/tree/v0.435.0"
++            },
++            "time": "2026-03-01T01:14:26+00:00"
++        },
++        {
++            "name": "google/auth",
++            "version": "v1.50.0",
++            "source": {
++                "type": "git",
++                "url": "https://github.com/googleapis/google-auth-library-php.git",
++                "reference": "e1c26a718198e16d8a3c69b1cae136b73f959b0f"
++            },
++            "dist": {
++                "type": "zip",
++                "url": "https://api.github.com/repos/googleapis/google-auth-library-php/zipball/e1c26a718198e16d8a3c69b1cae136b73f959b0f",
++                "reference": "e1c26a718198e16d8a3c69b1cae136b73f959b0f",
++                "shasum": ""
++            },
++            "require": {
++                "firebase/php-jwt": "^6.0||^7.0",
++                "guzzlehttp/guzzle": "^7.4.5",
++                "guzzlehttp/psr7": "^2.4.5",
++                "php": "^8.1",
++                "psr/cache": "^2.0||^3.0",
++                "psr/http-message": "^1.1||^2.0",
++                "psr/log": "^3.0"
++            },
++            "require-dev": {
++                "guzzlehttp/promises": "^2.0",
++                "kelvinmo/simplejwt": "^1.1.0",
++                "phpseclib/phpseclib": "^3.0.35",
++                "phpspec/prophecy-phpunit": "^2.1",
++                "phpunit/phpunit": "^9.6",
++                "sebastian/comparator": ">=1.2.3",
++                "squizlabs/php_codesniffer": "^4.0",
++                "symfony/filesystem": "^6.3||^7.3",
++                "symfony/process": "^6.0||^7.0",
++                "webmozart/assert": "^1.11||^2.0"
++            },
++            "suggest": {
++                "phpseclib/phpseclib": "May be used in place of OpenSSL for signing strings or for token management. Please require version ^2."
++            },
++            "type": "library",
++            "autoload": {
++                "psr-4": {
++                    "Google\\Auth\\": "src"
++                }
++            },
++            "notification-url": "https://packagist.org/downloads/",
++            "license": [
++                "Apache-2.0"
++            ],
++            "description": "Google Auth Library for PHP",
++            "homepage": "https://github.com/google/google-auth-library-php",
++            "keywords": [
++                "Authentication",
++                "google",
++                "oauth2"
++            ],
++            "support": {
++                "docs": "https://cloud.google.com/php/docs/reference/auth/latest",
++                "issues": "https://github.com/googleapis/google-auth-library-php/issues",
++                "source": "https://github.com/googleapis/google-auth-library-php/tree/v1.50.0"
++            },
++            "time": "2026-01-08T21:33:57+00:00"
++        },
+         {
+             "name": "graham-campbell/result-type",
+             "version": "v1.1.3",
+@@ -2807,6 +3211,125 @@
+             ],
+             "time": "2024-11-21T10:36:35+00:00"
+         },
++        {
++            "name": "paragonie/constant_time_encoding",
++            "version": "v3.1.3",
++            "source": {
++                "type": "git",
++                "url": "https://github.com/paragonie/constant_time_encoding.git",
++                "reference": "d5b01a39b3415c2cd581d3bd3a3575c1ebbd8e77"
++            },
++            "dist": {
++                "type": "zip",
++                "url": "https://api.github.com/repos/paragonie/constant_time_encoding/zipball/d5b01a39b3415c2cd581d3bd3a3575c1ebbd8e77",
++                "reference": "d5b01a39b3415c2cd581d3bd3a3575c1ebbd8e77",
++                "shasum": ""
++            },
++            "require": {
++                "php": "^8"
++            },
++            "require-dev": {
++                "infection/infection": "^0",
++                "nikic/php-fuzzer": "^0",
++                "phpunit/phpunit": "^9|^10|^11",
++                "vimeo/psalm": "^4|^5|^6"
++            },
++            "type": "library",
++            "autoload": {
++                "psr-4": {
++                    "ParagonIE\\ConstantTime\\": "src/"
++                }
++            },
++            "notification-url": "https://packagist.org/downloads/",
++            "license": [
++                "MIT"
++            ],
++            "authors": [
++                {
++                    "name": "Paragon Initiative Enterprises",
++                    "email": "security@paragonie.com",
++                    "homepage": "https://paragonie.com",
++                    "role": "Maintainer"
++                },
++                {
++                    "name": "Steve 'Sc00bz' Thomas",
++                    "email": "steve@tobtu.com",
++                    "homepage": "https://www.tobtu.com",
++                    "role": "Original Developer"
++                }
++            ],
++            "description": "Constant-time Implementations of RFC 4648 Encoding (Base-64, Base-32, Base-16)",
++            "keywords": [
++                "base16",
++                "base32",
++                "base32_decode",
++                "base32_encode",
++                "base64",
++                "base64_decode",
++                "base64_encode",
++                "bin2hex",
++                "encoding",
++                "hex",
++                "hex2bin",
++                "rfc4648"
++            ],
++            "support": {
++                "email": "info@paragonie.com",
++                "issues": "https://github.com/paragonie/constant_time_encoding/issues",
++                "source": "https://github.com/paragonie/constant_time_encoding"
++            },
++            "time": "2025-09-24T15:06:41+00:00"
++        },
++        {
++            "name": "paragonie/random_compat",
++            "version": "v9.99.100",
++            "source": {
++                "type": "git",
++                "url": "https://github.com/paragonie/random_compat.git",
++                "reference": "996434e5492cb4c3edcb9168db6fbb1359ef965a"
++            },
++            "dist": {
++                "type": "zip",
++                "url": "https://api.github.com/repos/paragonie/random_compat/zipball/996434e5492cb4c3edcb9168db6fbb1359ef965a",
++                "reference": "996434e5492cb4c3edcb9168db6fbb1359ef965a",
++                "shasum": ""
++            },
++            "require": {
++                "php": ">= 7"
++            },
++            "require-dev": {
++                "phpunit/phpunit": "4.*|5.*",
++                "vimeo/psalm": "^1"
++            },
++            "suggest": {
++                "ext-libsodium": "Provides a modern crypto API that can be used to generate random bytes."
++            },
++            "type": "library",
++            "notification-url": "https://packagist.org/downloads/",
++            "license": [
++                "MIT"
++            ],
++            "authors": [
++                {
++                    "name": "Paragon Initiative Enterprises",
++                    "email": "security@paragonie.com",
++                    "homepage": "https://paragonie.com"
++                }
++            ],
++            "description": "PHP 5.x polyfill for random_bytes() and random_int() from PHP 7",
++            "keywords": [
++                "csprng",
++                "polyfill",
++                "pseudorandom",
++                "random"
++            ],
++            "support": {
++                "email": "info@paragonie.com",
++                "issues": "https://github.com/paragonie/random_compat/issues",
++                "source": "https://github.com/paragonie/random_compat"
++            },
++            "time": "2020-10-15T08:29:30+00:00"
++        },
+         {
+             "name": "phenx/php-font-lib",
+             "version": "0.5.6",
+@@ -2972,6 +3495,116 @@
+             ],
+             "time": "2024-07-20T21:41:07+00:00"
+         },
++        {
++            "name": "phpseclib/phpseclib",
++            "version": "3.0.49",
++            "source": {
++                "type": "git",
++                "url": "https://github.com/phpseclib/phpseclib.git",
++                "reference": "6233a1e12584754e6b5daa69fe1289b47775c1b9"
++            },
++            "dist": {
++                "type": "zip",
++                "url": "https://api.github.com/repos/phpseclib/phpseclib/zipball/6233a1e12584754e6b5daa69fe1289b47775c1b9",
++                "reference": "6233a1e12584754e6b5daa69fe1289b47775c1b9",
++                "shasum": ""
++            },
++            "require": {
++                "paragonie/constant_time_encoding": "^1|^2|^3",
++                "paragonie/random_compat": "^1.4|^2.0|^9.99.99",
++                "php": ">=5.6.1"
++            },
++            "require-dev": {
++                "phpunit/phpunit": "*"
++            },
++            "suggest": {
++                "ext-dom": "Install the DOM extension to load XML formatted public keys.",
++                "ext-gmp": "Install the GMP (GNU Multiple Precision) extension in order to speed up arbitrary precision integer arithmetic operations.",
++                "ext-libsodium": "SSH2/SFTP can make use of some algorithms provided by the libsodium-php extension.",
++                "ext-mcrypt": "Install the Mcrypt extension in order to speed up a few other cryptographic operations.",
++                "ext-openssl": "Install the OpenSSL extension in order to speed up a wide variety of cryptographic operations."
++            },
++            "type": "library",
++            "autoload": {
++                "files": [
++                    "phpseclib/bootstrap.php"
++                ],
++                "psr-4": {
++                    "phpseclib3\\": "phpseclib/"
++                }
++            },
++            "notification-url": "https://packagist.org/downloads/",
++            "license": [
++                "MIT"
++            ],
++            "authors": [
++                {
++                    "name": "Jim Wigginton",
++                    "email": "terrafrost@php.net",
++                    "role": "Lead Developer"
++                },
++                {
++                    "name": "Patrick Monnerat",
++                    "email": "pm@datasphere.ch",
++                    "role": "Developer"
++                },
++                {
++                    "name": "Andreas Fischer",
++                    "email": "bantu@phpbb.com",
++                    "role": "Developer"
++                },
++                {
++                    "name": "Hans-J├╝rgen Petrich",
++                    "email": "petrich@tronic-media.com",
++                    "role": "Developer"
++                },
++                {
++                    "name": "Graham Campbell",
++                    "email": "graham@alt-three.com",
++                    "role": "Developer"
++                }
++            ],
++            "description": "PHP Secure Communications Library - Pure-PHP implementations of RSA, AES, SSH2, SFTP, X.509 etc.",
++            "homepage": "http://phpseclib.sourceforge.net",
++            "keywords": [
++                "BigInteger",
++                "aes",
++                "asn.1",
++                "asn1",
++                "blowfish",
++                "crypto",
++                "cryptography",
++                "encryption",
++                "rsa",
++                "security",
++                "sftp",
++                "signature",
++                "signing",
++                "ssh",
++                "twofish",
++                "x.509",
++                "x509"
++            ],
++            "support": {
++                "issues": "https://github.com/phpseclib/phpseclib/issues",
++                "source": "https://github.com/phpseclib/phpseclib/tree/3.0.49"
++            },
++            "funding": [
++                {
++                    "url": "https://github.com/terrafrost",
++                    "type": "github"
++                },
++                {
++                    "url": "https://www.patreon.com/phpseclib",
++                    "type": "patreon"
++                },
++                {
++                    "url": "https://tidelift.com/funding/github/packagist/phpseclib/phpseclib",
++                    "type": "tidelift"
++                }
++            ],
++            "time": "2026-01-27T09:17:28+00:00"
++        },
+         {
+             "name": "psr/cache",
+             "version": "3.0.0",
+@@ -8895,12 +9528,12 @@
+     ],
+     "aliases": [],
+     "minimum-stability": "stable",
+-    "stability-flags": [],
++    "stability-flags": {},
+     "prefer-stable": true,
+     "prefer-lowest": false,
+     "platform": {
+         "php": "^7.2.5|^8.0.2"
+     },
+-    "platform-dev": [],
+-    "plugin-api-version": "2.3.0"
++    "platform-dev": {},
++    "plugin-api-version": "2.9.0"
+ }

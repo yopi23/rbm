@@ -168,9 +168,15 @@
                                         @break
 
                                         @case('alpha')
-                                            <span class="badge badge-danger badge-lg">
-                                                <i class="fas fa-times"></i> Alpha
-                                            </span>
+                                            @if($attendance->approval_status == 'rejected')
+                                                <span class="badge badge-danger badge-lg">
+                                                    <i class="fas fa-times"></i> Alpha (Izin Ditolak)
+                                                </span>
+                                            @else
+                                                <span class="badge badge-danger badge-lg">
+                                                    <i class="fas fa-times"></i> Alpha
+                                                </span>
+                                            @endif
                                         @break
 
                                         @case('libur')

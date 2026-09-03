@@ -643,8 +643,9 @@ class EmployeeManagementController extends Controller
                 return redirect()->back()->with('error', 'Tidak memiliki akses ke karyawan ini.');
             }
 
-            // Update attendance record as rejected
+            // Update attendance record as rejected and change status to alpha
             $attendance->update([
+                'status' => 'alpha',
                 'approval_status' => 'rejected',
                 'rejection_reason' => $request->reason,
                 'approved_by' => $adminId,
