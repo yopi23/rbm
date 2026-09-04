@@ -669,10 +669,8 @@ class EmployeeManagementController extends Controller
                     if (!$hasViolation) {
                         $salarySetting = SalarySetting::where('user_id', $attendance->user_id)->first();
                         $compensationType = $salarySetting ? $salarySetting->compensation_type : 'fixed';
-                        $penaltyInfo = \App\Http\Controllers\Admin\PenaltyRulesController::getApplicablePenalty(
-                            'absence',
+                        $penaltyInfo = \App\Http\Controllers\Admin\PenaltyRulesController::getApplicablePenaltyForAbsence(
                             $compensationType,
-                            0,
                             $this->getCurrentOwnerCode($attendance->user_id)
                         );
                         if ($penaltyInfo['success'] && $penaltyInfo['should_create_violation']) {

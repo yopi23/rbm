@@ -837,11 +837,18 @@ class SparepartApiController extends Controller
                         ->whereNotIn('id', $keepJobIds)
                         ->delete();
 
+                    $userRole = auth()->user()->userDetail->jabatan ?? '3';
                     // Create/Recreate standalone jobs
                     foreach ($request->jobs as $jobData) {
+                        if ($userRole !== '1') {
+                            $jobCatId = ServiceCategory::determineCategoryFromJobName($jobData['nama_pekerjaan'], $service->kode_owner);
+                        } else {
+                            $jobCatId = $jobData['service_category_id'] ?? ServiceCategory::determineCategoryFromJobName($jobData['nama_pekerjaan'], $service->kode_owner);
+                        }
+
                         ServiceJob::create([
                             'service_id' => $id,
-                            'service_category_id' => $jobData['service_category_id'] ?? $defaultCategoryId,
+                            'service_category_id' => $jobCatId,
                             'nama_pekerjaan' => $jobData['nama_pekerjaan'],
                             'biaya_jasa' => $jobData['biaya_jasa'],
                         ]);

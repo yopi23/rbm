@@ -225,10 +225,8 @@ class AttendanceCronController extends Controller
     {
         $ownerCode = $this->getCurrentOwnerCode($userId);
 
-        return PenaltyRulesController::getApplicablePenalty(
-            'absence',
+        return PenaltyRulesController::getApplicablePenaltyForAbsence(
             $compensationType,
-            0,
             $ownerCode
         );
     }
