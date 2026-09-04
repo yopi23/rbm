@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Log;
 use App\Traits\HasOwnerScope;
+use App\Services\FCMService;
 
 class EmployeeManagementController extends Controller
 {
@@ -651,6 +652,51 @@ class EmployeeManagementController extends Controller
                 'approved_by' => $adminId,
                 'approved_at' => now(),
             ]);
+
+            // Cek jika hari ini dan sudah melewati jadwal masuk, buatkan pelanggaran alpha (karena cron mungkin sudah terlewat)
+            $today = Carbon::today();
+            if (Carbon::parse($attendance->attendance_date)->isToday()) {
+                $schedule = WorkSchedule::where('user_id', $attendance->user_id)
+                    ->where('day_of_week', $today->format('l'))
+                    ->first();
+
+                if ($schedule && Carbon::now()->format('H:i:s') > $schedule->start_time) {
+                    $hasViolation = Violation::where('user_id', $attendance->user_id)
+                        ->whereDate('violation_date', $today)
+                        ->where('type', 'alpha')
+                        ->exists();
+
+                    if (!$hasViolation) {
+                        $salarySetting = SalarySetting::where('user_id', $attendance->user_id)->first();
+                        $compensationType = $salarySetting ? $salarySetting->compensation_type : 'fixed';
+                        $penaltyInfo = \App\Http\Controllers\Admin\PenaltyRulesController::getApplicablePenalty(
+                            'absence',
+                            $compensationType,
+                            0,
+                            $this->getCurrentOwnerCode($attendance->user_id)
+                        );
+                        if ($penaltyInfo['success'] && $penaltyInfo['should_create_violation']) {
+                            Violation::create([
+                                'user_id' => $attendance->user_id,
+                                'violation_date' => $today,
+                                'type' => 'alpha',
+                                'description' => $penaltyInfo['penalty_description'] . ' (Auto Generated on Reject Leave)',
+                                'penalty_amount' => $penaltyInfo['penalty_amount'],
+                                'penalty_percentage' => $penaltyInfo['penalty_percentage'],
+                                'status' => 'pending',
+                                'created_by' => $adminId,
+                                'metadata' => json_encode([
+                                    'rule_id' => $penaltyInfo['rule_id'] ?? null,
+                                    'compensation_type' => $compensationType,
+                                    'owner_code' => $this->getCurrentOwnerCode($attendance->user_id),
+                                    'auto_generated' => true,
+                                    'calculated_at' => now()->toISOString()
+                                ])
+                            ]);
+                        }
+                    }
+                }
+            }
 
             DB::commit();
 

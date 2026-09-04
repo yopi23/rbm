@@ -349,9 +349,9 @@ class PenaltyRulesController extends Controller
                     'compensation_type' => 'fixed',
                     'min_minutes' => 0,
                     'max_minutes' => null,
-                    'penalty_amount' => 50000,
+                    'penalty_amount' => 0,
                     'penalty_percentage' => 0,
-                    'description' => 'Alpha/Tidak masuk kerja - Gaji Tetap (Rp 50.000)',
+                    'description' => 'Alpha/Tidak masuk kerja - Gaji Tetap (Tidak ada tambahan potongan)',
                     'priority' => 1,
                     'created_by' => auth()->id()
                 ],
@@ -600,12 +600,13 @@ class PenaltyRulesController extends Controller
                 \Log::warning('No owner code available for absence penalty calculation');
 
                 // Return default penalty instead of failing - SELALU BERIKAN PENALTY UNTUK ALPHA
+                $isFixed = $compensationType === 'fixed';
                 return [
-                    'success' => true, // Changed to true untuk memberikan default penalty
-                    'penalty_amount' => 50000, // Default Rp 50.000 untuk alpha
-                    'penalty_percentage' => 15, // Default 15%
-                    'should_create_violation' => true, // SELALU buat violation untuk alpha
-                    'penalty_description' => 'Alpha (tidak hadir tanpa keterangan) - Default penalty (no owner)',
+                    'success' => true,
+                    'penalty_amount' => 0, 
+                    'penalty_percentage' => $isFixed ? 0 : 15,
+                    'should_create_violation' => true,
+                    'penalty_description' => 'Alpha (tidak hadir tanpa keterangan) - ' . ($isFixed ? 'Gaji Tetap (no owner)' : 'Default penalty (no owner)'),
                     'rule_id' => null,
                     'owner_code' => null
                 ];
@@ -658,10 +659,10 @@ class PenaltyRulesController extends Controller
                 if ($compensationType === 'fixed') {
                     return [
                         'success' => true,
-                        'penalty_amount' => 0, // Akan dihitung sebagai gaji harian
-                        'penalty_percentage' => 100, // 100% dari gaji harian
+                        'penalty_amount' => 0, 
+                        'penalty_percentage' => 0, 
                         'should_create_violation' => true,
-                        'penalty_description' => 'Alpha (tidak hadir tanpa keterangan) - Potong gaji harian (default)',
+                        'penalty_description' => 'Alpha (tidak hadir tanpa keterangan) - Gaji Tetap (Tidak ada tambahan potongan)',
                         'rule_id' => null,
                         'owner_code' => $ownerCode
                     ];

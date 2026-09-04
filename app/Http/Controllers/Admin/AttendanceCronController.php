@@ -91,13 +91,25 @@ class AttendanceCronController extends Controller
                     ->whereDate('attendance_date', $today)
                     ->first();
 
+                $needsAlphaPenalize = false;
                 if (!$attendanceExists) {
-                    Attendance::updateOrCreate(
-                        ['user_id' => $employee->id_user, 'attendance_date' => $today],
-                        ['status' => 'alpha', 'note' => 'Auto marked as alpha by system at ' . $currentTime->format('H:i')]
+                    $needsAlphaPenalize = true;
+                    Attendance::create(
+                        ['user_id' => $employee->id_user, 'attendance_date' => $today, 'status' => 'alpha', 'note' => 'Auto marked as alpha by system at ' . $currentTime->format('H:i')]
                     );
-                    $alphaCount++;
+                } elseif ($attendanceExists->status === 'alpha' && !$attendanceExists->check_in) {
+                    $violationExists = Violation::where('user_id', $employee->id_user)
+                        ->whereDate('violation_date', $today)
+                        ->where('type', 'alpha')
+                        ->exists();
 
+                    if (!$violationExists) {
+                        $needsAlphaPenalize = true;
+                    }
+                }
+
+                if ($needsAlphaPenalize) {
+                    $alphaCount++;
                     $violation = $this->createAlphaViolation($employee, $today);
                     if ($violation) {
                         $violationCount++;
@@ -106,13 +118,13 @@ class AttendanceCronController extends Controller
                     $details[] = [
                         'user_id' => $employee->id_user,
                         'name' => $employeeName,
-                        'status' => 'ALPHA (Belum Absen -> Ditandai Alpha & Denda)'
+                        'status' => 'ALPHA (Belum Absen / Izin Ditolak -> Ditandai Alpha & Denda)'
                     ];
                 } else {
                     $details[] = [
                         'user_id' => $employee->id_user,
                         'name' => $employeeName,
-                        'status' => 'Sudah Absen (' . strtoupper($attendanceExists->status) . ')'
+                        'status' => 'Sudah Absen (' . strtoupper($attendanceExists ? $attendanceExists->status : 'HADIR') . ')'
                     ];
                 }
             }
