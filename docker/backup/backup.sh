@@ -30,4 +30,4 @@ fi
 
 # Opsional: Bersihkan backup lama di GDrive (lebih dari 7 hari)
 # Hapus tanda pagar di bawah jika ingin mengaktifkannya
-# rclone delete --min-age 7d "$REMOTE_PATH"
+rclone delete --min-age 7d "$REMOTE_PATH"
