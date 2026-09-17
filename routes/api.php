@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\DeviceMonitoringApiController;
 use App\Http\Controllers\Api\PengeluaranTokoApiController;
 use App\Http\Controllers\Api\PengeluaranOpexApiController;
 use App\Http\Controllers\Api\WebhookController;
+use App\Http\Controllers\Api\StockHistoryApiController;
 use App\Http\Controllers\Api\TokoSettingController;
 use App\Http\Controllers\Api\ProductSearchApiController;
 use App\Http\Controllers\Admin\EmployeeManagementController;
@@ -520,5 +521,9 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
 
         // WhatsApp Integration
         Route::post('/send-message', [WhatsAppMessageController::class , 'sendMessage']);
+
+        // Stock History & Movement Report
+        Route::get('/stock-movements', [StockHistoryApiController::class, 'getStockMovements']);
+        Route::get('/spareparts/{id}/stock-history', [StockHistoryApiController::class, 'getSparepartDetailHistory']);
     }); // End of auth:sanctum middleware group
 
