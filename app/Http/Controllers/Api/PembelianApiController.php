@@ -37,24 +37,53 @@ class PembelianApiController extends Controller
      * GET /api/pembelian
      * Mendapatkan daftar semua pembelian
      */
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $pembelians = Pembelian::where('kode_owner', $this->getOwnerId())
+            $query = Pembelian::where('kode_owner', $this->getOwnerId());
+
+            if ($request->filled('search')) {
+                $search = trim($request->search);
+                $query->where(function ($q) use ($search) {
+                    $q->where('kode_pembelian', 'like', "%{$search}%")
+                        ->orWhere('supplier', 'like', "%{$search}%")
+                        ->orWhere('keterangan', 'like', "%{$search}%")
+                        ->orWhereHas('detailPembelians', function ($dq) use ($search) {
+                            $dq->where('nama_item', 'like', "%{$search}%")
+                                ->orWhereHas('sparepart', function ($sq) use ($search) {
+                                    $sq->where('nama_sparepart', 'like', "%{$search}%");
+                                });
+                        });
+                });
+            }
+
+            $pembelians = $query->with(['detailPembelians' => function ($dq) {
+                    $dq->select('id', 'pembelian_id', 'nama_item', 'jumlah', 'harga_beli', 'total');
+                }])
+                ->orderBy('tanggal_pembelian', 'desc')
                 ->orderBy('created_at', 'desc')
                 ->get()
                 ->map(function ($pembelian) {
-                return [
-                'id' => $pembelian->id,
-                'kode_pembelian' => $pembelian->kode_pembelian,
-                'tanggal_pembelian' => $pembelian->tanggal_pembelian,
-                'supplier' => $pembelian->supplier,
-                'total_harga' => $pembelian->total_harga,
-                'status' => $pembelian->status,
-                'keterangan' => $pembelian->keterangan,
-                'created_at' => $pembelian->created_at->toIso8601String(),
-                ];
-            });
+                    return [
+                        'id' => $pembelian->id,
+                        'kode_pembelian' => $pembelian->kode_pembelian,
+                        'tanggal_pembelian' => $pembelian->tanggal_pembelian,
+                        'supplier' => $pembelian->supplier,
+                        'total_harga' => $pembelian->total_harga,
+                        'status' => $pembelian->status,
+                        'keterangan' => $pembelian->keterangan,
+                        'created_at' => $pembelian->created_at ? $pembelian->created_at->toIso8601String() : null,
+                        'items_summary' => $pembelian->detailPembelians->map(function ($item) {
+                            return [
+                                'id' => $item->id,
+                                'nama_item' => $item->nama_item,
+                                'jumlah' => $item->jumlah,
+                                'harga_beli' => $item->harga_beli,
+                                'total' => $item->total,
+                            ];
+                        })->values(),
+                    ];
+                });
 
             return response()->json([
                 'success' => true,

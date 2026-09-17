@@ -877,10 +877,7 @@ class DashboardController extends Controller
                     if ($userRole !== '1') {
                         $jobCatId = ServiceCategory::determineCategoryFromJobName($jobData['nama_pekerjaan'], $userUpline);
                     } else {
-                        $jobCatId = $jobData['service_category_id'] ?? $defaultCategoryId;
-                        if (!$jobCatId) {
-                            $jobCatId = ServiceCategory::determineCategoryFromJobName($jobData['nama_pekerjaan'], $userUpline);
-                        }
+                        $jobCatId = isset($jobData['service_category_id']) && $jobData['service_category_id'] ? $jobData['service_category_id'] : ServiceCategory::determineCategoryFromJobName($jobData['nama_pekerjaan'], $userUpline);
                     }
 
                     ServiceJob::create([
@@ -914,10 +911,7 @@ class DashboardController extends Controller
                     if ($userRole !== '1') {
                         $partCategoryId = ServiceCategory::determineCategoryFromJobName($partJobName, $userUpline);
                     } else {
-                        $partCategoryId = $item['service_category_id'] ?? $defaultCategoryId;
-                        if (!$partCategoryId) {
-                            $partCategoryId = ServiceCategory::determineCategoryFromJobName($partJobName, $userUpline);
-                        }
+                        $partCategoryId = isset($item['service_category_id']) && $item['service_category_id'] ? $item['service_category_id'] : ServiceCategory::determineCategoryFromJobName($partJobName, $userUpline);
                     }
 
                     // Create a ServiceJob for this sparepart's installation
