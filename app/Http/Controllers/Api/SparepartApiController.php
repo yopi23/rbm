@@ -3549,82 +3549,77 @@ class SparepartApiController extends Controller
      * Consider adjusting based on actual need.
      */
     public function getServiceIndicators(Request $request)
-{
-    try {
-        $startTime = microtime(true);
+    {
+        try {
+            $startTime = microtime(true);
+            $uplineId = $this->getThisUser()->id_upline;
+            
+            // Menggunakan versioning cache
+            $cacheVersion = \Illuminate\Support\Facades\Cache::rememberForever("service_cache_version_{$uplineId}", function() { return 1; });
+            $cacheKey = "service_indicators_{$uplineId}_v{$cacheVersion}";
 
-        // Tambah filter owner untuk keamanan data
-        $services = modelServices::whereIn('status_services', ['Antri', 'Selesai'])
-                                ->where('kode_owner', $this->getThisUser()->id_upline)
-                                ->get();
+            $indicators = \Illuminate\Support\Facades\Cache::remember($cacheKey, 60, function() use ($uplineId) {
+                $services = \App\Models\Sevices::whereIn('status_services', ['Antri', 'Selesai'])
+                                        ->where('kode_owner', $uplineId)
+                                        ->get(['id', 'kode_service']);
 
-        \Log::info('Services query completed', [
-            'count' => $services->count(),
-            'owner_id' => $this->getThisUser()->id_upline
-        ]);
+                if ($services->isEmpty()) {
+                    return [];
+                }
 
-        if ($services->isEmpty()) {
+                $serviceIds = $services->pluck('id')->toArray();
+                $kodeServices = $services->pluck('kode_service')->toArray();
+
+                $warranties = \App\Models\Garansi::whereIn('kode_garansi', $kodeServices)
+                                     ->where('type_garansi', 'service')
+                                     ->pluck('kode_garansi')
+                                     ->toArray();
+
+                $notes = \App\Models\DetailCatatanService::whereIn('kode_services', $serviceIds)
+                                             ->pluck('kode_services')
+                                             ->toArray();
+
+                $indicatorsData = [];
+                foreach ($services as $service) {
+                    $indicatorsData[$service->id] = [
+                        'has_warranty' => in_array($service->kode_service, $warranties),
+                        'has_notes' => in_array($service->id, $notes)
+                    ];
+                }
+
+                return $indicatorsData;
+            });
+
+            $totalTime = microtime(true) - $startTime;
+
+            \Log::info('Service indicators completed', [
+                'total_time' => round($totalTime * 1000, 2) . 'ms',
+                'services_processed' => count($indicators),
+                'owner_id' => $uplineId
+            ]);
+
             return response()->json([
                 'success' => true,
-                'data' => [],
-                'message' => 'No services found'
+                'data' => $indicators,
+                'meta' => [
+                    'processed' => count($indicators),
+                    'execution_time_ms' => round($totalTime * 1000, 2)
+                ]
             ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in getServiceIndicators', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil indikator service: ' . $e->getMessage(),
+                'data' => []
+            ], 500);
         }
-
-        $indicators = [];
-        $warrantyCheckTime = 0;
-        $notesCheckTime = 0;
-
-        foreach ($services as $service) {
-            // Warranty check
-            $warrantyStart = microtime(true);
-            $hasWarranty = Garansi::where('kode_garansi', $service->kode_service)
-                                 ->where('type_garansi', 'service')
-                                 ->exists();
-            $warrantyCheckTime += (microtime(true) - $warrantyStart);
-
-            // Notes check
-            $notesStart = microtime(true);
-            $hasNotes = DetailCatatanService::where('kode_services', $service->id)->exists();
-            $notesCheckTime += (microtime(true) - $notesStart);
-
-            $indicators[$service->id] = [
-                'has_warranty' => $hasWarranty,
-                'has_notes' => $hasNotes
-            ];
-        }
-
-        $totalTime = microtime(true) - $startTime;
-
-        \Log::info('Service indicators completed', [
-            'total_time' => round($totalTime * 1000, 2) . 'ms',
-            'warranty_check_time' => round($warrantyCheckTime * 1000, 2) . 'ms',
-            'notes_check_time' => round($notesCheckTime * 1000, 2) . 'ms',
-            'services_processed' => count($indicators)
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'data' => $indicators,
-            'meta' => [
-                'processed' => count($indicators),
-                'execution_time_ms' => round($totalTime * 1000, 2)
-            ]
-        ]);
-
-    } catch (\Exception $e) {
-        \Log::error('Error in getServiceIndicators', [
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
-
-        return response()->json([
-            'success' => false,
-            'message' => 'Internal server error',
-            'error' => config('app.debug') ? $e->getMessage() : 'Something went wrong'
-        ], 500);
     }
-}
 
     /**
      * Add manual job to service.

@@ -375,6 +375,7 @@ class SalesApiController extends Controller
 
             // Filter utama (Ini sudah benar)
             $query->where('kode_owner', $userId);
+            $query->where('is_active', true);
             if ($categoryId) {
                 $query->where('kode_kategori', $categoryId);
             }

@@ -17,6 +17,7 @@
         "milon/barcode": "^10.0",
         "monolog/monolog": "3.0",
         "mpdf/mpdf": "^6.1",
+        "predis/predis": "^3.6",
         "spatie/laravel-ignition": "2.0"
     },
     "require-dev": {

@@ -9,13 +9,6 @@ use Illuminate\Support\Facades\Auth;
 
 class CabangScope implements Scope
 {
-    /**
-     * Apply the scope to a given Eloquent query builder.
-     *
-     * @param  \Illuminate\Database\Eloquent\Builder  $builder
-     * @param  \Illuminate\Database\Eloquent\Model  $model
-     * @return void
-     */
     public function apply(Builder $builder, Model $model)
     {
         if (Auth::check()) {
@@ -23,7 +16,8 @@ class CabangScope implements Scope
             $detail = \App\Models\UserDetail::where('kode_user', $user->id)->first();
             
             // Jika user bukan owner (yaitu jabatan '2'/Kasir atau '3'/Teknisi), batasi query ke cabang mereka
-            if ($detail && $detail->jabatan != '1') {
+            // TAMBAHAN: Pastikan user memiliki cabang_id. Jika null, tidak difilter by cabang agar datanya tetap muncul (sudah dilindungi filter kode_owner di controller)
+            if ($detail && $detail->jabatan != '1' && !empty($user->cabang_id)) {
                 $builder->where($model->getTable() . '.cabang_id', $user->cabang_id);
             }
         }

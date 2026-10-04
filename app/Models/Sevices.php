@@ -53,6 +53,14 @@ class Sevices extends Model
     protected static function booted()
     {
         static::addGlobalScope(new \App\Scopes\CabangScope);
+
+        // Invalidate service cache version on any change
+        static::saved(function ($model) {
+            \Illuminate\Support\Facades\Cache::increment("service_cache_version_{$model->kode_owner}");
+        });
+        static::deleted(function ($model) {
+            \Illuminate\Support\Facades\Cache::increment("service_cache_version_{$model->kode_owner}");
+        });
     }
 
     public function teknisi()
@@ -142,3 +150,4 @@ class Sevices extends Model
     }
 
 }
+

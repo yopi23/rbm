@@ -19,4 +19,19 @@ class Garansi extends Model
         'kode_owner',
         'status_garansi',
     ];
+
+    protected static function booted()
+    {
+        static::saved(function ($model) {
+            if ($model->kode_owner) {
+                \Illuminate\Support\Facades\Cache::increment("service_cache_version_{$model->kode_owner}");
+            }
+        });
+        static::deleted(function ($model) {
+            if ($model->kode_owner) {
+                \Illuminate\Support\Facades\Cache::increment("service_cache_version_{$model->kode_owner}");
+            }
+        });
+    }
 }
+

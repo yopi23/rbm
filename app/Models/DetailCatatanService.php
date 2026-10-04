@@ -14,4 +14,18 @@ class DetailCatatanService extends Model
         'kode_user',
         'catatan_service',
     ];
+
+    protected static function booted()
+    {
+        $clearCache = function ($model) {
+            $service = \App\Models\Sevices::find($model->kode_services);
+            if ($service && $service->kode_owner) {
+                \Illuminate\Support\Facades\Cache::increment("service_cache_version_{$service->kode_owner}");
+            }
+        };
+
+        static::saved($clearCache);
+        static::deleted($clearCache);
+    }
 }
+

@@ -1057,35 +1057,45 @@ class DashboardController extends Controller
     {
         try {
             $perPage = (int) $request->query('per_page', 0);
-            $query = modelServices::with('customer')
-                ->where('kode_owner', $this->getThisUser()->id_upline)
-                ->whereIn('status_services', ['Antri', 'Proses'])
-                ->latest();
+            $uplineId = $this->getThisUser()->id_upline;
+            
+            // Menggunakan versioning agar support semua driver cache
+            $cacheVersion = \Illuminate\Support\Facades\Cache::rememberForever("service_cache_version_{$uplineId}", function() { return 1; });
+            $cacheKey = "pending_services_{$uplineId}_{$perPage}_v{$cacheVersion}";
 
-            if ($perPage > 0) {
-                $paginated = $query->paginate($perPage);
-                return response()->json([
+            $result = \Illuminate\Support\Facades\Cache::remember($cacheKey, 60, function() use ($perPage, $uplineId) {
+                $query = \App\Models\Sevices::with('customer')
+                    ->where('kode_owner', $uplineId)
+                    ->whereIn('status_services', ['Antri', 'Proses'])
+                    ->latest();
+
+                if ($perPage > 0) {
+                    $paginated = $query->paginate($perPage);
+                    return [
+                        'success' => true,
+                        'status' => 'success',
+                        'message' => 'Data service yang antri berhasil diambil.',
+                        'data' => $paginated->items(),
+                        'pagination' => [
+                            'current_page' => $paginated->currentPage(),
+                            'last_page' => $paginated->lastPage(),
+                            'total' => $paginated->total(),
+                            'per_page' => $paginated->perPage(),
+                        ]
+                    ];
+                }
+
+                $services = $query->get();
+
+                return [
                     'success' => true,
                     'status' => 'success',
-                    'message' => 'Data service yang antri berhasil diambil.',
-                    'data' => $paginated->items(),
-                    'pagination' => [
-                        'current_page' => $paginated->currentPage(),
-                        'last_page' => $paginated->lastPage(),
-                        'total' => $paginated->total(),
-                        'per_page' => $paginated->perPage(),
-                    ]
-                ], 200);
-            }
+                    'message' => $services->isEmpty() ? 'Tidak ada data service yang antri.' : 'Data service yang antri berhasil diambil.',
+                    'data' => $services,
+                ];
+            });
 
-            $services = $query->get();
-
-            return response()->json([
-                'success' => true,
-                'status' => 'success',
-                'message' => $services->isEmpty() ? 'Tidak ada data service yang antri.' : 'Data service yang antri berhasil diambil.',
-                'data' => $services,
-            ], 200);
+            return response()->json($result, 200);
         } catch (\Exception $e) {
             \Log::error('get_pending_services error: ' . $e->getMessage());
             return response()->json([
