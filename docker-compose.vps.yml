@@ -143,7 +143,7 @@ services:
         deploy:
             resources:
                 limits:
-                    memory: 64M
+                    memory: 256M
 
     # PhpMyAdmin Service
     phpmyadmin:
@@ -212,7 +212,7 @@ services:
             resources:
                 limits:
                     cpus: '0.25'
-                    memory: 256M
+                    memory: 64M
                 reservations:
                     memory: 64M
         logging:
