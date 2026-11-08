@@ -142,10 +142,15 @@ class AiReceiptController extends Controller
     {
         $validated = $request->validate([
             'api_key' => 'nullable|string|max:255',
+            'model' => 'nullable|string|max:100',
         ]);
 
         $ownerId = $this->getOwnerId();
-        $result = AiReceiptScannerService::testConnection($ownerId, $validated['api_key'] ?? null);
+        $result = AiReceiptScannerService::testConnection(
+            $ownerId,
+            $validated['api_key'] ?? null,
+            $validated['model'] ?? null
+        );
 
         if (!$result['success']) {
             return response()->json([

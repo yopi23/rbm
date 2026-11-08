@@ -23,6 +23,7 @@ services:
     environment:
       SERVICE_NAME: app
       SERVICE_TAGS: dev
+      REDIS_HOST: redis
     working_dir: /var/www/rbm
     volumes:
       - .:/var/www/rbm

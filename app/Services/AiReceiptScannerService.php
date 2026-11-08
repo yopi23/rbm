@@ -15,8 +15,8 @@ class AiReceiptScannerService
      * Google Gemini Generative Language API endpoint.
      */
     protected const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-    protected const DEFAULT_MODEL = 'gemini-2.5-flash';
-    protected const FALLBACK_MODEL = 'gemini-1.5-flash';
+    protected const DEFAULT_MODEL = 'gemini-3.6-flash';
+    protected const FALLBACK_MODEL = 'gemini-3.5-flash';
 
     /**
      * Normalisasi nama model Gemini.
@@ -30,16 +30,24 @@ class AiReceiptScannerService
         $name = trim($modelName, " \t\n\r\0\x0B\"'");
         $lower = strtolower($name);
 
-        if (in_array($lower, ['2.5', '2.5 flash', '2.5-flash', 'gemini 2.5', 'gemini-2.5'], true)) {
-            return 'gemini-2.5-flash';
-        }
-
-        if (in_array($lower, ['1.5', '1.5 flash', '1.5-flash', 'gemini 1.5', 'gemini-1.5'], true)) {
-            return 'gemini-1.5-flash';
-        }
-
         if (in_array($lower, ['3.6', '3.6 flash', '3.6-flash', 'gemini 3.6', 'gemini-3.6'], true)) {
             return 'gemini-3.6-flash';
+        }
+
+        if (in_array($lower, ['3.7', '3.7 flash', '3.7-flash', 'gemini 3.7', 'gemini-3.7'], true)) {
+            return 'gemini-3.7-flash';
+        }
+
+        if (in_array($lower, ['3.5', '3.5 flash', '3.5-flash', 'gemini 3.5', 'gemini-3.5'], true)) {
+            return 'gemini-3.5-flash';
+        }
+
+        if (in_array($lower, ['3', '3 flash', '3-flash', 'gemini 3', 'gemini-3', 'gemini-3-flash'], true)) {
+            return 'gemini-3-flash';
+        }
+
+        if (in_array($lower, ['2.0', '2.0 flash', '2.0-flash', 'gemini 2.0', 'gemini-2.0'], true)) {
+            return 'gemini-2.0-flash';
         }
 
         $clean = str_replace('models/', '', $name);
@@ -197,7 +205,7 @@ class AiReceiptScannerService
     /**
      * Uji koneksi API Key ke Google Gemini.
      */
-    public static function testConnection(int $ownerId, ?string $providedApiKey = null): array
+    public static function testConnection(int $ownerId, ?string $providedApiKey = null, ?string $preferredModel = null): array
     {
         $cleanProvidedKey = null;
         if (!empty($providedApiKey)) {
@@ -213,54 +221,118 @@ class AiReceiptScannerService
             ];
         }
 
-        $candidateModels = [
-            self::getDefaultModel(),
-            self::getFallbackModel(),
-            'gemini-2.5-flash',
-            'gemini-1.5-flash',
-        ];
-        $candidateModels = array_values(array_unique($candidateModels));
-
+        // 1. Coba deteksi model yang aktif langsung dari Google AI Studio ListModels (v1beta dan v1)
+        $apiVersions = ['v1beta', 'v1'];
+        $discoveredModels = [];
+        $workingApiVersion = null;
         $lastError = 'Koneksi gagal.';
 
-        foreach ($candidateModels as $candidateModel) {
-            $url = self::GEMINI_API_URL . '/' . $candidateModel . ':generateContent?key=' . urlencode($apiKey);
-
+        foreach ($apiVersions as $version) {
+            $listUrl = "https://generativelanguage.googleapis.com/{$version}/models?key=" . urlencode($apiKey);
             try {
-                $response = Http::timeout(10)->post($url, [
-                    'contents' => [
-                        [
-                            'parts' => [
-                                ['text' => 'Ping']
-                            ]
-                        ]
-                    ],
-                    'generationConfig' => [
-                        'temperature' => 0.0,
-                        'maxOutputTokens' => 10,
-                    ],
-                ]);
-
+                $response = Http::timeout(10)->get($listUrl);
                 if ($response->successful()) {
-                    return [
-                        'success' => true,
-                        'active_model' => $candidateModel,
-                        'message' => "Koneksi ke Google Gemini AI ({$candidateModel}) berhasil terhubung!",
-                    ];
-                }
-
-                $errorData = $response->json();
-                $lastError = $errorData['error']['message'] ?? 'HTTP ' . $response->status();
-
-                // Jika API key tidak valid, langsung hentikan
-                if ($response->status() === 400 && (
-                    str_contains(strtolower($lastError), 'api key not valid') ||
-                    str_contains(strtolower($lastError), 'api_key_invalid')
-                )) {
-                    break;
+                    $workingApiVersion = $version;
+                    $data = $response->json();
+                    if (!empty($data['models']) && is_array($data['models'])) {
+                        foreach ($data['models'] as $m) {
+                            $methods = $m['supportedGenerationMethods'] ?? [];
+                            if (in_array('generateContent', $methods, true)) {
+                                $rawName = $m['name'] ?? '';
+                                $shortName = str_replace('models/', '', $rawName);
+                                if (!empty($shortName)) {
+                                    $discoveredModels[] = $shortName;
+                                }
+                            }
+                        }
+                    }
+                    if (!empty($discoveredModels)) {
+                        break;
+                    }
+                } else {
+                    $err = $response->json();
+                    $lastError = $err['error']['message'] ?? ('HTTP ' . $response->status());
                 }
             } catch (\Throwable $e) {
-                $lastError = 'Koneksi ke Google AI terputus/timeout: ' . $e->getMessage();
+                $lastError = $e->getMessage();
+            }
+        }
+
+        // 2. Kumpulkan kandidat model yang akan diuji
+        $candidateModels = [];
+        if (!empty($preferredModel)) {
+            $candidateModels[] = self::normalizeModelName($preferredModel);
+        }
+
+        if (!empty($discoveredModels)) {
+            // Prioritaskan model flash
+            foreach ($discoveredModels as $dm) {
+                if (str_contains(strtolower($dm), 'flash')) {
+                    $candidateModels[] = $dm;
+                }
+            }
+            $candidateModels = array_merge($candidateModels, $discoveredModels);
+        } else {
+            $candidateModels = array_merge($candidateModels, [
+                'gemini-3.6-flash',
+                'gemini-3.7-flash',
+                'gemini-3.5-flash',
+                'gemini-3-flash',
+                'gemini-2.0-flash',
+            ]);
+        }
+        $candidateModels = array_values(array_unique($candidateModels));
+
+        // 3. Uji Ping generateContent
+        $endpointsToTest = $workingApiVersion 
+            ? ["https://generativelanguage.googleapis.com/{$workingApiVersion}/models"] 
+            : [
+                'https://generativelanguage.googleapis.com/v1beta/models',
+                'https://generativelanguage.googleapis.com/v1/models',
+            ];
+
+        foreach ($endpointsToTest as $endpointBase) {
+            foreach ($candidateModels as $candidateModel) {
+                $url = "{$endpointBase}/{$candidateModel}:generateContent?key=" . urlencode($apiKey);
+
+                try {
+                    $response = Http::timeout(10)->post($url, [
+                        'contents' => [
+                            [
+                                'parts' => [
+                                    ['text' => 'Ping']
+                                ]
+                            ]
+                        ],
+                        'generationConfig' => [
+                            'temperature' => 0.0,
+                            'maxOutputTokens' => 5,
+                        ],
+                    ]);
+
+                    if ($response->successful()) {
+                        return [
+                            'success' => true,
+                            'active_model' => $candidateModel,
+                            'message' => "Koneksi ke Google Gemini AI ({$candidateModel}) berhasil terhubung!",
+                        ];
+                    }
+
+                    $errorData = $response->json();
+                    $lastError = $errorData['error']['message'] ?? ('HTTP ' . $response->status());
+
+                    if ($response->status() === 400 && (
+                        str_contains(strtolower($lastError), 'api key not valid') ||
+                        str_contains(strtolower($lastError), 'api_key_invalid')
+                    )) {
+                        return [
+                            'success' => false,
+                            'message' => 'API Key tidak valid. Mohon periksa kembali API Key yang Anda salin dari Google AI Studio.',
+                        ];
+                    }
+                } catch (\Throwable $e) {
+                    $lastError = 'Koneksi ke Google AI terputus/timeout: ' . $e->getMessage();
+                }
             }
         }
 
@@ -303,67 +375,63 @@ class AiReceiptScannerService
         // Bangun system prompt cerdas
         $prompt = self::buildSystemPrompt($mode);
 
-        $url = self::GEMINI_API_URL . '/' . $model . ':generateContent?key=' . urlencode($apiKey);
+        $candidateModels = array_values(array_unique([
+            $model,
+            'gemini-3.6-flash',
+            'gemini-3.7-flash',
+            'gemini-3.5-flash',
+            'gemini-3-flash',
+            self::getFallbackModel(),
+        ]));
+
+        $endpoints = [
+            'https://generativelanguage.googleapis.com/v1beta/models',
+            'https://generativelanguage.googleapis.com/v1/models',
+        ];
+
+        $response = null;
+        $lastErrMsg = 'Gagal menghubungi Gemini AI';
 
         try {
-            $response = Http::timeout(40)->post($url, [
-                'contents' => [
-                    [
-                        'parts' => [
-                            ['text' => $prompt],
+            foreach ($endpoints as $endpointBase) {
+                foreach ($candidateModels as $tryModel) {
+                    $tryUrl = "{$endpointBase}/{$tryModel}:generateContent?key=" . urlencode($apiKey);
+                    $res = Http::timeout(45)->post($tryUrl, [
+                        'contents' => [
                             [
-                                'inline_data' => [
-                                    'mime_type' => $mimeType,
-                                    'data' => $base64Image,
-                                ]
-                            ]
-                        ]
-                    ]
-                ],
-                'generationConfig' => [
-                    'temperature' => 0.1,
-                    'responseMimeType' => 'application/json',
-                ],
-            ]);
-
-            // Jika gagal, coba fallback model
-            $fallbackModel = self::getFallbackModel();
-            if (!$response->successful() && $model !== $fallbackModel) {
-                Log::info("Gemini {$model} gagal (HTTP {$response->status()}), mencoba fallback ke " . $fallbackModel);
-                $fallbackUrl = self::GEMINI_API_URL . '/' . $fallbackModel . ':generateContent?key=' . urlencode($apiKey);
-                $fallbackResponse = Http::timeout(40)->post($fallbackUrl, [
-                    'contents' => [
-                        [
-                            'parts' => [
-                                ['text' => $prompt],
-                                [
-                                    'inline_data' => [
-                                        'mime_type' => $mimeType,
-                                        'data' => $base64Image,
+                                'parts' => [
+                                    ['text' => $prompt],
+                                    [
+                                        'inline_data' => [
+                                            'mime_type' => $mimeType,
+                                            'data' => $base64Image,
+                                        ]
                                     ]
                                 ]
                             ]
-                        ]
-                    ],
-                    'generationConfig' => [
-                        'temperature' => 0.1,
-                        'responseMimeType' => 'application/json',
-                    ],
-                ]);
+                        ],
+                        'generationConfig' => [
+                            'temperature' => 0.1,
+                            'responseMimeType' => 'application/json',
+                        ],
+                    ]);
 
-                if ($fallbackResponse->successful()) {
-                    $response = $fallbackResponse;
+                    if ($res->successful()) {
+                        $response = $res;
+                        break 2;
+                    }
+
+                    $errData = $res->json();
+                    $lastErrMsg = $errData['error']['message'] ?? ('HTTP ' . $res->status());
                 }
             }
 
-            if (!$response->successful()) {
-                $err = $response->json();
-                $msg = $err['error']['message'] ?? ('HTTP ' . $response->status());
-                Log::warning("Gemini AI scan error untuk owner [{$ownerId}]: {$msg}");
+            if (!$response || !$response->successful()) {
+                Log::warning("Gemini AI scan error untuk owner [{$ownerId}]: {$lastErrMsg}");
                 return [
                     'success' => false,
                     'error_code' => 'AI_UPSTREAM_ERROR',
-                    'message' => 'Asisten pembaca nota merespon: ' . $msg,
+                    'message' => 'Asisten pembaca nota merespon: ' . $lastErrMsg,
                 ];
             }
 
