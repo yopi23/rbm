@@ -9,6 +9,14 @@ use Illuminate\Support\Facades\Auth;
 
 class AiReceiptController extends Controller
 {
+    public function __construct()
+    {
+        if (function_exists('opcache_invalidate')) {
+            @opcache_invalidate(app_path('Services/AiReceiptScannerService.php'), true);
+            @opcache_invalidate(__FILE__, true);
+        }
+    }
+
     /**
      * Dapatkan ID Owner dari user yang sedang login.
      */
@@ -116,7 +124,11 @@ class AiReceiptController extends Controller
 
         // Jika memasukkan API key baru, uji koneksi dulu
         if (!empty($validated['api_key'])) {
-            $test = AiReceiptScannerService::testConnection($ownerId, $validated['api_key']);
+            $test = AiReceiptScannerService::testConnection(
+                $ownerId,
+                $validated['api_key'],
+                $validated['model'] ?? null
+            );
             if (!$test['success']) {
                 return response()->json([
                     'success' => false,

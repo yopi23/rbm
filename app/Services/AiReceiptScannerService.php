@@ -101,6 +101,94 @@ class AiReceiptScannerService
     }
 
     /**
+     * Dapatkan daftar model Google Gemini yang aktif dan mendukung 'generateContent'
+     * langsung dari endpoint resmi Google AI (Dynamic Auto-Discovery).
+     */
+    public static function getAvailableModels(string $apiKey): array
+    {
+        $cacheKey = 'gemini_models_' . substr(md5($apiKey), 0, 12);
+
+        return cache()->remember($cacheKey, 86400, function () use ($apiKey) {
+            try {
+                $response = Http::timeout(8)->get('https://generativelanguage.googleapis.com/v1beta/models?key=' . urlencode($apiKey));
+
+                if (!$response->successful()) {
+                    return [];
+                }
+
+                $data = $response->json();
+                $models = $data['models'] ?? [];
+
+                $usableModels = [];
+                foreach ($models as $m) {
+                    $methods = $m['supportedGenerationMethods'] ?? [];
+                    if (in_array('generateContent', $methods, true)) {
+                        $cleanName = str_replace('models/', '', $m['name'] ?? '');
+                        if (!empty($cleanName) && !self::isSunsetModel($cleanName)) {
+                            $usableModels[] = $cleanName;
+                        }
+                    }
+                }
+
+                return $usableModels;
+            } catch (\Throwable $e) {
+                Log::warning('Gagal mengambil daftar model Gemini: ' . $e->getMessage());
+                return [];
+            }
+        });
+    }
+
+    /**
+     * Tentukan model terbaik secara dinamis (identik dengan modul Kasir).
+     */
+    public static function resolveModel(string $apiKey, ?string $requestedModel = null): string
+    {
+        // 1. Setting pilihan user / toko jika valid dan bukan model sunset
+        if (!empty($requestedModel)) {
+            $normalized = self::normalizeModelName($requestedModel);
+            if (!self::isSunsetModel($normalized)) {
+                return $normalized;
+            }
+        }
+
+        // 2. Override server via .env / config
+        $envModel = config('services.gemini.model') ?: env('GEMINI_MODEL');
+        if (!empty($envModel)) {
+            $normalized = self::normalizeModelName($envModel);
+            if (!self::isSunsetModel($normalized)) {
+                return $normalized;
+            }
+        }
+
+        // 3. Auto-discovery dari Google API
+        $available = self::getAvailableModels($apiKey);
+        if (!empty($available)) {
+            foreach ($available as $modelName) {
+                if (str_contains($modelName, '3') && str_contains($modelName, 'flash') && !str_contains($modelName, 'lite')) {
+                    return $modelName;
+                }
+            }
+            foreach ($available as $modelName) {
+                if (str_contains($modelName, '3') && str_contains($modelName, 'flash')) {
+                    return $modelName;
+                }
+            }
+            foreach ($available as $modelName) {
+                if (str_contains($modelName, '2.5-flash') && !str_contains($modelName, 'lite')) {
+                    return $modelName;
+                }
+            }
+            foreach ($available as $modelName) {
+                if (!self::isSunsetModel($modelName)) {
+                    return $modelName;
+                }
+            }
+        }
+
+        return self::getDefaultModel();
+    }
+
+    /**
      * Ambil konfigurasi AI milik owner tertentu.
      */
     public static function getConfig(int $ownerId): array
@@ -301,6 +389,33 @@ class AiReceiptScannerService
             }
         }
 
+        // 3. Jika model default & fallback masih gagal karena model tidak ditemukan/sunset,
+        // coba auto-discovery langsung dari endpoint Google AI (identik dengan modul Kasir)
+        if (str_contains(strtolower($lastError), 'not found') || str_contains(strtolower($lastError), 'no longer available')) {
+            $discovered = self::getAvailableModels($apiKey);
+            foreach ($discovered as $autoModel) {
+                if (in_array($autoModel, $candidateModels, true)) continue;
+                if (!str_contains($autoModel, 'flash')) continue;
+
+                $url = self::GEMINI_API_URL . '/' . $autoModel . ':generateContent?key=' . urlencode($apiKey);
+                try {
+                    $response = Http::timeout(8)->post($url, [
+                        'contents' => [['parts' => [['text' => 'Ping']]]],
+                        'generationConfig' => ['temperature' => 0.0, 'maxOutputTokens' => 10],
+                    ]);
+                    if ($response->successful()) {
+                        return [
+                            'success' => true,
+                            'active_model' => $autoModel,
+                            'message' => "Koneksi ke Google Gemini AI ({$autoModel}) berhasil terhubung!",
+                        ];
+                    }
+                } catch (\Throwable $e) {
+                    // continue
+                }
+            }
+        }
+
         return [
             'success' => false,
             'message' => 'Gagal verifikasi API Key: ' . $lastError,
@@ -331,7 +446,10 @@ class AiReceiptScannerService
             ];
         }
 
-        $model = self::normalizeModelName($config['model'] ?? null);
+        $model = self::resolveModel($apiKey, $config['model'] ?? null);
+        if (self::isSunsetModel($model)) {
+            $model = self::getDefaultModel();
+        }
 
         // Streaming in-memory file gambar
         $mimeType = $file->getMimeType() ?: 'image/jpeg';
@@ -340,14 +458,17 @@ class AiReceiptScannerService
         // Bangun system prompt cerdas
         $prompt = self::buildSystemPrompt($mode);
 
-        $candidateModels = array_values(array_unique([
+        $discovered = self::getAvailableModels($apiKey);
+        $discoveredFlash = array_values(array_filter($discovered, fn($m) => str_contains($m, 'flash')));
+
+        $candidateModels = array_values(array_unique(array_filter(array_merge([
             $model,
             'gemini-3.6-flash',
-            'gemini-3.7-flash',
+            'gemini-3.5-flash-lite',
             'gemini-3.5-flash',
-            'gemini-3-flash',
+            'gemini-2.5-flash',
             self::getFallbackModel(),
-        ]));
+        ], $discoveredFlash), fn($m) => !self::isSunsetModel($m))));
 
         $endpoints = [
             'https://generativelanguage.googleapis.com/v1beta/models',
