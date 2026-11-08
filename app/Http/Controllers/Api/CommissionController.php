@@ -32,7 +32,7 @@ class CommissionController extends Controller
                 ->avg('max_percentage'); // Menggunakan max_percentage sebagai dasar
 
             // Default ke 0 jika tidak ada teknisi persentase sama sekali
-            $avgShopLoadPercentage = $avgPercentage ?? 0;
+            $avgShopLoadPercentage = (float) ($avgPercentage ?? 0);
 
 
             $fourteenDaysAgo = Carbon::parse($date)->subDays(14)->toDateString();

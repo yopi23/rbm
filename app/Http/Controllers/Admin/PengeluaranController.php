@@ -20,51 +20,12 @@ class PengeluaranController extends Controller
     use KategoriLaciTrait;
     use ManajemenKasTrait;
     //
-    public function getTable($thead = '<th>No</th><th>Aksi</th>', $tbody = '')
-    {
-        $result = '<div class="table-responsive"><table class="table" id="dataTable">';
-        $result .= '<thead>' . $thead . '</thead>';
-        $result .= '<tbody>' . $tbody . '</body>';
-        $result .= '</table></div>';
-        return $result;
-    }
-    public function getHiddenItemForm($method = 'POST')
-    {
-        $result = '' . csrf_field() . '';
-        $result .= '' . method_field($method) . '';
-        return $result;
-    }
     public function view_toko(Request $request)
     {
         $page = "Pengeluaran Toko";
         $link_tambah = route('create_pengeluaran_toko');
-        $thead = '<th width="5%">No</th>
-                    <th>Tanggal</th>
-                    <th>Nama</th>
-                    <th>Catatan</th>
-                    <th>Harga</th>
-                    <th>Aksi</th>';
-        $tbody = '';
-        $no = 1;
         $data_pengeluaran = PengeluaranToko::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
-        foreach ($data_pengeluaran as $item) {
-            $edit = Request::create(route('edit_pengeluaran_toko', $item->id));
-            $delete = Request::create(route('delete_pengeluaran_toko', $item->id));
-            $tbody .= '<tr>
-                        <td>' . $no++ . '</td>
-                        <td>' . $item->tanggal_pengeluaran . '</td>
-                        <td>' . $item->nama_pengeluaran . '</td>
-                        <td>' . $item->catatan_pengeluaran . '</td>
-                        <td>Rp.' . number_format($item->jumlah_pengeluaran) . ',-</td>
-                        <td>  <form action="' . $delete->url() . '" onsubmit="' . "return confirm('Apakah Anda yakin ?')" . '" method="POST">
-                                    ' . $this->getHiddenItemForm('DELETE') . '
-                                    <a href="' . $edit->url() . '" class="btn btn-warning"><i class="fas fa-edit"></i></a>
-                                    <button type="submit" class="btn btn-danger"><i class="fas fa-trash"></i></button>
-                                </form>
-                        </td>
-                       </tr>';
-        }
-        $data = $this->getTable($thead, $tbody);
+        $data = view('admin.tables.pengeluaran_toko_table', compact('data_pengeluaran'))->render();
         return view('admin.layout.card_layout', compact(['page', 'data', 'link_tambah']));
     }
 
@@ -175,41 +136,8 @@ class PengeluaranController extends Controller
     {
         $page = "Pengeluaran Operasional";
         $link_tambah = route('create_pengeluaran_opex');
-        $thead = '<th width="5%">No</th>
-                    <th>Tanggal</th>
-                    <th>Nama</th>
-                    <th>Kategori</th>
-                    <th>Catatan</th>
-                    <th>Jumlah</th>
-                    <th>Aksi</th>';
-        $tbody = '';
-        $no = 1;
-        // Eager load relasi pegawai untuk efisiensi
         $data_opex = PengeluaranOperasional::with('pegawai')->where('kode_owner', $this->getThisUser()->id_upline)->latest()->get();
-        foreach ($data_opex as $item) {
-            $edit = Request::create(route('edit_pengeluaran_opex', $item->id));
-            $delete = Request::create(route('delete_pengeluaran_opex', $item->id));
-
-            // Perbaikan Bug: Gunakan '==' untuk perbandingan
-            $kategori = (strtolower($item->kategori) == 'penggajian' && $item->pegawai) ? $item->kategori . ' (' . $item->pegawai->name . ')' : $item->kategori;
-
-            $tbody .= '<tr>
-                        <td>' . $no++ . '</td>
-                        <td>' . $item->tgl_pengeluaran . '</td>
-                        <td>' . $item->nama_pengeluaran . '</td>
-                        <td>' . $kategori . '</td>
-                        <td>' . $item->desc_pengeluaran . '</td>
-                        <td>Rp.' . number_format($item->jml_pengeluaran) . ',-</td>
-                        <td>
-                        <form action="' . $delete->url() . '" onsubmit="return confirm(\'Apakah Anda yakin ?\')" method="POST">
-                                    ' . $this->getHiddenItemForm('DELETE') . '
-                                    <a href="' . $edit->url() . '" class="btn btn-warning"><i class="fas fa-edit"></i></a>
-                                    <button type="submit" class="btn btn-danger"><i class="fas fa-trash"></i></button>
-                                </form>
-                        </td>
-                        </tr>';
-        }
-        $data = $this->getTable($thead, $tbody);
+        $data = view('admin.tables.pengeluaran_opex_table', compact('data_opex'))->render();
         return view('admin.layout.card_layout', compact(['page', 'data', 'link_tambah']));
     }
 

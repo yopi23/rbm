@@ -30,6 +30,7 @@ use App\Http\Controllers\Admin\EmployeeManagementController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Api\HutangApiController;
 use App\Http\Controllers\Api\PembelianApiController;
+use App\Http\Controllers\Api\AiReceiptController;
 use App\Http\Controllers\Api\QrisController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\ShiftApiController;
@@ -180,6 +181,12 @@ Route::middleware('auth:sanctum', 'subscribed.api')->group(function () {
     Route::post('/pembelian/{id}/items', [PembelianApiController::class , 'addItem']);
     Route::put('/pembelian/items/{detailId}', [PembelianApiController::class , 'updateItem']);
     Route::delete('/pembelian/items/{id}', [PembelianApiController::class , 'removeItem']);
+    Route::post('/pembelian/{id}/items/bulk', [PembelianApiController::class , 'bulkAddItems']);
+    // AI Assistant & Receipt OCR Routes
+    Route::post('/ai/scan-receipt', [AiReceiptController::class , 'scan']);
+    Route::get('/ai/config', [AiReceiptController::class , 'getConfig']);
+    Route::post('/ai/config', [AiReceiptController::class , 'saveConfig']);
+    Route::post('/ai/test-connection', [AiReceiptController::class , 'testConnection']);
     //end pembeliaan
 
     // pusat pencarian spareprt

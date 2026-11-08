@@ -25,11 +25,15 @@ class TokoSetting extends Model
         'primary_color',
         'secondary_color',
         'public_page_enabled',
+        'ai_gemini_api_key',
+        'ai_model',
+        'ai_enabled',
     ];
 
     protected $casts = [
         'public_page_enabled' => 'boolean',
         'print_logo_on_receipt' => 'boolean',
+        'ai_enabled' => 'boolean',
     ];
 
     public function owner()

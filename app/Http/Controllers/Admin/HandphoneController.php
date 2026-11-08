@@ -19,66 +19,13 @@ use Milon\Barcode\Facades\DNS1DFacade;
 class HandphoneController extends Controller
 {
 
-    public function getTable($thead = '<th>No</th><th>Aksi</th>', $tbody = '')
-    {
-        $result = '<div class="table-responsive"><table class="table" id="dataTable">';
-        $result .= '<thead>' . $thead . '</thead>';
-        $result .= '<tbody>' . $tbody . '</body>';
-        $result .= '</table></div>';
-        return $result;
-    }
-    public function getHiddenItemForm($method = 'POST')
-    {
-        $result = '' . csrf_field() . '';
-        $result .= '' . method_field($method) . '';
-        return $result;
-    }
     //View Functions
     public function view_produk(Request $request)
     {
         $page = "Data Barang";
         $link_tambah = route('create_produk');
-        $thead = '<th width="5%">No</th>
-                    <th>Barcode</th>
-                    <th>Image</th>
-                    <th>Kode Barang</th>
-                    <th>Nama</th>
-                    <th>Harga Beli</th>
-                    <th>Harga Jual</th>
-                    <th>Kondisi</th>
-                    <th>Stok</th>
-                    <th>Aksi</th>';
         $data_barang = Handphone::withoutGlobalScope(ActiveScope::class)->where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
-        $tbody = '';
-        $no = 1;
-
-        foreach ($data_barang as $item) {
-            $edit = Request::create(route('edit_produk', $item->id));
-            $delete = Request::create(route('delete_produk', $item->id));
-            $foto = '<img src="' . asset('public/img/no_image.png') . '" width="100%" height="100%" class="img" id="view-img">';
-            if ($item->foto_barang != '-') {
-                $foto =  '<img src="' . asset('public/uploads/' . $item->foto_barang) . '" class="img" width="100%" height="100%">';
-            }
-            $qr = DNS1DFacade::getBarcodeHTML($item->kode_barang, "C39", 1, 100);
-            $tbody .= '<tr>
-                            <td>' . $no++ . '</td>
-                            <td>' . $qr . '</td>
-                            <td>' . $foto . '</td>
-                            <td>' . $item->kode_barang . '</td>
-                            <td>' . $item->nama_barang . '</td>
-                            <td>Rp.' . number_format($item->harga_beli_barang) . ',-</td>
-                            <td>Rp.' . number_format($item->harga_jual_barang) . ',-</td>
-                            <td>' . $item->kondisi_barang . '</td>
-                            <td>' . $item->stok_barang . '</td>
-                            <td>
-                                <form action="' . $delete->url() . '" onsubmit="' . "return confirm('Apakah Anda yakin ?')" . '" method="POST">
-                                    ' . $this->getHiddenItemForm('DELETE') . '
-                                    <a href="' . $edit->url() . '" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>
-                                    <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></button>
-                                </form>
-                            </tr>';
-        }
-        $data = $this->getTable($thead, $tbody);
+        $data = view('admin.tables.produk_table', compact('data_barang'))->render();
         return view('admin.layout.card_layout', compact(['page', 'link_tambah', 'data']));
     }
 
@@ -86,31 +33,8 @@ class HandphoneController extends Controller
     {
         $page = "Data Kategori Produk";
         $link_tambah = route('create_kategori_produk');
-        $thead = '<th width="5%">No</th><th width="15%">Image</th><th>Nama</th><th>Aksi</th>';
         $kategori = KategoriHandphone::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
-        $tbody = '';
-        $no = 1;
-
-        foreach ($kategori as $item) {
-            $edit = Request::create(route('EditKategoriProduk', $item->id));
-            $delete = Request::create(route('DeleteKategoriProduk', $item->id));
-            $foto = '<img src="' . asset('public/img/no_image.png') . '" width="100%" height="100%" class="img" id="view-img">';
-            if ($item->foto_kategori != '-') {
-                $foto =  '<img src="' . asset('public/uploads/' . $item->foto_kategori) . '" class="img" width="100%" height="100%">';
-            }
-            $tbody .= '<tr>
-                            <td>' . $no++ . '</td>
-                            <td>' . $foto . '</td>
-                            <td>' . $item->nama_kategori . '</td>
-                            <td>
-                                <form action="' . $delete->url() . '" onsubmit="' . "return confirm('Apakah Anda yakin ?')" . '" method="POST">
-                                    ' . $this->getHiddenItemForm('DELETE') . '
-                                    <a href="' . $edit->url() . '" class="btn btn-warning"><i class="fas fa-edit"></i> Edit</a>
-                                    <button type="submit" class="btn btn-danger"><i class="fas fa-trash"></i> Hapus</button>
-                                </form>
-                            </tr>';
-        }
-        $data = $this->getTable($thead, $tbody);
+        $data = view('admin.tables.kategori_produk_table', compact('kategori'))->render();
         return view('admin.layout.card_layout', compact(['page', 'link_tambah', 'data']));
     }
 

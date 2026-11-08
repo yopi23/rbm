@@ -12,18 +12,6 @@ use Illuminate\Support\Facades\Hash;
 
 class UsersController extends Controller
 {
-    public function getTable($thead = '<th>No</th><th>Aksi</th>',$tbody = ''){
-        $result = '<div class="table-responsive"><table class="table" id="dataTable">';
-        $result .= '<thead>'.$thead.'</thead>';
-        $result .= '<tbody>'.$tbody.'</body>';
-        $result .= '</table></div>';
-        return $result;
-    }
-    public function getHiddenItemForm($method = 'POST'){
-        $result = ''.csrf_field().'';
-        $result .= ''.method_field($method).'';
-        return $result;
-    }
     public function getRoleUser($role = '0'){
         switch ($role){
             case '0':
@@ -59,35 +47,12 @@ class UsersController extends Controller
     {
         //
         $page = "Pengguna";
-        $thead = '<th width="5%">No</th>
-        <th>Nama</th>
-        <th>Email</th>
-        <th>Role</th>
-        <th>Status</th>
-        <th>Aksi</th>';
         $data = User::join('user_details','users.id','=','user_details.kode_user')
         ->whereIn('user_details.jabatan',[2,3])
         ->where('user_details.id_upline','=',$this->getThisUser()->id_upline)
         ->get(['users.*','user_details.*','users.id as id_user']);
-        $tbody = '';
-        $no = 1;
-        foreach($data as $item){
-            $edit = Request::create(route('users.edit',$item->id_user));
-            $delete = Request::create(route('users.destroy',$item->id_user));
-            $tbody .= '<tr><td>'.$no++.'</td>
-                        <td>'.$item->name.'</td>
-                        <td>'.$item->email.'</td>
-                        <td>'.$this->getRoleUser($item->jabatan).'</td>
-                        <td>'.$this->getStatusUser($item->status_user).'</td>
-                        <th><form action="'.$delete->url().'" onsubmit="'."return confirm('Apakah Anda yakin ?')".'" method="POST">
-                                '.$this->getHiddenItemForm('DELETE').'
-                                <a href="'.$edit->url().'" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>
-                                <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></button>
-                            </form>
-                    </th>';
-        }
         $link_tambah = route('users.create');
-        $data = $this->getTable($thead,$tbody);
+        $data = view('admin.tables.users_table', compact('data'))->render();
         return view('admin.layout.card_layout',compact(['page','data','link_tambah']));
     }
 

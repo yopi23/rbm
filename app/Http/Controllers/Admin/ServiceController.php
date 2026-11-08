@@ -31,38 +31,9 @@ class ServiceController extends Controller
 {
     use StockHistoryTrait;
     use ManajemenKasTrait; // Added
-    public function getTable($thead = '<th>No</th><th>Aksi</th>', $tbody = '')
-    {
-        $result = '<div class="table-responsive"><table class="table" id="dataTable">';
-        $result .= '<thead>' . $thead . '</thead>';
-        $result .= '<tbody>' . $tbody . '</body>';
-        $result .= '</table></div>';
-        return $result;
-    }
-    public function getHiddenItemForm($method = 'POST')
-    {
-        $result = '' . csrf_field() . '';
-        $result .= '' . method_field($method) . '';
-        return $result;
-    }
     public function view_all()
     {
         $page = "Data Service";
-        $thead = '<th width="5%">No</th>
-                    <th>Tanggal</th>
-                    <th>Nama</th>
-                    <th>No Telp</th>
-                    <th>Unit</th>
-                    <th>Keterangan</th>
-                    <th>Harga</th>
-                    <th>Sparepart</th>
-                    <th>Status</th>
-                    <th>Update at</th>
-                    <th>Teknisi</th>
-                    <th>Print</th>
-                    ';
-        $tbody = '';
-        $no = 1;
         $year = date('Y'); // Mendapatkan tahun saat ini
         $data_service = modelServices::leftjoin('detail_part_services', 'sevices.id', '=', 'kode_services')
             ->leftjoin('detail_part_luar_services', 'sevices.id', '=', 'detail_part_luar_services.kode_services')
@@ -81,35 +52,7 @@ class ServiceController extends Controller
             'detail_part_luar_services.created_at as dpl_created_at',
             'detail_part_luar_services.harga_part'
         ]);
-        foreach ($data_service as $item) {
-            $teknisi = $item->id_teknisi != null || $item->id_teknisi != '' ?User::where([['id', '=', $item->id_teknisi]])->get(['name'])->first()->name : '-';
-            $qr = DNS1DFacade::getBarcodeHTML($item->kode_service, "C39", 1, 100);
-            $tbody .= '<tr>
-                        <td>' . $no++ . '</td>
-                        <td>' . $item->tgl_service . '<br>' . $item->kode_service . '</td>
-                        <td>' . $item->nama_pelanggan . '</td>
-                        <td><a href="https://wa.me/62' . $item->no_telp . '?text=Assalamualaikum, pemberitahuan bahwa unit ' . $item->type_unit . ' sudah selesai diperbaiki. Teknisi: ' . $teknisi . ' (Terimakasih)" target="_blank">' . $item->no_telp . '</a></td>
-                        <td>' . $item->type_unit . '</td>
-                        <td>' . $item->keterangan . '</td>
-                        <td>Rp.' . number_format($item->total_biaya) . ',-</td>
-                        <td>Rp.' . number_format(($item->detail_harga_part_service * $item->qty_part_toko) + ($item->harga_part * $item->qty_part_luar)) . ',-</td>
-                        <td>' . $item->status_services . '</td>
-                        <td>' . $item->updated_at . '</td>
-                        <td>
-                        ' . $teknisi . '
-                        </td>
-                         <td>
-                         <a href="' . route('nota_tempel_selesai', $item->id_service) . '" target="_blank" class="btn btn-sm btn-primary mt-2"><i class="fas fa-print"></i></a>
-                         <button class="btn btn-secondary btn-sm my-2" data-toggle="modal" data-target="#editteknisi" data-id_teknisi="' . $item->id_teknisi . '" data-id_service="' . $item->id_service . '" data-teknisi="' . $teknisi . '" data-device="' . $item->nama_pelanggan . ' ' . '(' . $item->type_unit . ')' . '">Edit</button>
-                         </td>
-                        </tr>';
-        }
-        // $data = $this->getTable($thead, $tbody);
-        // Menambahkan ID ke tabel
-        $data = '<div class="table-responsive"><table id="service_data" class="table table-bordered table-striped">';
-        $data .= '<thead>' . $thead . '</thead>';
-        $data .= '<tbody>' . $tbody . '</tbody>';
-        $data .= '</table></div>';
+        $data = view('admin.tables.service_table', compact('data_service'))->render();
         $user = UserDetail::where('id_upline', $this->getThisUser()->id)->get();
         return view('admin.layout.card_layout', compact(['page', 'data', 'user']));
     }

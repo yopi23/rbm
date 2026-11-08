@@ -418,15 +418,16 @@ class SalesApiController extends Controller
             // AKHIR PERUBAHAN LOGIKA
             // =================================================================
 
-            // Pengurutan hasil (ini sudah bagus, kita pertahankan)
+            // Pengurutan hasil dengan parameterized binding
             $exactMatchForOrder = implode('%', $keywords);
             $results = $query->orderByRaw("
             CASE
-                WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE '{$exactMatchForOrder}%' THEN 1
-                WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE '%{$exactMatchForOrder}%' THEN 2
+                WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE ? THEN 1
+                WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE ? THEN 2
                 ELSE 3
             END, nama_sparepart ASC
-        ")->paginate($limit);
+        ", [$exactMatchForOrder . "%", "%" . $exactMatchForOrder . "%"])
+                ->paginate($limit);
 
 
             $results->getCollection()->transform(function ($item) {

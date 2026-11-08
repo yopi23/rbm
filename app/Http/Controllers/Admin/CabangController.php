@@ -9,52 +9,16 @@ use Illuminate\Http\Request;
 
 class CabangController extends Controller
 {
-    public function getTable($thead = '<th>No</th><th>Aksi</th>', $tbody = '') {
-        $result = '<div class="table-responsive"><table class="table" id="dataTable">';
-        $result .= '<thead>' . $thead . '</thead>';
-        $result .= '<tbody>' . $tbody . '</tbody>';
-        $result .= '</table></div>';
-        return $result;
-    }
-
-    public function getHiddenItemForm($method = 'POST') {
-        $result = '' . csrf_field() . '';
-        $result .= '' . method_field($method) . '';
-        return $result;
-    }
-
     public function index()
     {
         $page = "Manajemen Cabang";
-        $thead = '<th width="5%">No</th>
-        <th>Nama Cabang</th>
-        <th>Alamat</th>
-        <th>Status</th>
-        <th>Aksi</th>';
-
         $thisUser = $this->getThisUser();
         $kode_owner = ($thisUser->jabatan == '1') ? $thisUser->id_user : $thisUser->id_upline;
 
         $data = Cabang::where('kode_owner', $kode_owner)->get();
-        $tbody = '';
-        $no = 1;
-        foreach ($data as $item) {
-            $edit = route('cabang.edit', $item->id);
-            $delete = route('cabang.destroy', $item->id);
-            $status = $item->is_active ? '<span class="badge badge-success">Aktif</span>' : '<span class="badge badge-danger">Tidak Aktif</span>';
-            $tbody .= '<tr><td>' . $no++ . '</td>
-                        <td>' . htmlspecialchars($item->nama_cabang) . '</td>
-                        <td>' . htmlspecialchars($item->alamat_cabang ?? '-') . '</td>
-                        <td>' . $status . '</td>
-                        <th><form action="' . $delete . '" onsubmit="' . "return confirm('Apakah Anda yakin ?')" . '" method="POST">
-                                ' . $this->getHiddenItemForm('DELETE') . '
-                                <a href="' . $edit . '" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>
-                                <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></button>
-                            </form>
-                    </th>';
-        }
         $link_tambah = route('cabang.create');
-        $data = $this->getTable($thead, $tbody);
+        $data = view('admin.tables.cabang_table', compact('data'))->render();
+
         return view('admin.layout.card_layout', compact(['page', 'data', 'link_tambah']));
     }
 

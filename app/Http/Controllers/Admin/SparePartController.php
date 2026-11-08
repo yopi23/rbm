@@ -28,66 +28,13 @@ class SparePartController extends Controller
 {
 
 
-    public function getTable($thead = '<th>No</th><th>Aksi</th>', $tbody = '')
-    {
-        $result = '<div class="table-responsive"><table class="table" id="dataEditTable">';
-        $result .= '<thead>' . $thead . '</thead>';
-        $result .= '<tbody>' . $tbody . '</body>';
-        $result .= '</table></div>';
-        return $result;
-    }
-    public function getHiddenItemForm($method = 'POST')
-    {
-        $result = '' . csrf_field() . '';
-        $result .= '' . method_field($method) . '';
-        return $result;
-    }
     //Function View
     public function view_sparepart(Request $request)
     {
         $page = "Data Sparepart";
         $link_tambah = route('create_sparepart');
-
-        // Definisikan header tabel dengan kolom checkbox
-        $thead = '<th width="1%"><input type="checkbox" id="select-all-checkbox"></th>
-                    <th width="5%">No</th>
-                    <th>Kode</th>
-                    <th>Nama Sparepart</th>
-                    <th>Sub Kategori</th>
-                    <th>Harga Beli</th>
-                    <th>Harga Jual</th>
-                    <th>Stok</th>
-                    <th>Aksi</th>';
-
         $sparepart_data = Sparepart::withoutGlobalScope(ActiveScope::class)->with(['subKategori'])->where('kode_owner', '=', $this->getThisUser()->id_upline)->latest('updated_at')->get();
-
-        // Buat body tabel dengan baris checkbox
-        $tbody = '';
-        $no = 1;
-        foreach ($sparepart_data as $item) {
-            $edit_route = route('EditSparepart', $item->id);
-            $delete_route = route('DeleteSparepart', $item->id);
-            $sub_kategori_name = $item->subKategori->nama_sub_kategori ?? '-';
-            $tbody .= '<tr>
-                            <td><input type="checkbox" class="item-checkbox" value="' . $item->id . '"></td>
-                            <td>' . $no++ . '</td>
-                            <td>' . $item->kode_sparepart . '</td>
-                            <td>' . $item->nama_sparepart . '</td>
-                            <td>' . $sub_kategori_name . '</td>
-                            <td>Rp.' . number_format($item->harga_beli) . '</td>
-                            <td>Rp.' . number_format($item->harga_jual) . '</td>
-                            <td>' . $item->stok_sparepart . '</td>
-                            <td>
-                                <form action="' . $delete_route . '" onsubmit="return confirm(\'Anda yakin?\')" method="POST" style="display:inline;">
-                                    ' . $this->getHiddenItemForm('DELETE') . '
-                                    <a href="' . $edit_route . '" class="btn btn-sm btn-warning my-1"><i class="fas fa-edit"></i></a>
-                                    <button type="submit" class="btn btn-sm btn-danger my-1"><i class="fas fa-trash"></i></button>
-                                </form>
-                            </td>
-                        </tr>';
-        }
-
-        $data = $this->getTable($thead, $tbody);
+        $data = view('admin.tables.sparepart_table', compact('sparepart_data'))->render();
         $kategori = KategoriSparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->get();
 
         // Render view konten (index.blade.php) ke dalam layout utama 'blank_page'
@@ -188,30 +135,8 @@ class SparePartController extends Controller
     {
         $page = "Data Kategori Sparepart";
         $link_tambah = route('create_kategori_sparepart');
-        $thead = '<th width="5%">No</th><th width="15%">Image</th><th width="60%">Nama</th><th width="20%">Aksi</th>';
         $kategori = KategoriSparepart::where('kode_owner', '=', $this->getThisUser()->id_upline)->latest()->get();
-        $tbody = '';
-        $no = 1;
-        foreach ($kategori as $item) {
-            $edit = Request::create(route('EditKategoriSparepart', $item->id));
-            $delete = Request::create(route('DeleteKategoriSparepart', $item->id));
-            $foto = '<img src="' . asset('public/img/no_image.png') . '" width="100%" height="100%" class="img" id="view-img">';
-            if ($item->foto_kategori != '-') {
-                $foto =  '<img src="' . asset('public/uploads/' . $item->foto_kategori) . '" class="img" width="100%" height="100%">';
-            }
-            $tbody .= '<tr>
-                            <td>' . $no++ . '</td>
-                            <td>' . $foto . '</td>
-                            <td>' . $item->nama_kategori . '</td>
-                            <td>
-                                <form action="' . $delete->url() . '" onsubmit="' . "return confirm('Apakah Anda yakin ?')" . '" method="POST">
-                                    ' . $this->getHiddenItemForm('DELETE') . '
-                                    <a href="' . $edit->url() . '" class="btn btn-warning"><i class="fas fa-edit"></i></a>
-                                    <button type="submit" class="btn btn-danger"><i class="fas fa-trash"></i></button>
-                                </form>
-                            </tr>';
-        }
-        $data = $this->getTable($thead, $tbody);
+        $data = view('admin.tables.kategori_sparepart_table', compact('kategori'))->render();
         return view('admin.layout.card_layout', compact(['page', 'data', 'link_tambah']));
     }
 
@@ -1519,40 +1444,7 @@ class SparePartController extends Controller
                                      ->get();
         }
 
-        $thead = '<th width="5%">No</th>
-                 <th width="15%">Image</th>
-                 <th width="20%">Kategori</th>
-                 <th width="40%">Nama Sub Kategori</th>
-                 <th width="20%">Aksi</th>';
-
-        $tbody = '';
-        $no = 1;
-
-        foreach ($sub_kategori as $item) {
-            $edit = Request::create(route('EditSubKategoriSparepart', $item->id));
-            $delete = Request::create(route('DeleteSubKategoriSparepart', $item->id));
-
-            $foto = '<img src="' . asset('public/img/no_image.png') . '" width="100%" height="100%" class="img" id="view-img">';
-            if ($item->foto_sub_kategori != '-') {
-                $foto =  '<img src="' . asset('public/uploads/' . $item->foto_sub_kategori) . '" class="img" width="100%" height="100%">';
-            }
-
-            $tbody .= '<tr>
-                        <td>' . $no++ . '</td>
-                        <td>' . $foto . '</td>
-                        <td>' . $item->kategori->nama_kategori . '</td>
-                        <td>' . $item->nama_sub_kategori . '</td>
-                        <td>
-                            <form action="' . $delete->url() . '" onsubmit="' . "return confirm('Apakah Anda yakin ?')" . '" method="POST">
-                                ' . $this->getHiddenItemForm('DELETE') . '
-                                <a href="' . $edit->url() . '" class="btn btn-warning"><i class="fas fa-edit"></i></a>
-                                <button type="submit" class="btn btn-danger"><i class="fas fa-trash"></i></button>
-                            </form>
-                        </td>
-                      </tr>';
-        }
-
-        $data = $this->getTable($thead, $tbody);
+        $data = view('admin.tables.sub_kategori_sparepart_table', compact('sub_kategori'))->render();
 
         return view('admin.layout.card_layout', compact(['page', 'data', 'link_tambah']));
     }

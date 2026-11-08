@@ -356,6 +356,101 @@ class PembelianApiController extends Controller
     }
 
     /**
+     * POST /api/pembelian/{id}/items/bulk
+     * Menambah banyak item sekaligus ke pembelian (misal dari hasil scan nota AI)
+     */
+    public function bulkAddItems(Request $request, $id)
+    {
+        $activeShift = Shift::getActiveShift(auth()->user()->id);
+        if (!$activeShift) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shift belum dibuka. Silakan buka shift terlebih dahulu.'
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.nama_item' => 'required|string',
+            'items.*.jumlah' => 'required|integer|min:1',
+            'items.*.harga_beli' => 'required|numeric|min:0',
+            'items.*.is_new_item' => 'required|boolean',
+            'items.*.sparepart_id' => 'nullable|exists:spareparts,id',
+            'items.*.product_variant_id' => 'nullable|exists:product_variants,id',
+            'items.*.attributes' => 'nullable|array',
+            'items.*.item_kategori' => 'nullable|exists:kategori_spareparts,id',
+            'keterangan' => 'nullable|string',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $pembelian = Pembelian::where('kode_owner', $this->getOwnerId())
+                ->findOrFail($id);
+
+            if ($pembelian->status === 'selesai') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pembelian sudah selesai dan tidak dapat diubah.',
+                ], 403);
+            }
+
+            $addedItems = [];
+            $additionalTotal = 0;
+
+            foreach ($validated['items'] as $itemData) {
+                $detailData = [
+                    'pembelian_id' => $pembelian->id,
+                    'nama_item' => $itemData['nama_item'],
+                    'jumlah' => $itemData['jumlah'],
+                    'harga_beli' => $itemData['harga_beli'],
+                    'total' => $itemData['jumlah'] * $itemData['harga_beli'],
+                    'is_new_item' => $itemData['is_new_item'],
+                ];
+
+                if ($itemData['is_new_item']) {
+                    $detailData['item_kategori'] = $itemData['item_kategori'] ?? null;
+                    $detailData['attributes'] = json_encode($itemData['attributes'] ?? []);
+                } else {
+                    $detailData['product_variant_id'] = $itemData['product_variant_id'] ?? null;
+                    $detailData['item_kategori'] = $itemData['item_kategori'] ?? null;
+                    $detailData['attributes'] = json_encode($itemData['attributes'] ?? []);
+
+                    if (!empty($itemData['product_variant_id'])) {
+                        $variant = ProductVariant::find($itemData['product_variant_id']);
+                        if ($variant) {
+                            $detailData['sparepart_id'] = $variant->sparepart_id;
+                        }
+                    }
+                }
+
+                $detail = DetailPembelian::create($detailData);
+                $addedItems[] = $detail;
+                $additionalTotal += $detailData['total'];
+            }
+
+            $pembelian->total_harga += $additionalTotal;
+            if (!empty($validated['keterangan']) && empty($pembelian->keterangan)) {
+                $pembelian->keterangan = $validated['keterangan'];
+            }
+            $pembelian->save();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => count($addedItems) . ' item berhasil ditambahkan ke pembelian.',
+                'data' => $addedItems,
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menambah item secara massal: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * PUT /api/pembelian/items/{detailId}
      * Update item pembelian
      */

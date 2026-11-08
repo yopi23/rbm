@@ -10,18 +10,6 @@ use Illuminate\Http\Request;
 class SupplierController extends Controller
 {
 
-    public function getTable($thead = '<th>No</th><th>Aksi</th>',$tbody = ''){
-        $result = '<div class="table-responsive"><table class="table" id="dataTable">';
-        $result .= '<thead>'.$thead.'</thead>';
-        $result .= '<tbody>'.$tbody.'</body>';
-        $result .= '</table></div>';
-        return $result;
-    }
-    public function getHiddenItemForm($method = 'POST'){
-        $result = ''.csrf_field().'';
-        $result .= ''.method_field($method).'';
-        return $result;
-    }
     /**
      * Display a listing of the resource.
      *
@@ -31,30 +19,9 @@ class SupplierController extends Controller
     {
         //
         $page = "Supplier";
-        $thead = '<th width="5%">No</th>
-        <th>Nama</th>
-        <th>Alamat</th>
-        <th>No Telp</th>
-        <th>Aksi</th>';
         $data = Supplier::where('kode_owner','=',$this->getThisUser()->id_upline)->latest()->get();
-        $tbody = '';
-        $no = 1;
-        foreach($data as $item){
-            $edit = Request::create(route('supplier.edit',$item->id));
-            $delete = Request::create(route('supplier.destroy',$item->id));
-            $tbody .= '<tr><td>'.$no++.'</td>
-                        <td>'.$item->nama_supplier.'</td>
-                        <td>'.$item->alamat_supplier.'</td>
-                        <td>'.$item->no_telp_supplier.'</td>
-                        <th><form action="'.$delete->url().'" onsubmit="'."return confirm('Apakah Anda yakin ?')".'" method="POST">
-                                '.$this->getHiddenItemForm('DELETE').'
-                                <a href="'.$edit->url().'" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>
-                                <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></button>
-                            </form>
-                    </th>';
-        }
         $link_tambah = route('supplier.create');
-        $data = $this->getTable($thead,$tbody);
+        $data = view('admin.tables.supplier_table', compact('data'))->render();
         return view('admin.layout.card_layout',compact(['page','data','link_tambah']));
     }
 
