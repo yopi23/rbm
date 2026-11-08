@@ -634,15 +634,19 @@ class PembelianApiController extends Controller
                         throw new \Exception('Tidak ada aturan harga yang valid untuk item: "' . $detail->nama_item . '"');
                     }
 
-                    $sparepart = Sparepart::firstOrCreate(
+                    $ownerId = $this->getOwnerId();
+                    $kodeSparepartBaru = 'SP' . date('YmdHis') . rand(100, 999);
+                    $sparepart = Sparepart::withoutGlobalScopes()->firstOrCreate(
                     [
                         'nama_sparepart' => $detail->nama_item,
-                        'kode_kategori' => $detail->item_kategori
+                        'kode_kategori' => $detail->item_kategori,
+                        'kode_owner' => $ownerId,
                     ],
                     [
-                        'kode_sparepart' => 'SP' . date('YmdHis') . rand(100, 999),
-                        'kode_owner' => $this->getOwnerId(),
+                        'kode_sparepart' => $kodeSparepartBaru,
                         'kode_spl' => $validated['supplier'],
+                        'cabang_id' => auth()->user()->cabang_id,
+                        'is_active' => 1,
                         'foto_sparepart' => '-',
                         'desc_sparepart' => null,
                         'stok_sparepart' => 0,
@@ -656,6 +660,7 @@ class PembelianApiController extends Controller
                     );
 
                     $variant = $sparepart->variants()->create([
+                        'sku' => $sparepart->kode_sparepart,
                         'purchase_price' => $detail->harga_beli,
                         'stock' => 0,
                         'wholesale_price' => $calculatedPrices['wholesale_price'],

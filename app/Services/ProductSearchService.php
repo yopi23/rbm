@@ -27,22 +27,33 @@ class ProductSearchService
     ): LengthAwarePaginator {
         $query = ProductVariant::query()
             ->with([
-                'sparepart:id,nama_sparepart,kode_sparepart,kode_kategori,harga_jual,harga_ecer,harga_pasang,kode_owner,stok_sparepart',
+                'sparepart' => function ($q) {
+                    $q->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                      ->select('id', 'nama_sparepart', 'kode_sparepart', 'kode_kategori', 'harga_jual', 'harga_ecer', 'harga_pasang', 'kode_owner', 'stok_sparepart');
+                },
                 'sparepart.kategori:id,nama_kategori',
                 'attributeValues:id,value,attribute_id',
                 'attributeValues.attribute:id,name'
             ])
             ->whereHas('sparepart', function ($q) use ($ownerId) {
-                $q->where('kode_owner', $ownerId);
+                $q->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                  ->where('kode_owner', $ownerId);
             });
 
         if ($inStockOnly) {
-            $query->where('stock', '>', 0);
+            $query->where(function ($q) {
+                $q->where('stock', '>', 0)
+                  ->orWhereHas('sparepart', function ($sq) {
+                      $sq->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                         ->where('stok_sparepart', '>', 0);
+                  });
+            });
         }
 
         if ($categoryId) {
             $query->whereHas('sparepart', function ($q) use ($categoryId) {
-                $q->where('kode_kategori', $categoryId);
+                $q->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                  ->where('kode_kategori', $categoryId);
             });
         }
 
@@ -58,11 +69,15 @@ class ProductSearchService
                 // Klausa ini mencari varian yang cocok dengan SEMUA keyword
                 // di salah satu dari tiga tempat: nama sparepart, nilai atribut, atau SKU.
 
-                // KONDISI 1 (ATAU): Semua keyword ada di NAMA SPAREPART
+                // KONDISI 1 (ATAU): Semua keyword ada di NAMA / KODE SPAREPART
                 $q->orWhere(function ($nameQuery) use ($keywords) {
                     foreach ($keywords as $keyword) {
                         $nameQuery->whereHas('sparepart', function ($subQ) use ($keyword) {
-                            $subQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'LIKE', '%' . $keyword . '%');
+                            $subQ->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                                 ->where(function ($innerQ) use ($keyword) {
+                                     $innerQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'LIKE', '%' . $keyword . '%')
+                                            ->orWhere(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%');
+                                 });
                         });
                     }
                 });

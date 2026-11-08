@@ -188,8 +188,11 @@ class StockOpnameController extends Controller
                 'kode_owner' => $this->getThisUser()->id_upline,
             ]);
 
-            // Generate detail opname untuk semua sparepart
-            $spareparts = Sparepart::where('kode_owner', $kode_owner)->get();
+            // Generate detail opname untuk semua sparepart aktif milik toko
+            $spareparts = Sparepart::withoutGlobalScopes()
+                ->where('kode_owner', $kode_owner)
+                ->where('is_active', 1)
+                ->get();
 
             $detailsData = [];
             foreach ($spareparts as $sparepart) {
@@ -305,13 +308,23 @@ class StockOpnameController extends Controller
 
              $query = $period->details()
                 ->with(['sparepart.kategori', 'sparepart.supplier', 'sparepart.variants.attributeValues.attribute']) // Tambahkan relasi kategori, supplier dan varian
+                ->whereHas('sparepart')
                 ->where('status', 'pending');
 
             // Filter pencarian jika ada
             if (!empty($search)) {
-                $query->whereHas('sparepart', function($q) use ($search) {
-                    $q->where('kode_sparepart', 'like', "%{$search}%")
-                    ->orWhere('nama_sparepart', 'like', "%{$search}%");
+                $normalizedSearch = str_replace(',', '.', $search);
+                $keywords = array_filter(explode(' ', strtolower($normalizedSearch)));
+                $query->whereHas('sparepart', function($q) use ($keywords) {
+                    foreach ($keywords as $keyword) {
+                        $q->where(function($subQ) use ($keyword) {
+                            $subQ->where(DB::raw('LOWER(kode_sparepart)'), 'like', "%{$keyword}%")
+                                 ->orWhere(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'like', "%{$keyword}%")
+                                 ->orWhereHas('variants.attributeValues', function($attrQ) use ($keyword) {
+                                     $attrQ->where(DB::raw('LOWER(value)'), 'like', "%{$keyword}%");
+                                 });
+                        });
+                    }
                 });
             }
 
@@ -329,7 +342,7 @@ class StockOpnameController extends Controller
                 });
             }
 
-            $pendingItems = $query->paginate($perPage);
+            $pendingItems = $query->orderBy('id', 'desc')->paginate($perPage);
 
             $result = [
                 'current_page' => $pendingItems->currentPage(),
@@ -340,15 +353,15 @@ class StockOpnameController extends Controller
                     return [
                         'id' => $item->id,
                         'sparepart_id' => $item->sparepart_id,
-                        'kode_sparepart' => $item->sparepart->kode_sparepart,
-                        'nama_sparepart' => $item->sparepart->nama_sparepart,
-                        'kategori' => $item->sparepart->kategori ? $item->sparepart->kategori->nama_kategori : $item->sparepart->kode_kategori,
-                        'supplier' => $item->sparepart->supplier ? $item->sparepart->supplier->nama_supplier : $item->sparepart->kode_spl,
-                        'harga_beli' => $item->sparepart->harga_beli,
+                        'kode_sparepart' => $item->sparepart?->kode_sparepart ?? '-',
+                        'nama_sparepart' => $item->sparepart?->nama_sparepart ?? 'Item Terhapus',
+                        'kategori' => $item->sparepart?->kategori ? $item->sparepart->kategori->nama_kategori : ($item->sparepart?->kode_kategori ?? '-'),
+                        'supplier' => $item->sparepart?->supplier ? $item->sparepart->supplier->nama_supplier : ($item->sparepart?->kode_spl ?? '-'),
+                        'harga_beli' => $item->sparepart?->harga_beli ?? 0,
                         'stock_tercatat' => $item->stock_tercatat,
                         'status' => $item->status,
                         'status_text' => $item->status_text,
-                        'variants' => $item->sparepart->variants
+                        'variants' => $item->sparepart?->variants ?? []
                     ];
                 })
             ];
@@ -382,13 +395,23 @@ class StockOpnameController extends Controller
 
              $query = $period->details()
                 ->with(['sparepart.kategori', 'sparepart.supplier', 'sparepart.variants.attributeValues.attribute']) // Tambahkan relasi kategori, supplier dan varian
+                ->whereHas('sparepart')
                 ->whereIn('status', ['checked', 'adjusted']);
 
             // Filter pencarian jika ada
             if (!empty($search)) {
-                $query->whereHas('sparepart', function($q) use ($search) {
-                    $q->where('kode_sparepart', 'like', "%{$search}%")
-                    ->orWhere('nama_sparepart', 'like', "%{$search}%");
+                $normalizedSearch = str_replace(',', '.', $search);
+                $keywords = array_filter(explode(' ', strtolower($normalizedSearch)));
+                $query->whereHas('sparepart', function($q) use ($keywords) {
+                    foreach ($keywords as $keyword) {
+                        $q->where(function($subQ) use ($keyword) {
+                            $subQ->where(DB::raw('LOWER(kode_sparepart)'), 'like', "%{$keyword}%")
+                                 ->orWhere(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'like', "%{$keyword}%")
+                                 ->orWhereHas('variants.attributeValues', function($attrQ) use ($keyword) {
+                                     $attrQ->where(DB::raw('LOWER(value)'), 'like', "%{$keyword}%");
+                                 });
+                        });
+                    }
                 });
             }
 
@@ -406,7 +429,7 @@ class StockOpnameController extends Controller
                 });
             }
 
-            $checkedItems = $query->paginate($perPage);
+            $checkedItems = $query->orderBy('checked_at', 'desc')->orderBy('id', 'desc')->paginate($perPage);
 
             $result = [
                 'current_page' => $checkedItems->currentPage(),
@@ -417,10 +440,10 @@ class StockOpnameController extends Controller
                     return [
                         'id' => $item->id,
                         'sparepart_id' => $item->sparepart_id,
-                        'kode_sparepart' => $item->sparepart->kode_sparepart,
-                        'nama_sparepart' => $item->sparepart->nama_sparepart,
-                        'kategori' => $item->sparepart->kategori ? $item->sparepart->kategori->nama_kategori : $item->sparepart->kode_kategori,
-                        'supplier' => $item->sparepart->supplier ? $item->sparepart->supplier->nama_supplier : $item->sparepart->kode_spl,
+                        'kode_sparepart' => $item->sparepart?->kode_sparepart ?? '-',
+                        'nama_sparepart' => $item->sparepart?->nama_sparepart ?? 'Item Terhapus',
+                        'kategori' => $item->sparepart?->kategori ? $item->sparepart->kategori->nama_kategori : ($item->sparepart?->kode_kategori ?? '-'),
+                        'supplier' => $item->sparepart?->supplier ? $item->sparepart->supplier->nama_supplier : ($item->sparepart?->kode_spl ?? '-'),
                         'stock_tercatat' => $item->stock_tercatat,
                         'stock_aktual' => $item->stock_aktual,
                         'selisih' => $item->selisih,
@@ -429,7 +452,7 @@ class StockOpnameController extends Controller
                         'catatan' => $item->catatan,
                         'checked_at' => $item->checked_at ? $item->checked_at->format('Y-m-d H:i:s') : null,
                         'user_check' => $item->userCheck ? $item->userCheck->name : null,
-                        'variants' => $item->sparepart->variants
+                        'variants' => $item->sparepart?->variants ?? []
                     ];
                 })
             ];
@@ -530,20 +553,36 @@ class StockOpnameController extends Controller
             $period = StockOpnamePeriod::where('kode_owner', $kode_owner)
                 ->findOrFail($id);
 
-            // Cari sparepart berdasarkan kode atau barcode
-             $sparepart = Sparepart::where('kode_owner', $kode_owner)
+            // Cari sparepart berdasarkan kode, barcode, atau nama
+            $sparepart = Sparepart::withoutGlobalScopes()
+                ->where('kode_owner', $kode_owner)
                 ->with(['variants.attributeValues.attribute'])
                 ->where(function($query) use ($search) {
-                    $query->where('kode_sparepart', $search);
-                        //   ->orWhere('barcode', $search);
+                    $query->where('kode_sparepart', $search)
+                          ->orWhere(DB::raw('LOWER(nama_sparepart)'), strtolower(trim($search)));
                 })
                 ->first();
 
             if (!$sparepart) {
-                // return response()->json([
-                //     'success' => false,
-                //     'message' => 'Sparepart tidak ditemukan'
-                // ], 404);
+                $normalizedSearch = str_replace(',', '.', trim($search));
+                $keywords = array_filter(explode(' ', strtolower($normalizedSearch)));
+                if (!empty($keywords)) {
+                    $sparepart = Sparepart::withoutGlobalScopes()
+                        ->where('kode_owner', $kode_owner)
+                        ->with(['variants.attributeValues.attribute'])
+                        ->where(function($q) use ($keywords) {
+                            foreach ($keywords as $keyword) {
+                                $q->where(function($subQ) use ($keyword) {
+                                    $subQ->where(DB::raw('LOWER(kode_sparepart)'), 'like', "%{$keyword}%")
+                                         ->orWhere(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'like', "%{$keyword}%");
+                                });
+                            }
+                        })
+                        ->first();
+                }
+            }
+
+            if (!$sparepart) {
                 return response()->json([
                     'success' => true,
                     'type' => 'new_item',
@@ -552,17 +591,18 @@ class StockOpnameController extends Controller
                 ]);
             }
 
-            // Cari detail opname untuk sparepart ini
-            $detail = StockOpnameDetail::where('period_id', $id)
-                ->where('sparepart_id', $sparepart->id)
-                ->first();
-
-            if (!$detail) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Item ini tidak terdaftar dalam periode stock opname ini'
-                ], 404);
-            }
+            // Cari atau daftarkan otomatis detail opname untuk sparepart ini
+            $detail = StockOpnameDetail::firstOrCreate(
+                [
+                    'period_id' => $id,
+                    'sparepart_id' => $sparepart->id,
+                ],
+                [
+                    'stock_tercatat' => $sparepart->stok_sparepart ?? 0,
+                    'status' => 'pending',
+                    'kode_owner' => $kode_owner,
+                ]
+            );
 
             $result = [
                 'id' => $detail->id,
@@ -806,6 +846,7 @@ class StockOpnameController extends Controller
                 'kode_spl'       => $request->kode_supplier,
                 'kode_owner'     => $kode_owner,
                 'cabang_id'      => $user->cabang_id,
+                'is_active'      => 1,
                 'foto_sparepart' => '-',
                 'kode_sub_kategori' => null,
                 'stock_asli' => null,
@@ -819,6 +860,7 @@ class StockOpnameController extends Controller
 
             // 4. Buat Product Variant default untuk sparepart baru
             $variant = $sparepart->variants()->create([
+                'sku' => $kode_sparepart,
                 'purchase_price' => $hargaBeli,
                 'stock' => $request->stock_aktual,
                 'wholesale_price' => $calculatedPrices['wholesale_price'],

@@ -30,26 +30,31 @@ class ProductApiController extends Controller
         try {
             $ownerId = $this->getThisUser()->id_upline;
 
-            $query = Sparepart::with(['kategori', 'supplier', 'variants.attributeValues.attribute'])
+            $query = Sparepart::withoutGlobalScope(\App\Scopes\CabangScope::class)
+                ->with(['kategori', 'supplier', 'variants.attributeValues.attribute'])
                 ->where('kode_owner', $ownerId);
 
-            $detail = $this->getThisUser();
-            if ($detail && $detail->jabatan != '1') {
-                $query->where('cabang_id', auth()->user()->cabang_id);
-            } elseif ($request->filled('cabang_id')) {
-                $query->where('cabang_id', $request->input('cabang_id'));
+            if ($request->filled('cabang_id')) {
+                $query->where(function ($q) use ($request) {
+                    $q->where('cabang_id', $request->input('cabang_id'))
+                      ->orWhereNull('cabang_id');
+                });
             }
 
             // Filter search query
             if ($request->filled('q')) {
                 $search = $request->input('q');
-                $keywords = array_filter(explode(' ', strtolower($search)));
+                $normalizedInput = str_replace(',', '.', $search);
+                $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
                 
                 $query->where(function ($q) use ($keywords) {
                     foreach ($keywords as $keyword) {
                         $q->where(function ($subQ) use ($keyword) {
-                            $subQ->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', '%' . $keyword . '%')
-                                 ->orWhere('kode_sparepart', 'LIKE', '%' . $keyword . '%');
+                            $subQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'LIKE', '%' . $keyword . '%')
+                                 ->orWhere(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%')
+                                 ->orWhereHas('variants.attributeValues', function ($attrQ) use ($keyword) {
+                                     $attrQ->where(DB::raw('LOWER(value)'), 'LIKE', '%' . $keyword . '%');
+                                 });
                         });
                     }
                 });
@@ -214,7 +219,30 @@ class ProductApiController extends Controller
 
                 $this->syncVariantAttributes($request, $variant);
 
-                $freshProduct = Sparepart::withoutGlobalScope(\App\Scopes\ActiveScope::class)
+                // Sinkronisasi ke periode Stock Opname yang sedang aktif (jika ada)
+                $activePeriods = \App\Models\StockOpnamePeriod::where('kode_owner', $product->kode_owner)
+                    ->whereIn('status', ['draft', 'in_progress'])
+                    ->get();
+                foreach ($activePeriods as $activePeriod) {
+                    \App\Models\StockOpnameDetail::firstOrCreate(
+                        [
+                            'period_id' => $activePeriod->id,
+                            'sparepart_id' => $product->id,
+                        ],
+                        [
+                            'stock_tercatat' => $product->stok_sparepart,
+                            'stock_aktual' => $product->stok_sparepart,
+                            'selisih' => 0,
+                            'status' => 'adjusted',
+                            'catatan' => 'Produk baru ditambahkan dari Manajemen Produk',
+                            'user_check' => auth()->id(),
+                            'checked_at' => now(),
+                            'kode_owner' => $product->kode_owner,
+                        ]
+                    );
+                }
+
+                $freshProduct = Sparepart::withoutGlobalScopes()
                     ->with(['kategori', 'supplier', 'variants.attributeValues.attribute'])
                     ->find($product->id);
 
@@ -411,7 +439,30 @@ class ProductApiController extends Controller
                 }
                 $this->syncVariantAttributes($request, $variant);
 
-                $freshProduct = Sparepart::withoutGlobalScope(\App\Scopes\ActiveScope::class)
+                // Sinkronisasi ke periode Stock Opname yang sedang aktif (jika ada)
+                $activePeriods = \App\Models\StockOpnamePeriod::where('kode_owner', $product->kode_owner)
+                    ->whereIn('status', ['draft', 'in_progress'])
+                    ->get();
+                foreach ($activePeriods as $activePeriod) {
+                    \App\Models\StockOpnameDetail::firstOrCreate(
+                        [
+                            'period_id' => $activePeriod->id,
+                            'sparepart_id' => $product->id,
+                        ],
+                        [
+                            'stock_tercatat' => $product->stok_sparepart,
+                            'stock_aktual' => $product->stok_sparepart,
+                            'selisih' => 0,
+                            'status' => 'adjusted',
+                            'catatan' => 'Produk baru ditambahkan dari Manajemen Produk',
+                            'user_check' => auth()->id(),
+                            'checked_at' => now(),
+                            'kode_owner' => $product->kode_owner,
+                        ]
+                    );
+                }
+
+                $freshProduct = Sparepart::withoutGlobalScopes()
                     ->with(['kategori', 'supplier', 'variants.attributeValues.attribute'])
                     ->find($product->id);
 

@@ -14,11 +14,21 @@ class CabangScope implements Scope
         if (Auth::check()) {
             $user = Auth::user();
             $detail = \App\Models\UserDetail::where('kode_user', $user->id)->first();
-            
+
+            // Untuk Sparepart (master katalog barang toko), semua HP di bawah owner yang sama
+            // harus bisa mencari barang yang didata dari HP manapun (baik yang cabang_id = null maupun cabang toko).
+            if ($model instanceof \App\Models\Sparepart) {
+                return;
+            }
+
             // Jika user bukan owner (yaitu jabatan '2'/Kasir atau '3'/Teknisi), batasi query ke cabang mereka
-            // TAMBAHAN: Pastikan user memiliki cabang_id. Jika null, tidak difilter by cabang agar datanya tetap muncul (sudah dilindungi filter kode_owner di controller)
+            // Pastikan user memiliki cabang_id, dan tetap sertakan data yang cabang_id-nya NULL (data global toko/owner)
             if ($detail && $detail->jabatan != '1' && !empty($user->cabang_id)) {
-                $builder->where($model->getTable() . '.cabang_id', $user->cabang_id);
+                $table = $model->getTable();
+                $builder->where(function ($q) use ($table, $user) {
+                    $q->where($table . '.cabang_id', $user->cabang_id)
+                      ->orWhereNull($table . '.cabang_id');
+                });
             }
         }
     }

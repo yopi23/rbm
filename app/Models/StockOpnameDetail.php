@@ -35,7 +35,8 @@ class StockOpnameDetail extends Model
     // Relasi dengan sparepart
     public function sparepart()
     {
-        return $this->belongsTo(Sparepart::class, 'sparepart_id');
+        return $this->belongsTo(Sparepart::class, 'sparepart_id')
+            ->withoutGlobalScopes();
     }
 
     // Relasi dengan user yang melakukan pengecekan
