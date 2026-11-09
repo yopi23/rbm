@@ -58,47 +58,52 @@ class ProductSearchService
         }
 
         if ($searchTerm) {
-            // 1. Pecah search term menjadi beberapa kata kunci (keywords)
-            $normalizedInput = str_replace(',', '.', $searchTerm);
-            $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
+            $keywords = \App\Models\Sparepart::extractSearchKeywords($searchTerm);
+            $cleanInput = strtolower(trim($searchTerm));
+            $matchCode = \App\Models\Sparepart::shouldMatchCode($searchTerm, $keywords);
 
-            // =================================================================
-            // ✅ LOGIKA PENCARIAN BARU YANG LEBIH AKURAT
-            // =================================================================
-            $query->where(function ($q) use ($keywords) {
-                // Klausa ini mencari varian yang cocok dengan SEMUA keyword
-                // di salah satu dari tiga tempat: nama sparepart, nilai atribut, atau SKU.
+            if (!empty($keywords)) {
+                $query->where(function ($q) use ($keywords, $cleanInput, $matchCode) {
+                    // Semua keyword WAJIB cocok (AND) pada nama sparepart, kategori, atau nilai atribut varian
+                    $q->where(function ($allKwQuery) use ($keywords) {
+                        foreach ($keywords as $keyword) {
+                            $regex = \App\Models\Sparepart::buildKeywordRegex($keyword);
+                            $allKwQuery->where(function ($kwQ) use ($regex) {
+                                $kwQ->whereHas('sparepart', function ($subQ) use ($regex) {
+                                    $subQ->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                                         ->where(function ($spQ) use ($regex) {
+                                             $spQ->whereRaw("REPLACE(LOWER(nama_sparepart), ',', '.') REGEXP ?", [$regex])
+                                                 ->orWhereHas('kategori', function ($catQ) use ($regex) {
+                                                     $catQ->whereRaw("LOWER(nama_kategori) REGEXP ?", [$regex]);
+                                                 })
+                                                 ->orWhereHas('subKategori', function ($subCatQ) use ($regex) {
+                                                     $subCatQ->whereRaw("LOWER(nama_sub_kategori) REGEXP ?", [$regex]);
+                                                 });
+                                         });
+                                })
+                                ->orWhereHas('attributeValues', function ($attrQ) use ($regex) {
+                                    $attrQ->whereRaw("REPLACE(LOWER(value), ',', '.') REGEXP ?", [$regex]);
+                                });
+                            });
+                        }
+                    });
 
-                // KONDISI 1 (ATAU): Semua keyword ada di NAMA / KODE SPAREPART
-                $q->orWhere(function ($nameQuery) use ($keywords) {
-                    foreach ($keywords as $keyword) {
-                        $nameQuery->whereHas('sparepart', function ($subQ) use ($keyword) {
-                            $subQ->withoutGlobalScope(\App\Scopes\CabangScope::class)
-                                 ->where(function ($innerQ) use ($keyword) {
-                                     $innerQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'LIKE', '%' . $keyword . '%')
-                                            ->orWhere(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%');
-                                 });
-                        });
+                    // Pencocokan SKU / kode_sparepart hanya untuk pencarian kode utuh (bukan per-keyword)
+                    if ($matchCode) {
+                        $q->orWhereRaw('LOWER(sku) LIKE ?', ['%' . $cleanInput . '%'])
+                          ->orWhereHas('sparepart', function ($spQ) use ($cleanInput) {
+                              $spQ->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                                   ->whereRaw('LOWER(kode_sparepart) LIKE ?', ['%' . $cleanInput . '%']);
+                          });
+                    } else {
+                        $q->orWhereRaw('LOWER(sku) = ?', [$cleanInput])
+                          ->orWhereHas('sparepart', function ($spQ) use ($cleanInput) {
+                              $spQ->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                                   ->whereRaw('LOWER(kode_sparepart) = ?', [$cleanInput]);
+                          });
                     }
                 });
-
-                // KONDISI 2 (ATAU): Semua keyword ada di NILAI ATRIBUT
-                $q->orWhere(function ($attributeQuery) use ($keywords) {
-                    foreach ($keywords as $keyword) {
-                        $attributeQuery->whereHas('attributeValues', function ($subQ) use ($keyword) {
-                            $subQ->where(DB::raw('LOWER(value)'), 'LIKE', '%' . $keyword . '%');
-                        });
-                    }
-                });
-
-                // KONDISI 3 (ATAU): Semua keyword ada di SKU
-                $q->orWhere(function ($skuQuery) use ($keywords) {
-                    foreach ($keywords as $keyword) {
-                        $skuQuery->where(DB::raw('LOWER(sku)'), 'LIKE', '%' . $keyword . '%');
-                    }
-                });
-            });
-            // =================================================================
+            }
         }
 
         $paginatedVariants = $query->paginate($limit);

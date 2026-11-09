@@ -313,18 +313,9 @@ class StockOpnameController extends Controller
 
             // Filter pencarian jika ada
             if (!empty($search)) {
-                $normalizedSearch = str_replace(',', '.', $search);
-                $keywords = array_filter(explode(' ', strtolower($normalizedSearch)));
-                $query->whereHas('sparepart', function($q) use ($keywords) {
-                    foreach ($keywords as $keyword) {
-                        $q->where(function($subQ) use ($keyword) {
-                            $subQ->where(DB::raw('LOWER(kode_sparepart)'), 'like', "%{$keyword}%")
-                                 ->orWhere(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'like', "%{$keyword}%")
-                                 ->orWhereHas('variants.attributeValues', function($attrQ) use ($keyword) {
-                                     $attrQ->where(DB::raw('LOWER(value)'), 'like', "%{$keyword}%");
-                                 });
-                        });
-                    }
+                $query->whereHas('sparepart', function($q) use ($search) {
+                    $q->withoutGlobalScopes();
+                    Sparepart::applyAccurateSearch($q, $search);
                 });
             }
 
@@ -400,18 +391,9 @@ class StockOpnameController extends Controller
 
             // Filter pencarian jika ada
             if (!empty($search)) {
-                $normalizedSearch = str_replace(',', '.', $search);
-                $keywords = array_filter(explode(' ', strtolower($normalizedSearch)));
-                $query->whereHas('sparepart', function($q) use ($keywords) {
-                    foreach ($keywords as $keyword) {
-                        $q->where(function($subQ) use ($keyword) {
-                            $subQ->where(DB::raw('LOWER(kode_sparepart)'), 'like', "%{$keyword}%")
-                                 ->orWhere(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'like', "%{$keyword}%")
-                                 ->orWhereHas('variants.attributeValues', function($attrQ) use ($keyword) {
-                                     $attrQ->where(DB::raw('LOWER(value)'), 'like', "%{$keyword}%");
-                                 });
-                        });
-                    }
+                $query->whereHas('sparepart', function($q) use ($search) {
+                    $q->withoutGlobalScopes();
+                    Sparepart::applyAccurateSearch($q, $search);
                 });
             }
 
@@ -564,21 +546,13 @@ class StockOpnameController extends Controller
                 ->first();
 
             if (!$sparepart) {
-                $normalizedSearch = str_replace(',', '.', trim($search));
-                $keywords = array_filter(explode(' ', strtolower($normalizedSearch)));
+                $sparepartQuery = Sparepart::withoutGlobalScopes()
+                    ->where('kode_owner', $kode_owner)
+                    ->with(['variants.attributeValues.attribute']);
+                $keywords = Sparepart::applyAccurateSearch($sparepartQuery, $search);
                 if (!empty($keywords)) {
-                    $sparepart = Sparepart::withoutGlobalScopes()
-                        ->where('kode_owner', $kode_owner)
-                        ->with(['variants.attributeValues.attribute'])
-                        ->where(function($q) use ($keywords) {
-                            foreach ($keywords as $keyword) {
-                                $q->where(function($subQ) use ($keyword) {
-                                    $subQ->where(DB::raw('LOWER(kode_sparepart)'), 'like', "%{$keyword}%")
-                                         ->orWhere(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'like', "%{$keyword}%");
-                                });
-                            }
-                        })
-                        ->first();
+                    Sparepart::applyAccurateOrder($sparepartQuery, $keywords);
+                    $sparepart = $sparepartQuery->first();
                 }
             }
 

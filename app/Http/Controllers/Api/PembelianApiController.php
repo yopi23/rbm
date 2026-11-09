@@ -982,11 +982,12 @@ class PembelianApiController extends Controller
             $ownerId = $this->getOwnerId();
 
             // 1. Pecah search term menjadi kata kunci bersih (tanpa tanda kurung, garis miring, koma, plus)
-            $cleanedSearch = preg_replace('/[\/\(\)\-\,\+\.]+/', ' ', strtolower($searchTerm));
-            $keywords = array_values(array_unique(array_filter(explode(' ', $cleanedSearch), fn($w) => strlen($w) >= 2)));
+            $keywords = Sparepart::extractSearchKeywords($searchTerm);
+            $cleanInput = strtolower(trim($searchTerm));
+            $matchCode = Sparepart::shouldMatchCode($searchTerm, $keywords);
 
             if (empty($keywords)) {
-                $keywords = [strtolower(trim($searchTerm))];
+                $keywords = [$cleanInput];
             }
 
             $baseQuery = fn() => ProductVariant::query()
@@ -1004,36 +1005,53 @@ class PembelianApiController extends Controller
 
             $matchedVariants = collect();
 
-            // Tahap 1: Pencarian ketat (semua keyword cocok) jika jumlah kata kunci pendek (<= 5 kata)
+            // Tahap 1: Pencarian ketat (semua keyword cocok dengan batas kata) jika jumlah kata kunci <= 5
             if (count($keywords) <= 5) {
                 $matchedVariants = $baseQuery()
-                    ->where(function ($query) use ($keywords) {
-                        $query->orWhere(function ($nameQuery) use ($keywords) {
+                    ->where(function ($query) use ($keywords, $cleanInput, $matchCode) {
+                        $query->where(function ($allKwQuery) use ($keywords) {
                             foreach ($keywords as $keyword) {
-                                $nameQuery->whereHas('sparepart', function ($subQ) use ($keyword) {
-                                    $subQ->withoutGlobalScope(\App\Scopes\CabangScope::class)
-                                         ->where(function ($innerQ) use ($keyword) {
-                                             $innerQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'LIKE', '%' . $keyword . '%')
-                                                    ->orWhere(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%');
-                                         });
+                                $regex = Sparepart::buildKeywordRegex($keyword);
+                                $allKwQuery->where(function ($kwQ) use ($regex) {
+                                    $kwQ->whereHas('sparepart', function ($subQ) use ($regex) {
+                                        $subQ->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                                             ->where(function ($spQ) use ($regex) {
+                                                 $spQ->whereRaw("REPLACE(LOWER(nama_sparepart), ',', '.') REGEXP ?", [$regex])
+                                                     ->orWhereHas('kategori', function ($catQ) use ($regex) {
+                                                         $catQ->whereRaw("LOWER(nama_kategori) REGEXP ?", [$regex]);
+                                                     })
+                                                     ->orWhereHas('subKategori', function ($subCatQ) use ($regex) {
+                                                         $subCatQ->whereRaw("LOWER(nama_sub_kategori) REGEXP ?", [$regex]);
+                                                     });
+                                             });
+                                    })
+                                    ->orWhereHas('attributeValues', function ($attrQ) use ($regex) {
+                                        $attrQ->whereRaw("REPLACE(LOWER(value), ',', '.') REGEXP ?", [$regex]);
+                                    });
                                 });
                             }
                         });
 
-                        $query->orWhere(function ($attributeQuery) use ($keywords) {
-                            foreach ($keywords as $keyword) {
-                                $attributeQuery->whereHas('attributeValues', function ($subQ) use ($keyword) {
-                                    $subQ->where(DB::raw('LOWER(value)'), 'LIKE', '%' . $keyword . '%');
-                                });
-                            }
-                        });
+                        if ($matchCode) {
+                            $query->orWhereRaw('LOWER(sku) LIKE ?', ['%' . $cleanInput . '%'])
+                                  ->orWhereHas('sparepart', function ($spQ) use ($cleanInput) {
+                                      $spQ->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                                           ->whereRaw('LOWER(kode_sparepart) LIKE ?', ['%' . $cleanInput . '%']);
+                                  });
+                        } else {
+                            $query->orWhereRaw('LOWER(sku) = ?', [$cleanInput])
+                                  ->orWhereHas('sparepart', function ($spQ) use ($cleanInput) {
+                                      $spQ->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                                           ->whereRaw('LOWER(kode_sparepart) = ?', [$cleanInput]);
+                                  });
+                        }
                     })
                     ->take(15)
                     ->get();
             }
 
-            // Tahap 2: Jika hasil masih sedikit (< 5) atau nama barang panjang/ada update tipe HP baru dari supplier
-            if ($matchedVariants->count() < 5) {
+            // Tahap 2: Khusus untuk nama barang panjang hasil OCR/supplier (>= 5 kata) ketika ada update tipe HP baru
+            if (count($keywords) >= 5 && $matchedVariants->count() < 5) {
                 $stopWords = ['lcd', 'ts', 'fullset', 'black', 'white', 'ori', 'original', 'plus', 'pro', 'max', 'lite', '4g', '5g', 'new', 'dan', 'for'];
                 $anchorKeywords = array_values(array_filter($keywords, fn($k) => !in_array($k, $stopWords) && strlen($k) >= 2));
                 if (empty($anchorKeywords)) {
@@ -1048,7 +1066,8 @@ class PembelianApiController extends Controller
                         $q->withoutGlobalScope(\App\Scopes\CabangScope::class)
                           ->where(function ($orQ) use ($searchAnchors) {
                               foreach ($searchAnchors as $anchor) {
-                                  $orQ->orWhere(DB::raw('LOWER(nama_sparepart)'), 'LIKE', '%' . $anchor . '%');
+                                  $regex = Sparepart::buildKeywordRegex($anchor);
+                                  $orQ->orWhereRaw("REPLACE(LOWER(nama_sparepart), ',', '.') REGEXP ?", [$regex]);
                               }
                           });
                     })

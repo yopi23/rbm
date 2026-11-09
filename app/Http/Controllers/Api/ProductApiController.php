@@ -42,22 +42,10 @@ class ProductApiController extends Controller
             }
 
             // Filter search query
+            $searchKeywords = [];
             if ($request->filled('q')) {
                 $search = $request->input('q');
-                $normalizedInput = str_replace(',', '.', $search);
-                $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
-                
-                $query->where(function ($q) use ($keywords) {
-                    foreach ($keywords as $keyword) {
-                        $q->where(function ($subQ) use ($keyword) {
-                            $subQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'LIKE', '%' . $keyword . '%')
-                                 ->orWhere(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%')
-                                 ->orWhereHas('variants.attributeValues', function ($attrQ) use ($keyword) {
-                                     $attrQ->where(DB::raw('LOWER(value)'), 'LIKE', '%' . $keyword . '%');
-                                 });
-                        });
-                    }
-                });
+                $searchKeywords = Sparepart::applyAccurateSearch($query, $search);
             }
 
             // Filter category
@@ -87,7 +75,12 @@ class ProductApiController extends Controller
             }
 
             $limit = $request->input('limit', 15);
-            $products = $query->latest('updated_at')->paginate($limit);
+            if (!empty($searchKeywords)) {
+                Sparepart::applyAccurateOrder($query, $searchKeywords);
+            } else {
+                $query->latest('updated_at');
+            }
+            $products = $query->paginate($limit);
 
             // Format response
             $formattedProducts = collect($products->items())->map(function ($product) {

@@ -714,12 +714,9 @@ class OrderApiController extends Controller
                     ->toArray();
             }
 
-            // Buat query dasar
-            $query = Sparepart::where('kode_owner', $this->getThisUser()->id_upline)
-                ->where(function($q) use ($search) {
-                    $q->where('nama_sparepart', 'like', "%{$search}%")
-                      ->orWhere('kode_sparepart', 'like', "%{$search}%");
-                });
+            // Buat query dasar dengan pencarian presisi
+            $query = Sparepart::where('kode_owner', $this->getThisUser()->id_upline);
+            $keywords = Sparepart::applyAccurateSearch($query, $search);
 
             // Filter jika ada existing items
             if (!empty($existingItemIds)) {
@@ -727,7 +724,7 @@ class OrderApiController extends Controller
             }
 
             // Eksekusi query
-            $results = $query->orderBy('nama_sparepart')
+            $results = Sparepart::applyAccurateOrder($query, $keywords)
                 ->limit(20)
                 ->get();
 

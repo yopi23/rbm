@@ -85,10 +85,6 @@ class SalesApiController extends Controller
             $originalQuery = trim($request->input('query'));
             $userId = $this->getThisUser()->id_upline;
 
-            // Normalisasi input dan pecah menjadi kata kunci (keywords)
-            $normalizedInput = str_replace(',', '.', $originalQuery);
-            $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
-
             // =================================================================
             // PENDEKATAN ELOQUENT YANG BERSIH DAN CEPAT
             // =================================================================
@@ -101,6 +97,7 @@ class SalesApiController extends Controller
                 'hargaKhusus'
             ])
                 ->where('kode_owner', $userId)
+                ->where('is_active', true)
                 ->where('stok_sparepart', '>', 0);
 
             // Filter opsional berdasarkan kategori
@@ -112,49 +109,10 @@ class SalesApiController extends Controller
             }
 
             // =================================================================
-            // ✅ LOGIKA PENCARIAN AKURAT DENGAN REGEXP (seperti fungsi search)
+            // ✅ LOGIKA PENCARIAN AKURAT DENGAN BATAS KATA & ATRIBUT
             // =================================================================
-            $query->where(function ($q) use ($keywords) {
-                // Buat ekspresi kolom yang dinormalisasi untuk digunakan kembali
-                $normalizedNameColumn = DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')");
-
-                // KONDISI 1: SEMUA keyword harus ada di `nama_sparepart`
-                $q->where(function ($nameQuery) use ($keywords, $normalizedNameColumn) {
-                        foreach ($keywords as $keyword) {
-                            $nameQuery->where($normalizedNameColumn, 'LIKE', '%' . $keyword . '%');
-                        }
-                    }
-                    );
-
-                    // KONDISI 2 (ATAU): SEMUA keyword ada di `attribute value`
-                    $q->orWhereHas('variants.attributeValues', function ($attrQuery) use ($keywords) {
-                        foreach ($keywords as $keyword) {
-                            $attrQuery->where(DB::raw('LOWER(value)'), 'LIKE', '%' . $keyword . '%');
-                        }
-                    }
-                    );
-
-                    // KONDISI 3 (ATAU): SEMUA keyword ada di `kode_sparepart`
-                    $q->orWhere(function ($codeQuery) use ($keywords) {
-                        foreach ($keywords as $keyword) {
-                            $codeQuery->where(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%');
-                        }
-                    }
-                    );
-                });
-            // =================================================================
-            // AKHIR PERUBAHAN LOGIKA
-            // =================================================================
-
-            // Pengurutan dan pengambilan data
-            $exactMatchForOrder = implode('%', $keywords);
-            $suggestions = $query->orderByRaw("
-            CASE
-                WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE ? THEN 1
-                WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE ? THEN 2
-                ELSE 3
-            END, nama_sparepart ASC
-        ", [$exactMatchForOrder . "%", "%" . $exactMatchForOrder . "%"])
+            $keywords = Sparepart::applyAccurateSearch($query, $originalQuery);
+            $suggestions = Sparepart::applyAccurateOrder($query, $keywords)
                 ->limit(15)
                 ->get();
 
@@ -360,11 +318,7 @@ class SalesApiController extends Controller
             $limit = $request->input('limit', 20);
             $userId = $this->getThisUser()->id_upline;
 
-            // Normalisasi input untuk konsistensi (misal: 6,7 -> 6.7)
-            $normalizedInput = str_replace(',', '.', $searchInput);
-            $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
-
-            // Query Utama (Ini sudah benar)
+            // Query Utama
             $query = Sparepart::query()
                 ->with([
                 'variants.attributeValues.attribute',
@@ -373,7 +327,7 @@ class SalesApiController extends Controller
                 'subKategori'
             ]);
 
-            // Filter utama (Ini sudah benar)
+            // Filter utama
             $query->where('kode_owner', $userId);
             $query->where('is_active', true);
             if ($categoryId) {
@@ -384,49 +338,10 @@ class SalesApiController extends Controller
             }
 
             // =================================================================
-            // ✅ LOGIKA PENCARIAN BARU DENGAN LIKE MATCHING
+            // ✅ LOGIKA PENCARIAN AKURAT DENGAN BATAS KATA & ATRIBUT
             // =================================================================
-            $query->where(function ($q) use ($keywords) {
-                // Buat ekspresi kolom yang dinormalisasi untuk digunakan kembali
-                $normalizedNameColumn = DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')");
-
-                // KONDISI 1: SEMUA keyword harus ada di `nama_sparepart`
-                $q->where(function ($nameQuery) use ($keywords, $normalizedNameColumn) {
-                        foreach ($keywords as $keyword) {
-                            $nameQuery->where($normalizedNameColumn, 'LIKE', '%' . $keyword . '%');
-                        }
-                    }
-                    );
-
-                    // KONDISI 2 (ATAU): SEMUA keyword harus ada di `attribute value`
-                    $q->orWhereHas('variants.attributeValues', function ($attrQuery) use ($keywords) {
-                        foreach ($keywords as $keyword) {
-                            $attrQuery->where(DB::raw('LOWER(value)'), 'LIKE', '%' . $keyword . '%');
-                        }
-                    }
-                    );
-
-                    // KONDISI 3 (ATAU): SEMUA keyword ada di `kode_sparepart` (LIKE masih cocok di sini)
-                    $q->orWhere(function ($codeQuery) use ($keywords) {
-                        foreach ($keywords as $keyword) {
-                            $codeQuery->where(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%');
-                        }
-                    }
-                    );
-                });
-            // =================================================================
-            // AKHIR PERUBAHAN LOGIKA
-            // =================================================================
-
-            // Pengurutan hasil dengan parameterized binding
-            $exactMatchForOrder = implode('%', $keywords);
-            $results = $query->orderByRaw("
-            CASE
-                WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE ? THEN 1
-                WHEN REPLACE(LOWER(nama_sparepart), ',', '.') LIKE ? THEN 2
-                ELSE 3
-            END, nama_sparepart ASC
-        ", [$exactMatchForOrder . "%", "%" . $exactMatchForOrder . "%"])
+            $keywords = Sparepart::applyAccurateSearch($query, $searchInput);
+            $results = Sparepart::applyAccurateOrder($query, $keywords)
                 ->paginate($limit);
 
 
@@ -625,15 +540,12 @@ class SalesApiController extends Controller
 
 
 
-            // Ekstrak keywords
-            $keywords = array_filter(explode(' ', strtolower(trim($request->input('search')))));
+            $searchInput = trim($request->input('search'));
             $categoryId = $request->input('category_id');
             $subcategoryId = $request->input('subcategory_id');
 
             // Ambil owner_code dari request, dengan fallback ke user saat ini
             $ownerCode = $request->input('owner_code');
-
-
 
             // Buat query dasar
             $query = Sparepart::query()
@@ -652,12 +564,8 @@ class SalesApiController extends Controller
                 $query->where('kode_sub_kategori', $subcategoryId);
             }
 
-            // Gunakan subquery untuk each keyword
-            foreach ($keywords as $keyword) {
-                $query->where(function ($q) use ($keyword) {
-                    $q->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', '%' . $keyword . '%');
-                });
-            }
+            $keywords = Sparepart::applyAccurateSearch($query, $searchInput);
+            Sparepart::applyAccurateOrder($query, $keywords);
 
             // Pilih kolom yang dibutuhkan
             $data = $query->select([

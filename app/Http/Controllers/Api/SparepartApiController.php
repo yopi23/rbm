@@ -76,29 +76,47 @@ class SparepartApiController extends Controller
             $pattern = '/^part[\s,:-]*(.+)$/';
             if (preg_match($pattern, $command, $matches)) {
                 $searchQuery = trim($matches[1]);
-                $keywords = array_filter(explode(' ', strtolower($searchQuery)));
+                $keywords = Sparepart::extractSearchKeywords($searchQuery);
+                $cleanInput = strtolower($searchQuery);
+                $matchCode = Sparepart::shouldMatchCode($searchQuery, $keywords);
 
-                // Query dengan LEFT JOIN harga_khususes
+                // Query dengan LEFT JOIN harga_khususes & kategori
                 $queryBuilder = DB::table('spareparts')
                     ->leftJoin('harga_khususes', 'spareparts.id', '=', 'harga_khususes.id_sp')
+                    ->leftJoin('kategori_spareparts', 'spareparts.kode_kategori', '=', 'kategori_spareparts.id')
+                    ->leftJoin('sub_kategori_spareparts', 'spareparts.kode_sub_kategori', '=', 'sub_kategori_spareparts.id')
                     ->where('spareparts.kode_owner', '=', $this->getThisUser()->id_upline)
                     ->where('spareparts.is_active', true); // Filter produk aktif
 
-                // Filtering berdasarkan kata kunci
-                foreach ($keywords as $keyword) {
-                    $queryBuilder->where(function ($q) use ($keyword) {
-                        $q->where(DB::raw('LOWER(spareparts.nama_sparepart)'), 'LIKE', '%' . $keyword . '%')
-                          ->orWhere(DB::raw('LOWER(spareparts.kode_sparepart)'), 'LIKE', '%' . $keyword . '%')
-                          ->orWhereExists(function ($query) use ($keyword) {
-                              $query->select(DB::raw(1))
-                                    ->from('product_variants')
-                                    ->join('attribute_value_product_variant', 'product_variants.id', '=', 'attribute_value_product_variant.product_variant_id')
-                                    ->join('attribute_values', 'attribute_value_product_variant.attribute_value_id', '=', 'attribute_values.id')
-                                    ->whereColumn('product_variants.sparepart_id', 'spareparts.id')
-                                    ->where(DB::raw('LOWER(attribute_values.value)'), 'LIKE', '%' . $keyword . '%');
-                          });
+                // Filtering berdasarkan kata kunci dengan batas kata (mencegah bocor ke model/seri lain)
+                $queryBuilder->where(function ($outerQ) use ($keywords, $cleanInput, $matchCode) {
+                    $outerQ->where(function ($allKwQ) use ($keywords) {
+                        foreach ($keywords as $keyword) {
+                            $regex = Sparepart::buildKeywordRegex($keyword);
+                            $allKwQ->where(function ($q) use ($regex) {
+                                $q->whereRaw("REPLACE(LOWER(spareparts.nama_sparepart), ',', '.') REGEXP ?", [$regex])
+                                  ->orWhereRaw("LOWER(kategori_spareparts.nama_kategori) REGEXP ?", [$regex])
+                                  ->orWhereRaw("LOWER(sub_kategori_spareparts.nama_sub_kategori) REGEXP ?", [$regex])
+                                  ->orWhereExists(function ($query) use ($regex) {
+                                      $query->select(DB::raw(1))
+                                            ->from('product_variants')
+                                            ->join('attribute_value_product_variant', 'product_variants.id', '=', 'attribute_value_product_variant.product_variant_id')
+                                            ->join('attribute_values', 'attribute_value_product_variant.attribute_value_id', '=', 'attribute_values.id')
+                                            ->whereColumn('product_variants.sparepart_id', 'spareparts.id')
+                                            ->whereRaw("REPLACE(LOWER(attribute_values.value), ',', '.') REGEXP ?", [$regex]);
+                                  });
+                            });
+                        }
                     });
-                }
+
+                    if ($matchCode) {
+                        $outerQ->orWhereRaw('LOWER(spareparts.kode_sparepart) LIKE ?', ['%' . $cleanInput . '%']);
+                    } else {
+                        $outerQ->orWhereRaw('LOWER(spareparts.kode_sparepart) = ?', [$cleanInput]);
+                    }
+                });
+
+                Sparepart::applyAccurateOrder($queryBuilder, $keywords, 'spareparts');
 
                 // Select kolom yang diperlukan
                 $results = $queryBuilder->select([
@@ -439,21 +457,12 @@ class SparepartApiController extends Controller
                 ], 200);
             }
 
-            // Split the search query into keywords
-            $keywords = array_filter(explode(' ', strtolower($search)));
-
             $queryBuilder = Sparepart::where('kode_owner', $this->getThisUser()->id_upline)
+                ->where('is_active', true)
                 ->with(['kategori', 'subKategori']);
 
-            foreach ($keywords as $keyword) {
-                $queryBuilder->where(function ($q) use ($keyword) {
-                    $q->where(DB::raw('LOWER(nama_sparepart)'), 'LIKE', '%' . $keyword . '%')
-                      ->orWhere(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%')
-                      ->orWhereHas('variants.attributeValues', function ($attrQuery) use ($keyword) {
-                          $attrQuery->where(DB::raw('LOWER(value)'), 'LIKE', '%' . $keyword . '%');
-                      });
-                });
-            }
+            $keywords = Sparepart::applyAccurateSearch($queryBuilder, $search);
+            Sparepart::applyAccurateOrder($queryBuilder, $keywords);
 
             $results = $queryBuilder->select([
                 'id',
