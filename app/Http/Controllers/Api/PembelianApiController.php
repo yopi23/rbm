@@ -1052,14 +1052,19 @@ class PembelianApiController extends Controller
 
             // Tahap 2: Khusus untuk nama barang panjang hasil OCR/supplier (>= 5 kata) ketika ada update tipe HP baru
             if (count($keywords) >= 5 && $matchedVariants->count() < 5) {
-                $stopWords = ['lcd', 'ts', 'fullset', 'black', 'white', 'ori', 'original', 'plus', 'pro', 'max', 'lite', '4g', '5g', 'new', 'dan', 'for'];
+                $stopWords = ['lcd', 'ts', 'fullset', 'black', 'white', 'ori', 'original', 'plus', 'pro', 'max', 'lite', '4g', '5g', 'new', 'dan', 'for', 'og', 'super'];
                 $anchorKeywords = array_values(array_filter($keywords, fn($k) => !in_array($k, $stopWords) && strlen($k) >= 2));
                 if (empty($anchorKeywords)) {
                     $anchorKeywords = $keywords;
                 }
 
-                // Ambil maksimal 12 kata kunci jangkar terpenting (merek & kode seri HP)
-                $searchAnchors = array_slice($anchorKeywords, 0, 12);
+                // Ambil kode model spesifik yang mengandung angka (misal: 11, 40, x6853, a70s, v60, p55)
+                $modelCodeKeywords = array_values(array_filter($anchorKeywords, fn($k) => preg_match('/[0-9]/', $k)));
+
+                // Prioritaskan pencarian kandidat berdasarkan kode model HP agar tidak menarik tipe HP sembarangan
+                $searchAnchors = !empty($modelCodeKeywords)
+                    ? array_slice($modelCodeKeywords, 0, 8)
+                    : array_slice($anchorKeywords, 0, 8);
 
                 $candidates = $baseQuery()
                     ->whereHas('sparepart', function ($q) use ($searchAnchors) {
@@ -1075,7 +1080,7 @@ class PembelianApiController extends Controller
                     ->get();
 
                 // Urutkan kandidat berdasarkan kemiripan token & kesamaan kode tipe HP
-                $scored = $candidates->map(function ($variant) use ($keywords, $anchorKeywords) {
+                $scored = $candidates->map(function ($variant) use ($keywords, $anchorKeywords, $modelCodeKeywords) {
                     if (!$variant->sparepart) {
                         return null;
                     }
@@ -1086,6 +1091,20 @@ class PembelianApiController extends Controller
                         explode(' ', preg_replace('/[\/\(\)\-\,\+\.]+/', ' ', $combinedTarget)),
                         fn($w) => strlen($w) >= 2
                     )));
+
+                    // Jika input memiliki kode angka model HP, kandidat WAJIB mencocokkan minimal 1 kode angka tersebut
+                    if (!empty($modelCodeKeywords)) {
+                        $hasModelCodeMatch = false;
+                        foreach ($modelCodeKeywords as $mck) {
+                            if (in_array($mck, $targetTokens) || str_contains($combinedTarget, $mck)) {
+                                $hasModelCodeMatch = true;
+                                break;
+                            }
+                        }
+                        if (!$hasModelCodeMatch) {
+                            return null;
+                        }
+                    }
 
                     $matchedCount = 0;
                     $anchorMatchedCount = 0;
@@ -1109,7 +1128,7 @@ class PembelianApiController extends Controller
                         'anchor_matches' => $anchorMatchedCount,
                     ];
                 })
-                ->filter(fn($item) => $item !== null && $item['anchor_matches'] >= 1)
+                ->filter(fn($item) => $item !== null && $item['anchor_matches'] >= min(2, count($anchorKeywords)))
                 ->sortByDesc('score')
                 ->pluck('variant');
 
