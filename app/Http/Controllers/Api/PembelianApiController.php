@@ -166,36 +166,142 @@ class PembelianApiController extends Controller
             $pembelian = Pembelian::where('kode_owner', $this->getOwnerId())
                 ->findOrFail($id);
 
-            $details = DetailPembelian::with([
-                'productVariant.sparepart',
+            $rawDetails = DetailPembelian::with([
+                'kategori',
+                'productVariant.sparepart' => function ($q) {
+                    $q->withoutGlobalScopes()->with('kategori');
+                },
                 'productVariant.attributeValues.attribute'
             ])
                 ->where('pembelian_id', $id)
+                ->get();
+
+            // Kumpulkan seluruh ID attribute_value dari JSON attributes untuk di-resolve sekaligus
+            $allAttrValueIds = [];
+            foreach ($rawDetails as $d) {
+                $decoded = is_string($d->attributes)
+                    ? json_decode($d->attributes, true)
+                    : (is_array($d->attributes) ? $d->attributes : []);
+                if (is_array($decoded)) {
+                    foreach ($decoded as $valId) {
+                        if (!empty($valId)) {
+                            $allAttrValueIds[] = (int) $valId;
+                        }
+                    }
+                }
+            }
+            $attrValuesMap = !empty($allAttrValueIds)
+                ? \App\Models\AttributeValue::with('attribute')
+                    ->whereIn('id', array_unique($allAttrValueIds))
+                    ->get()
+                    ->keyBy('id')
+                : collect();
+
+            $ownerCategories = KategoriSparepart::with('attributes.values')
+                ->where('kode_owner', $this->getOwnerId())
                 ->get()
-                ->map(function ($detail) {
+                ->keyBy('id');
+
+            $details = $rawDetails->map(function ($detail) use ($attrValuesMap, $ownerCategories, $pembelian) {
                 $variants = [];
-                if ($detail->productVariant && $detail->productVariant->attributeValues) {
+
+                // Prioritas 1: Ambil dari kolom JSON attributes (berlaku untuk Item Baru & Restock yang diedit)
+                $decodedAttrs = is_string($detail->attributes)
+                    ? json_decode($detail->attributes, true)
+                    : (is_array($detail->attributes) ? $detail->attributes : []);
+
+                if (is_array($decodedAttrs) && !empty($decodedAttrs)) {
+                    foreach ($decodedAttrs as $attrId => $valId) {
+                        $av = $attrValuesMap->get((int) $valId);
+                        if ($av) {
+                            $variants[] = [
+                                'attribute_id' => $av->attribute_id,
+                                'attribute_value_id' => $av->id,
+                                'attribute_name' => $av->attribute->name ?? '',
+                                'value' => $av->value,
+                            ];
+                        }
+                    }
+                }
+
+                // Prioritas 2: Fallback ke relasi productVariant.attributeValues
+                if (empty($variants) && $detail->productVariant && $detail->productVariant->attributeValues) {
                     foreach ($detail->productVariant->attributeValues as $attrValue) {
                         $variants[] = [
+                            'attribute_id' => $attrValue->attribute_id,
+                            'attribute_value_id' => $attrValue->id,
                             'attribute_name' => $attrValue->attribute->name ?? '',
                             'value' => $attrValue->value,
                         ];
                     }
                 }
 
+                $itemKategori = $detail->item_kategori
+                    ?? $detail->productVariant?->sparepart?->kode_kategori
+                    ?? null;
+
+                $lowerItemName = strtolower($detail->nama_item ?? '');
+
+                // Jika kategori belum terisi atau default namun nama barang diawali/mengandung nama kategori lain (misal "LCD")
+                if ($ownerCategories->isNotEmpty() && !empty($lowerItemName)) {
+                    $matchedCat = null;
+                    foreach ($ownerCategories as $cat) {
+                        $catNameLower = strtolower(trim($cat->nama_kategori ?? ''));
+                        if ($catNameLower !== '' && str_contains($lowerItemName, $catNameLower)) {
+                            $matchedCat = $cat;
+                            break;
+                        }
+                    }
+                    if ($matchedCat && (empty($itemKategori) || ($detail->is_new_item && empty($variants)))) {
+                        $itemKategori = $matchedCat->id;
+                    }
+                }
+
+                $namaKategori = $detail->kategori->nama_kategori
+                    ?? $detail->productVariant?->sparepart?->kategori?->nama_kategori
+                    ?? ($itemKategori && $ownerCategories->has($itemKategori) ? $ownerCategories->get($itemKategori)->nama_kategori : null);
+
+                // Prioritas 3: Jika masih belum ada atribut (misal hasil scan nota yang belum ter-set atributnya), deteksi otomatis dari nama barang
+                if (empty($variants) && $itemKategori && $ownerCategories->has($itemKategori) && !empty($lowerItemName)) {
+                    $catObj = $ownerCategories->get($itemKategori);
+                    $autoAttrs = [];
+                    foreach ($catObj->attributes ?? [] as $attr) {
+                        $sortedVals = collect($attr->values ?? [])->sortByDesc(fn($v) => strlen($v->value ?? ''));
+                        foreach ($sortedVals as $valObj) {
+                            $valText = strtolower(trim($valObj->value ?? ''));
+                            if ($valText !== '' && str_contains($lowerItemName, $valText)) {
+                                $autoAttrs[(string) $attr->id] = (string) $valObj->id;
+                                $variants[] = [
+                                    'attribute_id' => $attr->id,
+                                    'attribute_value_id' => $valObj->id,
+                                    'attribute_name' => $attr->name ?? '',
+                                    'value' => $valObj->value,
+                                ];
+                                break;
+                            }
+                        }
+                    }
+                    if (!empty($autoAttrs) && $pembelian->status === 'draft') {
+                        $detail->item_kategori = $itemKategori;
+                        $detail->attributes = json_encode($autoAttrs);
+                        $detail->save();
+                    }
+                }
+
                 return [
-                'id' => $detail->id,
-                'nama_item' => $detail->nama_item,
-                'jumlah' => $detail->jumlah,
-                'harga_beli' => $detail->harga_beli,
-                'total' => $detail->total,
-                'is_new_item' => $detail->is_new_item,
-                'product_variant_id' => $detail->product_variant_id,
-                'sparepart_id' => $detail->sparepart_id,
-                'item_kategori' => $detail->item_kategori,
-                'attributes' => $detail->attributes,
-                'variants' => $variants,
-                'product_variant' => $detail->productVariant,
+                    'id' => $detail->id,
+                    'nama_item' => $detail->nama_item,
+                    'jumlah' => $detail->jumlah,
+                    'harga_beli' => $detail->harga_beli,
+                    'total' => $detail->total,
+                    'is_new_item' => $detail->is_new_item,
+                    'product_variant_id' => $detail->product_variant_id,
+                    'sparepart_id' => $detail->sparepart_id,
+                    'item_kategori' => $itemKategori,
+                    'nama_kategori' => $namaKategori,
+                    'attributes' => $detail->attributes,
+                    'variants' => $variants,
+                    'product_variant' => $detail->productVariant,
                 ];
             });
 
@@ -319,15 +425,23 @@ class PembelianApiController extends Controller
             ];
 
             if ($validated['is_new_item']) {
-                $detailData['item_kategori'] = $validated['item_kategori'];
+                $detailData['item_kategori'] = $validated['item_kategori'] ?? null;
                 $detailData['attributes'] = json_encode($validated['attributes'] ?? []);
             }
             else {
-                $detailData['product_variant_id'] = $validated['product_variant_id'];
-                $detailData['item_kategori'] = $validated['item_kategori'];
-                $detailData['attributes'] = json_encode($validated['attributes'] ?? []);
+                $detailData['product_variant_id'] = $validated['product_variant_id'] ?? null;
+                $variant = !empty($validated['product_variant_id'])
+                    ? ProductVariant::with(['sparepart' => fn($q) => $q->withoutGlobalScopes(), 'attributeValues'])->find($validated['product_variant_id'])
+                    : null;
 
-                $variant = ProductVariant::find($validated['product_variant_id']);
+                $resolvedKategori = $validated['item_kategori'] ?? $variant?->sparepart?->kode_kategori;
+                $resolvedAttrs = !empty($validated['attributes'])
+                    ? $validated['attributes']
+                    : ($variant ? $variant->attributeValues->pluck('id', 'attribute_id')->map(fn($v) => (string) $v)->toArray() : []);
+
+                $detailData['item_kategori'] = $resolvedKategori;
+                $detailData['attributes'] = json_encode($resolvedAttrs);
+
                 if ($variant) {
                     $detailData['sparepart_id'] = $variant->sparepart_id;
                 }
@@ -412,14 +526,20 @@ class PembelianApiController extends Controller
                     $detailData['attributes'] = json_encode($itemData['attributes'] ?? []);
                 } else {
                     $detailData['product_variant_id'] = $itemData['product_variant_id'] ?? null;
-                    $detailData['item_kategori'] = $itemData['item_kategori'] ?? null;
-                    $detailData['attributes'] = json_encode($itemData['attributes'] ?? []);
+                    $variant = !empty($itemData['product_variant_id'])
+                        ? ProductVariant::with(['sparepart' => fn($q) => $q->withoutGlobalScopes(), 'attributeValues'])->find($itemData['product_variant_id'])
+                        : null;
 
-                    if (!empty($itemData['product_variant_id'])) {
-                        $variant = ProductVariant::find($itemData['product_variant_id']);
-                        if ($variant) {
-                            $detailData['sparepart_id'] = $variant->sparepart_id;
-                        }
+                    $resolvedKategori = $itemData['item_kategori'] ?? $variant?->sparepart?->kode_kategori;
+                    $resolvedAttrs = !empty($itemData['attributes'])
+                        ? $itemData['attributes']
+                        : ($variant ? $variant->attributeValues->pluck('id', 'attribute_id')->map(fn($v) => (string) $v)->toArray() : []);
+
+                    $detailData['item_kategori'] = $resolvedKategori;
+                    $detailData['attributes'] = json_encode($resolvedAttrs);
+
+                    if ($variant) {
+                        $detailData['sparepart_id'] = $variant->sparepart_id;
                     }
                 }
 
@@ -468,6 +588,7 @@ class PembelianApiController extends Controller
             'nama_item' => 'required|string|max:8000',
             'jumlah' => 'required|integer|min:1',
             'harga_beli' => 'required|numeric|min:0',
+            'is_new_item' => 'sometimes|boolean',
             'product_variant_id' => 'nullable|exists:product_variants,id',
             'attributes' => 'nullable|array',
             'item_kategori' => 'nullable|exists:kategori_spareparts,id',
@@ -487,22 +608,40 @@ class PembelianApiController extends Controller
             }
 
             $oldTotal = $detail->total;
+            $isNewItem = array_key_exists('is_new_item', $validated)
+                ? (bool) $validated['is_new_item']
+                : (bool) $detail->is_new_item;
 
             $updateData = [
                 'nama_item' => $validated['nama_item'],
                 'jumlah' => $validated['jumlah'],
                 'harga_beli' => $validated['harga_beli'],
                 'total' => $validated['jumlah'] * $validated['harga_beli'],
-                'item_kategori' => $validated['item_kategori'],
+                'is_new_item' => $isNewItem,
+                'item_kategori' => $validated['item_kategori'] ?? $detail->item_kategori,
                 'attributes' => json_encode($validated['attributes'] ?? []),
             ];
 
-            if (!$detail->is_new_item) {
-                $updateData['product_variant_id'] = $validated['product_variant_id'];
-                $variant = ProductVariant::find($validated['product_variant_id']);
+            if (!$isNewItem) {
+                $variantId = $validated['product_variant_id'] ?? $detail->product_variant_id;
+                $updateData['product_variant_id'] = $variantId;
+                $variant = $variantId
+                    ? ProductVariant::with(['sparepart' => fn($q) => $q->withoutGlobalScopes(), 'attributeValues'])->find($variantId)
+                    : null;
                 if ($variant) {
                     $updateData['sparepart_id'] = $variant->sparepart_id;
+                    if (empty($updateData['item_kategori'])) {
+                        $updateData['item_kategori'] = $variant->sparepart?->kode_kategori;
+                    }
+                    if (empty($validated['attributes'])) {
+                        $updateData['attributes'] = json_encode(
+                            $variant->attributeValues->pluck('id', 'attribute_id')->map(fn($v) => (string) $v)->toArray()
+                        );
+                    }
                 }
+            } else {
+                $updateData['product_variant_id'] = null;
+                $updateData['sparepart_id'] = null;
             }
 
             $detail->update($updateData);
@@ -688,17 +827,20 @@ class PembelianApiController extends Controller
                 }
                 else {
                     // Proses restock
-                    $variant = ProductVariant::find($detail->product_variant_id);
+                    $variant = ProductVariant::with('attributeValues')->find($detail->product_variant_id);
 
                     if ($variant) {
-                        $sparepart = Sparepart::find($detail->sparepart_id);
+                        $sparepart = Sparepart::withoutGlobalScopes()->find($detail->sparepart_id ?: $variant->sparepart_id);
 
                         if (!$sparepart) {
                             throw new \Exception('Data sparepart tidak ditemukan untuk item restock: "' . $detail->nama_item . '"');
                         }
 
-                        $categoryId = $sparepart->kode_kategori;
+                        $categoryId = $detail->item_kategori ?: $sparepart->kode_kategori;
                         $attributeValueIds = array_filter(json_decode($detail->attributes, true) ?: []);
+                        if (empty($attributeValueIds)) {
+                            $attributeValueIds = $variant->attributeValues->pluck('id')->toArray();
+                        }
 
                         $calculatedPrices = $priceCalculator->calculate(
                             $detail->harga_beli,
@@ -730,6 +872,19 @@ class PembelianApiController extends Controller
                         $variant->retail_price = $calculatedPrices['retail_price'];
                         $variant->internal_price = $calculatedPrices['internal_price'];
                         // $variant->stock will be updated by logStockChange
+
+                        if (!empty($attributeValueIds)) {
+                            $variant->attributeValues()->sync(array_values($attributeValueIds));
+                        }
+
+                        // Update nama sparepart jika ada update nama baru dari nota/form
+                        $trimmedNewName = trim($detail->nama_item ?? '');
+                        if (!empty($trimmedNewName) && $sparepart->nama_sparepart !== $trimmedNewName) {
+                            $sparepart->nama_sparepart = $trimmedNewName;
+                        }
+                        if (!empty($detail->item_kategori)) {
+                            $sparepart->kode_kategori = $detail->item_kategori;
+                        }
 
                         $sparepart->harga_beli = $new_stock_cost;
                         $sparepart->harga_jual = $calculatedPrices['internal_price'];
@@ -810,9 +965,10 @@ class PembelianApiController extends Controller
 
     /**
      * GET /api/pembelian/search-variants
-     * Pencarian varian produk
+     * Pencarian varian produk (mendukung pencarian manual maupun pencocokan nama nota AI yang di-update)
      */
-    public function searchVariants(Request $request)    {
+    public function searchVariants(Request $request)
+    {
         try {
             $searchTerm = $request->input('search');
 
@@ -825,74 +981,145 @@ class PembelianApiController extends Controller
 
             $ownerId = $this->getOwnerId();
 
-            // 1. Pecah search term menjadi beberapa kata kunci (keywords)
-            $normalizedInput = str_replace(',', '.', $searchTerm);
-            $keywords = array_filter(explode(' ', strtolower($normalizedInput)));
+            // 1. Pecah search term menjadi kata kunci bersih (tanpa tanda kurung, garis miring, koma, plus)
+            $cleanedSearch = preg_replace('/[\/\(\)\-\,\+\.]+/', ' ', strtolower($searchTerm));
+            $keywords = array_values(array_unique(array_filter(explode(' ', $cleanedSearch), fn($w) => strlen($w) >= 2)));
 
-            $variants = ProductVariant::query()
+            if (empty($keywords)) {
+                $keywords = [strtolower(trim($searchTerm))];
+            }
+
+            $baseQuery = fn() => ProductVariant::query()
                 ->whereHas('sparepart', function ($q) use ($ownerId) {
-                $q->where('kode_owner', $ownerId);
-            })
-                // Eager loading Anda sudah benar
-                ->with(['sparepart.kategori', 'attributeValues.attribute'])
+                    $q->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                      ->where('kode_owner', $ownerId);
+                })
+                ->with([
+                    'sparepart' => function ($q) {
+                        $q->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                          ->with('kategori');
+                    },
+                    'attributeValues.attribute'
+                ]);
 
-                // =================================================================
-                // ✅ PERBAIKAN LOGIKA PENCARIAN AKURAT DI SINI
-                // =================================================================
-                ->where(function ($query) use ($keywords) {
+            $matchedVariants = collect();
 
-                // KONDISI 1 (ATAU): Semua keyword ada di NAMA SPAREPART
-                $query->orWhere(function ($nameQuery) use ($keywords) {
-                        foreach ($keywords as $keyword) {
-                            $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
-                            $nameQuery->whereHas('sparepart', function ($subQ) use ($pattern) {
-                                        $subQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'REGEXP', $pattern);
-                                    }
-                                    );
-                                }
+            // Tahap 1: Pencarian ketat (semua keyword cocok) jika jumlah kata kunci pendek (<= 5 kata)
+            if (count($keywords) <= 5) {
+                $matchedVariants = $baseQuery()
+                    ->where(function ($query) use ($keywords) {
+                        $query->orWhere(function ($nameQuery) use ($keywords) {
+                            foreach ($keywords as $keyword) {
+                                $nameQuery->whereHas('sparepart', function ($subQ) use ($keyword) {
+                                    $subQ->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                                         ->where(function ($innerQ) use ($keyword) {
+                                             $innerQ->where(DB::raw("REPLACE(LOWER(nama_sparepart), ',', '.')"), 'LIKE', '%' . $keyword . '%')
+                                                    ->orWhere(DB::raw('LOWER(kode_sparepart)'), 'LIKE', '%' . $keyword . '%');
+                                         });
+                                });
                             }
-                            );
+                        });
 
-                            // KONDISI 2 (ATAU): Semua keyword ada di NILAI ATRIBUT
-                            $query->orWhere(function ($attributeQuery) use ($keywords) {
-                        foreach ($keywords as $keyword) {
-                            $pattern = '\\b' . preg_quote($keyword, '/') . '\\b';
-                            $attributeQuery->whereHas('attributeValues', function ($subQ) use ($pattern) {
-                                        $subQ->where(DB::raw('LOWER(value)'), 'REGEXP', $pattern);
-                                    }
-                                    );
-                                }
+                        $query->orWhere(function ($attributeQuery) use ($keywords) {
+                            foreach ($keywords as $keyword) {
+                                $attributeQuery->whereHas('attributeValues', function ($subQ) use ($keyword) {
+                                    $subQ->where(DB::raw('LOWER(value)'), 'LIKE', '%' . $keyword . '%');
+                                });
                             }
-                            );
+                        });
+                    })
+                    ->take(15)
+                    ->get();
+            }
 
-                        })
-                // =================================================================
-                // AKHIR PERBAIKAN
-                // =================================================================
+            // Tahap 2: Jika hasil masih sedikit (< 5) atau nama barang panjang/ada update tipe HP baru dari supplier
+            if ($matchedVariants->count() < 5) {
+                $stopWords = ['lcd', 'ts', 'fullset', 'black', 'white', 'ori', 'original', 'plus', 'pro', 'max', 'lite', '4g', '5g', 'new', 'dan', 'for'];
+                $anchorKeywords = array_values(array_filter($keywords, fn($k) => !in_array($k, $stopWords) && strlen($k) >= 2));
+                if (empty($anchorKeywords)) {
+                    $anchorKeywords = $keywords;
+                }
 
-                ->take(10)
-                ->get()
-                ->map(function ($variant) {
-                // Sisa dari logika 'map' Anda sudah benar dan tidak diubah
+                // Ambil maksimal 12 kata kunci jangkar terpenting (merek & kode seri HP)
+                $searchAnchors = array_slice($anchorKeywords, 0, 12);
+
+                $candidates = $baseQuery()
+                    ->whereHas('sparepart', function ($q) use ($searchAnchors) {
+                        $q->withoutGlobalScope(\App\Scopes\CabangScope::class)
+                          ->where(function ($orQ) use ($searchAnchors) {
+                              foreach ($searchAnchors as $anchor) {
+                                  $orQ->orWhere(DB::raw('LOWER(nama_sparepart)'), 'LIKE', '%' . $anchor . '%');
+                              }
+                          });
+                    })
+                    ->take(60)
+                    ->get();
+
+                // Urutkan kandidat berdasarkan kemiripan token & kesamaan kode tipe HP
+                $scored = $candidates->map(function ($variant) use ($keywords, $anchorKeywords) {
+                    if (!$variant->sparepart) {
+                        return null;
+                    }
+                    $spNameLower = strtolower($variant->sparepart->nama_sparepart ?? '');
+                    $attrStrLower = strtolower($variant->attributeValues->pluck('value')->implode(' '));
+                    $combinedTarget = $spNameLower . ' ' . $attrStrLower;
+                    $targetTokens = array_values(array_unique(array_filter(
+                        explode(' ', preg_replace('/[\/\(\)\-\,\+\.]+/', ' ', $combinedTarget)),
+                        fn($w) => strlen($w) >= 2
+                    )));
+
+                    $matchedCount = 0;
+                    $anchorMatchedCount = 0;
+                    foreach ($keywords as $kw) {
+                        if (in_array($kw, $targetTokens) || str_contains($combinedTarget, $kw)) {
+                            $matchedCount++;
+                        }
+                    }
+                    foreach ($anchorKeywords as $akw) {
+                        if (in_array($akw, $targetTokens) || str_contains($spNameLower, $akw)) {
+                            $anchorMatchedCount++;
+                        }
+                    }
+
+                    $minTokens = max(1, min(count($keywords), count($targetTokens)));
+                    $overlapScore = ($matchedCount / $minTokens) + ($anchorMatchedCount * 0.35);
+
+                    return [
+                        'variant' => $variant,
+                        'score' => $overlapScore,
+                        'anchor_matches' => $anchorMatchedCount,
+                    ];
+                })
+                ->filter(fn($item) => $item !== null && $item['anchor_matches'] >= 1)
+                ->sortByDesc('score')
+                ->pluck('variant');
+
+                $matchedVariants = $matchedVariants
+                    ->concat($scored)
+                    ->unique('id')
+                    ->take(15);
+            }
+
+            $variants = $matchedVariants->map(function ($variant) {
                 if (!$variant->sparepart) {
                     return null;
                 }
 
                 return [
-                'id' => $variant->id,
-                'sparepart' => [
-                'id' => $variant->sparepart->id,
-                'nama_sparepart' => $variant->sparepart->nama_sparepart,
-                'kode_kategori' => $variant->sparepart->kode_kategori,
-                'nama_kategori' => $variant->sparepart->kategori->nama_kategori ?? 'N/A',
-                ],
-                'sku' => $variant->sku,
-                'stock' => $variant->stock,
-                'purchase_price' => $variant->purchase_price,
-                'wholesale_price' => $variant->wholesale_price,
-                'retail_price' => $variant->retail_price,
-                'internal_price' => $variant->internal_price,
-                'attribute_values' => $variant->attributeValues,
+                    'id' => $variant->id,
+                    'sparepart' => [
+                        'id' => $variant->sparepart->id,
+                        'nama_sparepart' => $variant->sparepart->nama_sparepart,
+                        'kode_kategori' => $variant->sparepart->kode_kategori,
+                        'nama_kategori' => $variant->sparepart->kategori->nama_kategori ?? 'N/A',
+                    ],
+                    'sku' => $variant->sku,
+                    'stock' => $variant->stock,
+                    'purchase_price' => $variant->purchase_price,
+                    'wholesale_price' => $variant->wholesale_price,
+                    'retail_price' => $variant->retail_price,
+                    'internal_price' => $variant->internal_price,
+                    'attribute_values' => $variant->attributeValues,
                 ];
             })->filter();
 
@@ -906,7 +1133,8 @@ class PembelianApiController extends Controller
                 'success' => false,
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
             ], 500);
-        }    }
+        }
+    }
 
     /**
      * GET /api/suppliers
